@@ -66,9 +66,13 @@ function initYearMonth() {
 }
 
 function updateIssueDate() {
-  // 발행일자 기본값: 선택 월의 다음달 1일
-  const d = new Date(state.year, state.month, 1);
-  const iso = d.toISOString().split('T')[0];
+  // 발행일자 기본값: 선택 월의 마지막 주 평일 (금요일 또는 그 이전 평일)
+  const lastDay = new Date(state.year, state.month, 0); // 해당 월 마지막 날
+  // 마지막 날부터 거슬러 올라가며 평일(월~금) 찾기
+  while (lastDay.getDay() === 0 || lastDay.getDay() === 6) {
+    lastDay.setDate(lastDay.getDate() - 1);
+  }
+  const iso = lastDay.toISOString().split('T')[0];
   document.getElementById('issue-date').value = iso;
   state.issueDate = iso;
 }
@@ -109,6 +113,8 @@ async function loadAll() {
   if (sRes.ok && sRes.smtpUser) {
     document.getElementById('smtp-user').value = sRes.smtpUser;
     if (sRes.hasPass) document.getElementById('smtp-pass').placeholder = '저장됨 (변경 시 입력)';
+    const certStatus = document.getElementById('cert-pass-status');
+    if (certStatus) certStatus.textContent = sRes.hasCertPass ? '✅ 공동인증서 비밀번호 저장됨' : '';
   }
   renderAll();
 }
@@ -387,9 +393,10 @@ function renderHometax() {
     const invoiceCount = method === '분리' ? productCount : 1;
 
     let statusBadge = '<span class="badge badge-no">대기</span>';
-    if (status === 'running') statusBadge = '<span class="badge badge-sending">처리중...</span>';
-    if (status === 'done')    statusBadge = '<span class="badge badge-sent">완료</span>';
-    if (status === 'fail')    statusBadge = '<span class="badge badge-fail">실패</span>';
+    if (status === 'running')      statusBadge = '<span class="badge badge-sending">브라우저 열리는 중...</span>';
+    if (status === 'browser_open') statusBadge = '<span class="badge badge-warn">발행 대기 (로그인 후 입력)</span>';
+    if (status === 'done')         statusBadge = '<span class="badge badge-sent">발행 완료</span>';
+    if (status === 'fail')         statusBadge = '<span class="badge badge-fail">실패</span>';
 
     const methodSel = `<select class="select-method" onchange="updateHometaxMethod('${esc(v.name)}', this.value)">
       <option value="통합" ${method === '통합' ? 'selected' : ''}>통합 (1건)</option>
@@ -523,13 +530,15 @@ async function runHometaxSelected() {
       hometaxMethod,
     });
 
-    state.hometaxStatus[name] = res.ok ? 'done' : 'fail';
     if (res.ok) {
+      state.hometaxStatus[name] = 'browser_open';
+      showHometaxDataPanel(res);
       const label = res.hometaxMethod === '분리'
-        ? `${name} — 분리발행 ${res.invoiceCount}건 순서대로 입력됩니다`
-        : `${name} — 통합발행 1건 입력됩니다`;
-      toast(label + ' (공동인증서 로그인 필요)', 'success');
+        ? `홈택스가 열렸습니다. ${name} 분리발행 ${res.invoiceCount}건 — 아래 데이터 참고하여 입력하세요`
+        : `홈택스가 열렸습니다. 공동인증서 로그인 후 아래 데이터를 입력하세요`;
+      toast(label, 'success');
     } else {
+      state.hometaxStatus[name] = 'fail';
       toast(`${name} 오류: ${res.error}`, 'error');
     }
     renderHometax();
@@ -623,6 +632,69 @@ async function deleteCustomer(name) {
   }
 }
 
+// ── 홈택스 발행 데이터 패널 ─────────────────────────────────
+function showHometaxDataPanel(data) {
+  const panel = document.getElementById('hometax-data-panel');
+  const body  = document.getElementById('hometax-data-body');
+  if (!panel || !body) return;
+
+  const fmt = n => Number(n).toLocaleString();
+  const rows = data.products.map(p => `
+    <tr>
+      <td>${esc(p.name)}</td>
+      <td class="col-num">${fmt(p.qty)}</td>
+      <td class="col-num">${fmt(p.supply)}원</td>
+      <td class="col-num">${fmt(p.tax)}원</td>
+      <td class="col-num">${fmt(p.amount)}원</td>
+    </tr>`).join('');
+
+  body.innerHTML = `
+    <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom:14px;">
+      <div><span style="font-size:12px;color:#64748b;">공급받는 자</span><br><strong>${esc(data.customer?.name || '')}</strong></div>
+      <div><span style="font-size:12px;color:#64748b;">사업자번호</span><br><strong>${esc(data.customer?.bizNo || '')}</strong></div>
+      <div><span style="font-size:12px;color:#64748b;">작성일자</span><br><strong>${esc(data.issueDate || '')}</strong></div>
+      <div><span style="font-size:12px;color:#64748b;">발행방식</span><br><strong>${data.hometaxMethod === '분리' ? `분리발행 (${data.invoiceCount}건)` : '통합발행 (1건)'}</strong></div>
+    </div>
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <thead>
+        <tr style="background:#f1f5f9;">
+          <th style="padding:8px 10px; text-align:left; border-bottom:1px solid #e2e8f0;">품목(유종)</th>
+          <th style="padding:8px 10px; text-align:right; border-bottom:1px solid #e2e8f0;">수량</th>
+          <th style="padding:8px 10px; text-align:right; border-bottom:1px solid #e2e8f0;">공급가액</th>
+          <th style="padding:8px 10px; text-align:right; border-bottom:1px solid #e2e8f0;">세액</th>
+          <th style="padding:8px 10px; text-align:right; border-bottom:1px solid #e2e8f0;">합계금액</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        <tr style="background:#f8fafc; font-weight:700;">
+          <td style="padding:8px 10px; border-top:2px solid #e2e8f0;">합계</td>
+          <td style="padding:8px 10px; text-align:right; border-top:2px solid #e2e8f0;"></td>
+          <td style="padding:8px 10px; text-align:right; border-top:2px solid #e2e8f0;">${fmt(data.totalSupply)}원</td>
+          <td style="padding:8px 10px; text-align:right; border-top:2px solid #e2e8f0;">${fmt(data.totalTax)}원</td>
+          <td style="padding:8px 10px; text-align:right; border-top:2px solid #e2e8f0;">${fmt(data.totalAmount)}원</td>
+        </tr>
+      </tfoot>
+    </table>
+    <div style="margin-top:12px; padding:10px; background:#fef9c3; border-radius:6px; font-size:12px; color:#92400e;">
+      📌 홈택스에서 로그인 후: 조회/발급 → 전자세금계산서 → 발급 → 건별발급 → 위 데이터 입력
+    </div>
+    <div style="margin-top:10px; display:flex; gap:8px;">
+      <button class="btn-primary" onclick="window.open('https://www.hometax.go.kr')">홈택스 다시 열기</button>
+      <button onclick="updateHometaxDone('${esc(data.customer?.name || '')}')">✅ 발행 완료 표시</button>
+    </div>`;
+
+  panel.style.display = '';
+  panel.scrollIntoView({ behavior: 'smooth' });
+}
+
+function updateHometaxDone(name) {
+  if (!name) return;
+  state.hometaxStatus[name] = 'done';
+  renderHometax();
+  toast(`✅ ${name} 발행 완료로 표시됐습니다`, 'success');
+}
+
 // ── 설정 ────────────────────────────────────────────────────
 async function saveSettings() {
   const smtpUser = document.getElementById('smtp-user').value.trim();
@@ -634,6 +706,20 @@ async function saveSettings() {
     toast('✅ 설정 저장 완료', 'success');
     document.getElementById('smtp-pass').value = '';
     document.getElementById('smtp-pass').placeholder = '저장됨 (변경 시 입력)';
+  } else {
+    toast(`오류: ${res.error}`, 'error');
+  }
+}
+
+async function saveCertPass() {
+  const certPass = document.getElementById('cert-pass').value;
+  if (!certPass) return toast('비밀번호를 입력하세요.', 'warn');
+  const res = await api('POST', '/api/settings', { certPass });
+  if (res.ok) {
+    toast('✅ 공동인증서 비밀번호 저장 완료', 'success');
+    document.getElementById('cert-pass').value = '';
+    const certStatus = document.getElementById('cert-pass-status');
+    if (certStatus) certStatus.textContent = '✅ 공동인증서 비밀번호 저장됨';
   } else {
     toast(`오류: ${res.error}`, 'error');
   }

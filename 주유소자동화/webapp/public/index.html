@@ -245,8 +245,17 @@
   <!-- ───── Tab 4: 홈택스 세금계산서 ───── -->
   <section id="tab-hometax" class="tab-content">
     <div class="notice notice-warn">
-      ⚠️ 공동인증서 로그인이 필요합니다. 브라우저가 열리면 로그인하세요. 로그인 후 세금계산서 입력 및 최종 발행이 자동으로 처리됩니다.<br>
+      ⚠️ 발행 버튼을 누르면 <strong>홈택스가 브라우저에서 열립니다.</strong> 공동인증서로 로그인 후 아래 데이터를 참고해 세금계산서를 직접 입력·발행하세요.<br>
       사업자번호가 없는 업체는 <strong>[고객 관리]</strong>에서 먼저 등록하세요.
+    </div>
+
+    <!-- 발행 데이터 패널 (발행 버튼 클릭 후 표시) -->
+    <div id="hometax-data-panel" class="card" style="display:none;">
+      <div class="card-header">
+        <h2>📋 세금계산서 입력 데이터</h2>
+        <button onclick="document.getElementById('hometax-data-panel').style.display='none'">✕ 닫기</button>
+      </div>
+      <div id="hometax-data-body" style="padding:16px;"></div>
     </div>
     <div class="card">
       <div class="card-header">
@@ -298,12 +307,30 @@
           <input type="email" id="smtp-user" placeholder="example@naver.com">
         </div>
         <div class="form-group">
-          <label>비밀번호</label>
-          <input type="password" id="smtp-pass" placeholder="네이버 로그인 비밀번호">
+          <label>앱 비밀번호</label>
+          <input type="password" id="smtp-pass" placeholder="네이버 앱 비밀번호 (16자리)">
         </div>
         <div class="form-group">
           <button class="btn-primary" onclick="saveSettings()">저장</button>
         </div>
+      </div>
+    </div>
+
+    <div class="card settings-card">
+      <div class="card-header"><h2>🔐 공동인증서 설정</h2></div>
+      <div class="settings-guide">
+        <p>📌 홈택스 세금계산서 발행 시 사용하는 공동인증서 비밀번호를 미리 등록합니다.</p>
+        <p style="margin-top:6px; color:#dc2626;">⚠️ 비밀번호는 이 PC에만 저장되며 외부로 전송되지 않습니다.</p>
+      </div>
+      <div class="form-row vertical">
+        <div class="form-group">
+          <label>공동인증서 비밀번호</label>
+          <input type="password" id="cert-pass" placeholder="공동인증서 비밀번호">
+        </div>
+        <div class="form-group">
+          <button class="btn-primary" onclick="saveCertPass()">저장</button>
+        </div>
+        <div id="cert-pass-status" style="font-size:13px; color:#64748b;"></div>
       </div>
     </div>
   </section>
