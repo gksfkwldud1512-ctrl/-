@@ -633,59 +633,96 @@ async function deleteCustomer(name) {
 }
 
 // ── 홈택스 발행 데이터 패널 ─────────────────────────────────
+let _htCurrentProduct = 0;
+
 function showHometaxDataPanel(data) {
   const panel = document.getElementById('hometax-data-panel');
   const body  = document.getElementById('hometax-data-body');
   if (!panel || !body) return;
 
+  _htCurrentProduct = 0;
+  renderHometaxPanel(body, data);
+  panel.style.display = '';
+  panel.scrollIntoView({ behavior: 'smooth' });
+}
+
+function renderHometaxPanel(body, data) {
   const fmt = n => Number(n).toLocaleString();
-  const rows = data.products.map(p => `
-    <tr>
-      <td>${esc(p.name)}</td>
+  const isBunri = data.hometaxMethod === '분리';
+
+  const rows = data.products.map((p, i) => `
+    <tr style="${isBunri && i === _htCurrentProduct ? 'background:#dbeafe;font-weight:700;' : ''}">
+      <td>${isBunri ? `<span class="badge ${i < _htCurrentProduct ? 'badge-ok' : i === _htCurrentProduct ? 'badge-sending' : 'badge-no'}">${i < _htCurrentProduct ? '완료' : i === _htCurrentProduct ? '현재' : '대기'}</span> ` : ''}${esc(p.name)}</td>
       <td class="col-num">${fmt(p.qty)}</td>
       <td class="col-num">${fmt(p.supply)}원</td>
       <td class="col-num">${fmt(p.tax)}원</td>
       <td class="col-num">${fmt(p.amount)}원</td>
     </tr>`).join('');
 
+  const stepGuide = isBunri
+    ? `<div style="margin-bottom:10px; padding:10px; background:#fef9c3; border-radius:6px; font-size:13px; color:#92400e;">
+        ⚡ <strong>분리발행 ${data.invoiceCount}건</strong> — 현재: ${data.products[_htCurrentProduct]?.name || ''}<br>
+        건별발급 화면에서 [자동 입력] → 발급 → 다시 건별발급 → [자동 입력] 반복
+       </div>`
+    : `<div style="margin-bottom:10px; padding:10px; background:#dbeafe; border-radius:6px; font-size:13px; color:#1e40af;">
+        📌 건별발급 화면에서 [자동 입력] 버튼을 클릭하세요
+       </div>`;
+
   body.innerHTML = `
-    <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom:14px;">
+    <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom:12px;">
       <div><span style="font-size:12px;color:#64748b;">공급받는 자</span><br><strong>${esc(data.customer?.name || '')}</strong></div>
       <div><span style="font-size:12px;color:#64748b;">사업자번호</span><br><strong>${esc(data.customer?.bizNo || '')}</strong></div>
       <div><span style="font-size:12px;color:#64748b;">작성일자</span><br><strong>${esc(data.issueDate || '')}</strong></div>
-      <div><span style="font-size:12px;color:#64748b;">발행방식</span><br><strong>${data.hometaxMethod === '분리' ? `분리발행 (${data.invoiceCount}건)` : '통합발행 (1건)'}</strong></div>
+      <div><span style="font-size:12px;color:#64748b;">발행방식</span><br><strong>${isBunri ? `분리발행 (${data.invoiceCount}건)` : '통합발행 (1건)'}</strong></div>
     </div>
-    <table style="width:100%; border-collapse:collapse; font-size:13px;">
-      <thead>
-        <tr style="background:#f1f5f9;">
-          <th style="padding:8px 10px; text-align:left; border-bottom:1px solid #e2e8f0;">품목(유종)</th>
-          <th style="padding:8px 10px; text-align:right; border-bottom:1px solid #e2e8f0;">수량</th>
-          <th style="padding:8px 10px; text-align:right; border-bottom:1px solid #e2e8f0;">공급가액</th>
-          <th style="padding:8px 10px; text-align:right; border-bottom:1px solid #e2e8f0;">세액</th>
-          <th style="padding:8px 10px; text-align:right; border-bottom:1px solid #e2e8f0;">합계금액</th>
-        </tr>
-      </thead>
+    ${stepGuide}
+    <table style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:14px;">
+      <thead><tr style="background:#f1f5f9;">
+        <th style="padding:8px 10px; text-align:left; border-bottom:1px solid #e2e8f0;">품목</th>
+        <th style="padding:8px 10px; text-align:right; border-bottom:1px solid #e2e8f0;">수량</th>
+        <th style="padding:8px 10px; text-align:right; border-bottom:1px solid #e2e8f0;">공급가액</th>
+        <th style="padding:8px 10px; text-align:right; border-bottom:1px solid #e2e8f0;">세액</th>
+        <th style="padding:8px 10px; text-align:right; border-bottom:1px solid #e2e8f0;">합계</th>
+      </tr></thead>
       <tbody>${rows}</tbody>
-      <tfoot>
-        <tr style="background:#f8fafc; font-weight:700;">
-          <td style="padding:8px 10px; border-top:2px solid #e2e8f0;">합계</td>
-          <td style="padding:8px 10px; text-align:right; border-top:2px solid #e2e8f0;"></td>
-          <td style="padding:8px 10px; text-align:right; border-top:2px solid #e2e8f0;">${fmt(data.totalSupply)}원</td>
-          <td style="padding:8px 10px; text-align:right; border-top:2px solid #e2e8f0;">${fmt(data.totalTax)}원</td>
-          <td style="padding:8px 10px; text-align:right; border-top:2px solid #e2e8f0;">${fmt(data.totalAmount)}원</td>
-        </tr>
-      </tfoot>
+      <tfoot><tr style="background:#f8fafc; font-weight:700;">
+        <td style="padding:8px 10px; border-top:2px solid #e2e8f0;">합계</td>
+        <td></td>
+        <td style="padding:8px 10px; text-align:right; border-top:2px solid #e2e8f0;">${fmt(data.totalSupply)}원</td>
+        <td style="padding:8px 10px; text-align:right; border-top:2px solid #e2e8f0;">${fmt(data.totalTax)}원</td>
+        <td style="padding:8px 10px; text-align:right; border-top:2px solid #e2e8f0;">${fmt(data.totalAmount)}원</td>
+      </tr></tfoot>
     </table>
-    <div style="margin-top:12px; padding:10px; background:#fef9c3; border-radius:6px; font-size:12px; color:#92400e;">
-      📌 홈택스에서 로그인 후: 조회/발급 → 전자세금계산서 → 발급 → 건별발급 → 위 데이터 입력
-    </div>
-    <div style="margin-top:10px; display:flex; gap:8px;">
-      <button class="btn-primary" onclick="window.open('https://www.hometax.go.kr')">홈택스 다시 열기</button>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="btn-primary" id="btn-auto-fill" onclick="doHometaxFill()">
+        ⚡ 건별발급 화면에서 자동 입력
+      </button>
       <button onclick="updateHometaxDone('${esc(data.customer?.name || '')}')">✅ 발행 완료 표시</button>
-    </div>`;
+    </div>
+    <div id="fill-status" style="margin-top:8px; font-size:13px; color:#64748b;"></div>`;
+}
 
-  panel.style.display = '';
-  panel.scrollIntoView({ behavior: 'smooth' });
+async function doHometaxFill() {
+  const btn    = document.getElementById('btn-auto-fill');
+  const status = document.getElementById('fill-status');
+  if (btn) { btn.disabled = true; btn.textContent = '입력 중...'; }
+  if (status) status.textContent = '건별발급 폼을 찾아 입력 중입니다...';
+
+  const res = await api('POST', '/api/hometax-fill', { productIndex: _htCurrentProduct });
+
+  if (res.ok) {
+    if (status) status.textContent = `✅ ${res.productName} 입력 완료! 내용 확인 후 발급 버튼을 클릭하세요.`;
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ 건별발급 화면에서 자동 입력'; }
+    if (!res.isLast) {
+      _htCurrentProduct = res.nextIndex;
+      if (status) status.textContent += ` | 다음: 발급 후 건별발급 화면에서 다시 [자동 입력] 클릭 (남은 ${res.remaining}건)`;
+    }
+    toast(`✅ ${res.productName} 자동 입력 완료`, 'success');
+  } else {
+    if (status) status.textContent = `❌ ${res.error}`;
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ 건별발급 화면에서 자동 입력'; }
+    toast(`입력 실패: ${res.error}`, 'error');
+  }
 }
 
 function updateHometaxDone(name) {

@@ -285,6 +285,24 @@ app.post('/api/hometax', async (req, res) => {
   }
 });
 
+// ── 홈택스 자동 입력 (건별발급 화면에서 호출) ─────────────────
+app.post('/api/hometax-fill', async (req, res) => {
+  try {
+    const { productIndex } = req.body;
+    const { fillCurrentPage } = require('./lib/hometaxBot');
+    const result = await fillCurrentPage(productIndex || 0);
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: e.message });
+  }
+});
+
+// ── 홈택스 브라우저 상태 조회 ─────────────────────────────────
+app.get('/api/hometax-status', (req, res) => {
+  const { getBrowserStatus } = require('./lib/hometaxBot');
+  res.json({ ok: true, ...getBrowserStatus() });
+});
+
 // ── 설정 ─────────────────────────────────────────────────────
 app.get('/api/settings', (req, res) => {
   const s = readJSON(SETTINGS_FILE, {});
