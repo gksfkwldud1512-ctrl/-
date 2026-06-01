@@ -2,13 +2,21 @@
 const fs   = require('fs');
 const path = require('path');
 
-function findChrome() {
+function findBrowser() {
+  // Edge 우선, Chrome 차선
   const candidates = [
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    process.env.LOCALAPPDATA + '\\Google\\Chrome\\Application\\chrome.exe',
+    { exe: 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      dataDir: process.env.LOCALAPPDATA + '\\Microsoft\\Edge\\User Data' },
+    { exe: 'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+      dataDir: process.env.LOCALAPPDATA + '\\Microsoft\\Edge\\User Data' },
+    { exe: process.env.LOCALAPPDATA + '\\Microsoft\\Edge\\Application\\msedge.exe',
+      dataDir: process.env.LOCALAPPDATA + '\\Microsoft\\Edge\\User Data' },
+    { exe: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      dataDir: process.env.LOCALAPPDATA + '\\Google\\Chrome\\User Data' },
+    { exe: 'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      dataDir: process.env.LOCALAPPDATA + '\\Google\\Chrome\\User Data' },
   ];
-  return candidates.find(p => fs.existsSync(p)) || null;
+  return candidates.find(c => fs.existsSync(c.exe)) || null;
 }
 
 // 유종별 공급가액/세액 계산
@@ -32,8 +40,11 @@ async function openHometax(vendor, customer, issueDate, hometaxMethod) {
   try { puppeteer = require('puppeteer-core'); }
   catch { throw new Error('puppeteer-core 모듈이 없습니다. npm install 후 재시도하세요.'); }
 
-  const chromePath = findChrome();
-  if (!chromePath) throw new Error('Chrome을 찾을 수 없습니다. Chrome을 설치하세요.');
+  const found = findBrowser();
+  if (!found) throw new Error('Edge 또는 Chrome을 찾을 수 없습니다. 설치 후 재시도하세요.');
+
+  const { exe: browserPath, dataDir: userDataDir } = found;
+  const browserName = browserPath.includes('Edge') ? 'Edge' : 'Chrome';
 
   const taxData  = calcTaxData(vendor);
   const bizNo    = customer?.bizNo || '';
@@ -41,13 +52,10 @@ async function openHometax(vendor, customer, issueDate, hometaxMethod) {
   const method   = hometaxMethod || '통합';
   const products = Object.entries(taxData);
 
-  // 사용자의 실제 Chrome 프로필 사용 → 공동인증서 플러그인 포함
-  const userDataDir = process.env.LOCALAPPDATA + '\\Google\\Chrome\\User Data';
-
   let browser;
   try {
     browser = await puppeteer.launch({
-      executablePath: chromePath,
+      executablePath: browserPath,
       headless: false,
       defaultViewport: null,
       userDataDir,
@@ -60,16 +68,16 @@ async function openHometax(vendor, customer, issueDate, hometaxMethod) {
       ],
     });
   } catch (e) {
-    // Chrome이 이미 같은 프로필로 실행 중이면 새 창으로 열기
+    // 브라우저가 이미 같은 프로필로 실행 중이면 새 창으로 열기
     const { exec } = require('child_process');
-    exec(`"${chromePath}" --new-window https://www.hometax.go.kr`);
-    console.log('[홈택스봇] Chrome이 이미 실행 중 — 새 창으로 열었습니다. 수동으로 진행해주세요.');
+    exec(`"${browserPath}" --new-window https://www.hometax.go.kr`);
+    console.log(`[홈택스봇] ${browserName}이 이미 실행 중 — 새 창으로 열었습니다. 수동으로 진행해주세요.`);
     return;
   }
 
   const page = await browser.newPage();
   await page.goto('https://www.hometax.go.kr', { waitUntil: 'networkidle2', timeout: 30000 });
-  console.log(`[홈택스봇] ${vendor.name} (${method}발행 ${products.length}종) — 공동인증서로 로그인하세요.`);
+  console.log(`[홈택스봇] ${browserName} 실행됨. ${vendor.name} (${method}발행 ${products.length}종) — 공동인증서로 로그인하세요.`);
 
   // 로그인 감지 (최대 10분)
   try {
