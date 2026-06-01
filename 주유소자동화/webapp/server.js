@@ -237,7 +237,7 @@ app.post('/api/send-email', async (req, res) => {
   }
 });
 
-// ── 홈택스 세금계산서 데이터 조회 ────────────────────────────
+// ── 홈택스 자동화 ────────────────────────────────────────────
 app.post('/api/hometax', async (req, res) => {
   try {
     const { vendorName, issueDate, year, month } = req.body;
@@ -252,25 +252,27 @@ app.post('/api/hometax', async (req, res) => {
       return res.status(400).json({ ok: false, error: `${vendorName} 사업자번호 없음 — [고객 관리]에 등록하세요.` });
 
     const hometaxMethod = req.body.hometaxMethod || customer.hometaxMethod || '통합';
-    const { calcTaxData } = require('./lib/hometaxBot');
+    const { openHometax, calcTaxData } = require('./lib/hometaxBot');
     const taxData = calcTaxData(vendor);
 
-    // 브라우저에서 홈택스 열기 (시스템 기본 브라우저 사용)
-    const { exec } = require('child_process');
-    exec('start https://www.hometax.go.kr');
-
-    // 발행 데이터 계산해서 반환 (웹앱 패널 표시용)
+    // 발행 데이터 계산 (UI 패널 표시용)
     const products = Object.entries(taxData).map(([name, d]) => ({
       name, qty: d.qty, supply: d.sup, tax: d.tax, amount: d.amt
     }));
     const totalSupply = products.reduce((s, p) => s + p.supply, 0);
     const totalTax    = products.reduce((s, p) => s + p.tax, 0);
     const totalAmount = products.reduce((s, p) => s + p.amount, 0);
+    const invoiceCount = hometaxMethod === '분리' ? products.length : 1;
+
+    // puppeteer 자동화 백그라운드 실행
+    openHometax(vendor, customer, issueDate, hometaxMethod).catch(e =>
+      console.error('[홈택스봇]', e.message)
+    );
 
     res.json({
       ok: true,
       hometaxMethod,
-      invoiceCount: hometaxMethod === '분리' ? products.length : 1,
+      invoiceCount,
       customer: { name: customer.name, bizNo: customer.bizNo },
       issueDate,
       products,
