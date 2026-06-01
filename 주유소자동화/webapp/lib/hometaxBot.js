@@ -1,15 +1,11 @@
 'use strict';
-const fs   = require('fs');
-const path = require('path');
+const fs = require('fs');
 
 function findBrowser() {
-  // Edge 우선, Chrome 차선
   const candidates = [
     { exe: 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
       dataDir: process.env.LOCALAPPDATA + '\\Microsoft\\Edge\\User Data' },
     { exe: 'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-      dataDir: process.env.LOCALAPPDATA + '\\Microsoft\\Edge\\User Data' },
-    { exe: process.env.LOCALAPPDATA + '\\Microsoft\\Edge\\Application\\msedge.exe',
       dataDir: process.env.LOCALAPPDATA + '\\Microsoft\\Edge\\User Data' },
     { exe: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
       dataDir: process.env.LOCALAPPDATA + '\\Google\\Chrome\\User Data' },
@@ -19,11 +15,11 @@ function findBrowser() {
   return candidates.find(c => fs.existsSync(c.exe)) || null;
 }
 
-// 유종별 공급가액/세액 계산
 function calcTaxData(vendor) {
   const productMap = {};
   (vendor.txs || []).forEach(t => {
-    if (!productMap[t.product]) productMap[t.product] = { qty: 0, sup: 0, tax: 0, amt: 0, unitPrice: t.unitPrice };
+    if (!productMap[t.product])
+      productMap[t.product] = { qty: 0, sup: 0, tax: 0, amt: 0 };
     const supply = t.taxType === '면세' ? t.amount : Math.round(t.amount / 1.1);
     const tax    = t.taxType === '면세' ? 0 : t.amount - supply;
     productMap[t.product].qty += t.qty;
@@ -34,49 +30,14 @@ function calcTaxData(vendor) {
   return productMap;
 }
 
-// ── 로그인 감지 (5초 폴링, 다중 조건) ────────────────────────
-async function pollForLogin(page, timeoutMs) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const result = await page.evaluate(() => {
-        const text = document.body ? document.body.innerText : '';
-        const url  = window.location.href;
-        // 로그인 성공 신호들
-        if (text.includes('로그아웃'))              return 'logout_btn';
-        if (text.includes('마이홈택스'))             return 'myhometax';
-        if (text.includes('전자신고'))               return 'menu_found';
-        if (text.includes('세금신고'))               return 'menu_found';
-        if (document.querySelector('#gnb_logout'))   return 'logout_id';
-        if (document.querySelector('.logout'))       return 'logout_class';
-        // URL이 로그인 페이지가 아니면서 홈택스 내부 페이지인 경우
-        if (url.includes('hometax.go.kr') &&
-            !url.includes('nlogin') &&
-            !url.includes('Login') &&
-            url !== 'https://www.hometax.go.kr/' &&
-            url !== 'https://www.hometax.go.kr') {
-          return 'url_changed';
-        }
-        return null;
-      });
-      if (result) {
-        console.log(`[홈택스봇] 로그인 감지 (${result})`);
-        return true;
-      }
-    } catch {}
-    await new Promise(r => setTimeout(r, 5000)); // 5초 대기
-  }
-  return false;
-}
-
-// ── 홈택스 메인 진입점 ─────────────────────────────────────────
+// ── 메인 진입점 ───────────────────────────────────────────────
 async function openHometax(vendor, customer, issueDate, hometaxMethod) {
   let puppeteer;
   try { puppeteer = require('puppeteer-core'); }
-  catch { throw new Error('puppeteer-core 모듈이 없습니다. npm install 후 재시도하세요.'); }
+  catch { throw new Error('puppeteer-core 모듈이 없습니다.'); }
 
   const found = findBrowser();
-  if (!found) throw new Error('Edge 또는 Chrome을 찾을 수 없습니다. 설치 후 재시도하세요.');
+  if (!found) throw new Error('Edge 또는 Chrome을 찾을 수 없습니다.');
 
   const { exe: browserPath, dataDir: userDataDir } = found;
   const browserName = browserPath.includes('Edge') ? 'Edge' : 'Chrome';
@@ -102,165 +63,169 @@ async function openHometax(vendor, customer, issueDate, hometaxMethod) {
         '--disable-infobars',
       ],
     });
-  } catch (e) {
-    // 브라우저가 이미 같은 프로필로 실행 중이면 새 창으로 열기
+  } catch {
+    // 이미 실행 중이면 새 창으로만 열기
     const { exec } = require('child_process');
     exec(`"${browserPath}" --new-window https://www.hometax.go.kr`);
-    console.log(`[홈택스봇] ${browserName}이 이미 실행 중 — 새 창으로 열었습니다. 수동으로 진행해주세요.`);
+    console.log(`[홈택스봇] ${browserName} 이미 실행 중 — 새 창으로 열었습니다.`);
     return;
   }
 
+  // 홈택스 메인 열기
   const page = await browser.newPage();
   await page.goto('https://www.hometax.go.kr', { waitUntil: 'domcontentloaded', timeout: 30000 });
-  console.log(`[홈택스봇] ${browserName} 실행됨. ${vendor.name} (${method}발행 ${products.length}종) — 공동인증서로 로그인하세요.`);
 
-  // 로그인 감지: 5초마다 폴링, 최대 10분
-  console.log('[홈택스봇] 로그인 대기 중 (최대 10분)...');
-  const loggedIn = await pollForLogin(page, 600000);
-  if (!loggedIn) {
-    console.log('[홈택스봇] 로그인 대기 시간 초과 — 브라우저를 닫습니다.');
-    await browser.close();
-    return;
-  }
+  console.log('');
+  console.log('='.repeat(55));
+  console.log(`[홈택스봇] ${browserName} 실행됨 — ${vendor.name}`);
+  console.log('');
+  console.log('  ① 공동인증서로 로그인하세요');
+  console.log('  ② 로그인 후 아래 메뉴로 이동하세요:');
+  console.log('     조회/발급 → 전자세금계산서 → 발급 → 건별발급');
+  console.log('  ③ 건별발급 화면이 열리면 자동으로 입력됩니다!');
+  console.log('='.repeat(55));
+  console.log('');
 
-  console.log('[홈택스봇] 로그인 확인! 건별발급 페이지로 이동 중...');
-  await page.waitForTimeout(2000);
-
+  // 건별발급 폼 자동 감지 & 입력 (최대 10분 대기)
   try {
     if (method === '분리' && products.length > 1) {
-      // ── 분리발행: 유종마다 건별발급 폼 별도 작성 ──────────────
       for (let i = 0; i < products.length; i++) {
         const [prodName, tot] = products[i];
         const isLast  = i === products.length - 1;
-        const nextName = !isLast ? products[i + 1][0] : null;
+        console.log(`[홈택스봇] [${i + 1}/${products.length}] ${prodName} 폼 감지 대기 중...`);
 
-        console.log(`[홈택스봇] [${i + 1}/${products.length}] ${prodName} 입력 중...`);
-        await navigateToTaxInvoice(page);
-        await page.waitForTimeout(2000);
-        await fillInvoiceForm(page, [[prodName, tot]], date, bizNo);
+        const filled = await waitForFormAndFill(browser, [[prodName, tot]], date, bizNo, 600000);
+        if (!filled) { console.log('[홈택스봇] 시간 초과'); break; }
 
         if (!isLast) {
-          console.log(`[홈택스봇] ✅ ${prodName} 입력 완료 — 발급 버튼 클릭 후 자동으로 ${nextName} 입력합니다.`);
-          try { await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 300000 }); }
-          catch { console.log(`[홈택스봇] 페이지 이동 감지 실패 — ${nextName}으로 진행합니다.`); }
-          await page.waitForTimeout(1000);
+          console.log(`[홈택스봇] ✅ ${prodName} 입력 완료. 발급 버튼 클릭 후 다시 건별발급 메뉴로 이동하세요.`);
+          // 다음 품목을 위해 사용자가 다시 건별발급으로 이동하길 기다림
+          await waitForNewForm(browser, 300000);
         } else {
-          console.log(`[홈택스봇] ✅ ${prodName} 입력 완료 — 발급 버튼을 클릭하세요.`);
+          console.log(`[홈택스봇] ✅ ${prodName} 입력 완료. 내용 확인 후 발급 버튼을 클릭하세요.`);
         }
       }
     } else {
-      // ── 통합발행: 품목란에 유종별 행 나열 후 1건 ──────────────
-      await navigateToTaxInvoice(page);
-      await page.waitForTimeout(2000);
-      await fillInvoiceForm(page, products, date, bizNo);
-      console.log('[홈택스봇] ✅ 입력 완료 — 내용 확인 후 발급 버튼을 클릭하세요.');
+      console.log('[홈택스봇] 건별발급 폼 감지 대기 중...');
+      const filled = await waitForFormAndFill(browser, products, date, bizNo, 600000);
+      if (filled) console.log('[홈택스봇] ✅ 입력 완료. 내용 확인 후 발급 버튼을 클릭하세요.');
+      else        console.log('[홈택스봇] 시간 초과 — 수동으로 입력해주세요.');
     }
   } catch (e) {
-    console.error('[홈택스봇] 자동입력 오류:', e.message);
-    console.log('[홈택스봇] 수동으로 입력해주세요. 브라우저가 열려 있습니다.');
+    console.error('[홈택스봇] 오류:', e.message);
   }
 }
 
-// ── 건별발급 페이지 이동 ──────────────────────────────────────
-const INVOICE_URLS = [
-  'https://www.hometax.go.kr/websquareServlet/websquare?w2xPath=/ui/pp/UTSEIBG011M00.xml',
-  'https://www.hometax.go.kr/websquareServlet/websquare?w2xPath=/ui/pp/UTSEIBG01.xml',
-];
+// ── 건별발급 폼 감지 & 입력 ────────────────────────────────────
+async function waitForFormAndFill(browser, products, date, bizNo, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
 
-async function navigateToTaxInvoice(page) {
-  // 1단계: 알려진 URL로 직접 이동
-  for (const url of INVOICE_URLS) {
-    try {
-      await page.goto(url, { waitUntil: 'networkidle2', timeout: 15000 });
-      await page.waitForTimeout(2000);
-      // 건별발급 폼이 로드됐는지 확인
-      const found = await page.evaluate(() =>
-        document.body.innerText.includes('건별발급') ||
-        document.body.innerText.includes('전자세금계산서') ||
-        document.querySelector('input') !== null
-      );
-      if (found) { console.log('[홈택스봇] 건별발급 페이지 진입 완료'); return; }
-    } catch {}
+  while (Date.now() < deadline) {
+    // 열려있는 모든 페이지/프레임 확인
+    const pages = await browser.pages();
+    for (const pg of pages) {
+      try {
+        // 모든 프레임에서 건별발급 폼 여부 확인
+        const frames = pg.frames();
+        for (const frame of frames) {
+          try {
+            const isForm = await frame.evaluate(() => {
+              const text = document.body ? document.body.innerText : '';
+              const url  = window.location.href;
+              return (
+                text.includes('공급받는자') ||
+                text.includes('작성일자') ||
+                text.includes('사업자등록번호') ||
+                url.includes('UTSEIBG011') ||
+                url.includes('UTSEIBG01')
+              );
+            });
+
+            if (isForm) {
+              console.log('[홈택스봇] 건별발급 폼 감지! 입력 시작...');
+              await new Promise(r => setTimeout(r, 1500));
+              await fillInvoiceForm(frame, products, date, bizNo);
+              return true;
+            }
+          } catch {}
+        }
+      } catch {}
+    }
+    await new Promise(r => setTimeout(r, 3000));
   }
-
-  // 2단계: 메뉴 순서대로 클릭
-  console.log('[홈택스봇] URL 직접 이동 실패 — 메뉴 클릭 시도');
-  await page.goto('https://www.hometax.go.kr', { waitUntil: 'domcontentloaded', timeout: 15000 });
-  await page.waitForTimeout(1500);
-
-  const menuSteps = [
-    { text: '조회/발급',     exact: false },
-    { text: '전자세금계산서', exact: false },
-    { text: '발급',          exact: true  },
-    { text: '건별발급',      exact: false },
-  ];
-
-  for (const step of menuSteps) {
-    const clicked = await page.evaluate(({ text, exact }) => {
-      const els = Array.from(document.querySelectorAll('a, li, span, div, button, td'));
-      const el = exact
-        ? els.find(e => e.textContent.trim() === text)
-        : els.find(e => e.textContent.includes(text));
-      if (el) { el.click(); return true; }
-      return false;
-    }, step);
-    console.log(`[홈택스봇] 메뉴 "${step.text}": ${clicked ? '클릭됨' : '못 찾음'}`);
-    await page.waitForTimeout(1200);
-  }
-  await page.waitForTimeout(2000);
+  return false;
 }
 
-// ── 세금계산서 폼 입력 ─────────────────────────────────────────
-// products: [[유종명, {qty, sup, tax, amt}], ...]
-async function fillInvoiceForm(page, products, date, bizNo) {
+// 새로운 건별발급 폼 열릴 때까지 대기 (분리발행 다음 건 용)
+async function waitForNewForm(browser, timeoutMs) {
+  // 현재 폼이 사라지고 새 폼이 나타날 때까지 대기
+  await new Promise(r => setTimeout(r, 5000)); // 발급 버튼 클릭 후 잠시 대기
+  await waitForFormAndFill(browser, [], '', '', timeoutMs);
+}
+
+// ── 폼 입력 ───────────────────────────────────────────────────
+async function fillInvoiceForm(frame, products, date, bizNo) {
   // 작성일자
   if (date) {
-    await page.evaluate((d) => {
-      document.querySelectorAll('input').forEach(input => {
-        const hint = (input.placeholder || '') + (input.name || '') + (input.id || '');
-        if (hint.includes('date') || hint.includes('Date') || hint.includes('작성')) {
-          input.value = d;
-          input.dispatchEvent(new Event('input',  { bubbles: true }));
-          input.dispatchEvent(new Event('change', { bubbles: true }));
+    await frame.evaluate((d) => {
+      document.querySelectorAll('input').forEach(inp => {
+        const h = (inp.id + inp.name + inp.placeholder + inp.className).toLowerCase();
+        if (h.includes('date') || h.includes('dt') || inp.maxLength === 8) {
+          if (inp.value === '' || inp.value === '________') {
+            inp.value = d;
+            inp.dispatchEvent(new Event('input',  { bubbles: true }));
+            inp.dispatchEvent(new Event('change', { bubbles: true }));
+            inp.dispatchEvent(new Event('blur',   { bubbles: true }));
+          }
         }
       });
-    }, date);
-    await page.waitForTimeout(500);
+    }, date).catch(() => {});
+    await new Promise(r => setTimeout(r, 600));
   }
 
-  // 사업자번호 입력
+  // 사업자번호
   if (bizNo) {
-    await page.evaluate((no) => {
+    await frame.evaluate((no) => {
       const clean = no.replace(/-/g, '');
-      document.querySelectorAll('input').forEach(input => {
-        const hint = (input.placeholder || '') + (input.name || '') + (input.id || '');
-        if (hint.includes('사업자') || hint.includes('bizNo') || hint.includes('CorpNum')) {
-          input.value = clean;
-          input.dispatchEvent(new Event('input',  { bubbles: true }));
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-          input.dispatchEvent(new Event('blur',   { bubbles: true }));
+      document.querySelectorAll('input').forEach(inp => {
+        const h = (inp.id + inp.name + inp.placeholder + inp.className).toLowerCase();
+        if (h.includes('biz') || h.includes('corp') || h.includes('사업자') ||
+            inp.maxLength === 10 || inp.maxLength === 12) {
+          inp.value = clean;
+          inp.dispatchEvent(new Event('input',  { bubbles: true }));
+          inp.dispatchEvent(new Event('change', { bubbles: true }));
+          inp.dispatchEvent(new Event('blur',   { bubbles: true }));
         }
       });
-    }, bizNo);
-    await page.waitForTimeout(1200);
+    }, bizNo).catch(() => {});
+    await new Promise(r => setTimeout(r, 1200));
   }
 
   // 품목 행 입력
+  if (products.length === 0) return;
   for (let i = 0; i < products.length; i++) {
     const [prodName, tot] = products[i];
-    await page.evaluate((idx, name, qty, sup, tax) => {
-      const rows = document.querySelectorAll('table tbody tr, .item-row, [class*="item"]');
-      const row  = rows[idx];
+    await frame.evaluate((idx, name, qty, sup, tax) => {
+      const rows = document.querySelectorAll(
+        'table tbody tr, .grid-row, [class*="row"], [id*="row"]'
+      );
+      const row = rows[idx];
       if (!row) return;
-      const cells = row.querySelectorAll('input, td input');
-      const set   = (el, val) => { if (!el) return; el.value = String(val); el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); };
-      set(cells[0], name);
-      set(cells[1], qty.toFixed(2));
-      set(cells[3], sup);
-      set(cells[4], tax);
-    }, i, prodName, tot.qty, tot.sup, tot.tax);
-    await page.waitForTimeout(400);
+      const inputs = row.querySelectorAll('input');
+      const set = (el, val) => {
+        if (!el) return;
+        el.value = String(val);
+        el.dispatchEvent(new Event('input',  { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      if (inputs[0]) set(inputs[0], name);       // 품목
+      if (inputs[1]) set(inputs[1], qty.toFixed(2)); // 수량
+      if (inputs[3]) set(inputs[3], sup);         // 공급가액
+      if (inputs[4]) set(inputs[4], tax);         // 세액
+    }, i, prodName, tot.qty, tot.sup, tot.tax).catch(() => {});
+    await new Promise(r => setTimeout(r, 400));
   }
+  console.log('[홈택스봇] 폼 입력 완료');
 }
 
 module.exports = { openHometax, calcTaxData };
