@@ -34,6 +34,41 @@ function calcTaxData(vendor) {
   return productMap;
 }
 
+// ── 로그인 감지 (5초 폴링, 다중 조건) ────────────────────────
+async function pollForLogin(page, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const result = await page.evaluate(() => {
+        const text = document.body ? document.body.innerText : '';
+        const url  = window.location.href;
+        // 로그인 성공 신호들
+        if (text.includes('로그아웃'))              return 'logout_btn';
+        if (text.includes('마이홈택스'))             return 'myhometax';
+        if (text.includes('전자신고'))               return 'menu_found';
+        if (text.includes('세금신고'))               return 'menu_found';
+        if (document.querySelector('#gnb_logout'))   return 'logout_id';
+        if (document.querySelector('.logout'))       return 'logout_class';
+        // URL이 로그인 페이지가 아니면서 홈택스 내부 페이지인 경우
+        if (url.includes('hometax.go.kr') &&
+            !url.includes('nlogin') &&
+            !url.includes('Login') &&
+            url !== 'https://www.hometax.go.kr/' &&
+            url !== 'https://www.hometax.go.kr') {
+          return 'url_changed';
+        }
+        return null;
+      });
+      if (result) {
+        console.log(`[홈택스봇] 로그인 감지 (${result})`);
+        return true;
+      }
+    } catch {}
+    await new Promise(r => setTimeout(r, 5000)); // 5초 대기
+  }
+  return false;
+}
+
 // ── 홈택스 메인 진입점 ─────────────────────────────────────────
 async function openHometax(vendor, customer, issueDate, hometaxMethod) {
   let puppeteer;
@@ -76,23 +111,20 @@ async function openHometax(vendor, customer, issueDate, hometaxMethod) {
   }
 
   const page = await browser.newPage();
-  await page.goto('https://www.hometax.go.kr', { waitUntil: 'networkidle2', timeout: 30000 });
+  await page.goto('https://www.hometax.go.kr', { waitUntil: 'domcontentloaded', timeout: 30000 });
   console.log(`[홈택스봇] ${browserName} 실행됨. ${vendor.name} (${method}발행 ${products.length}종) — 공동인증서로 로그인하세요.`);
 
-  // 로그인 감지 (최대 10분)
-  try {
-    await page.waitForFunction(
-      () => document.body.innerText.includes('로그아웃') || document.querySelector('.user-name') !== null,
-      { timeout: 600000 }
-    );
-  } catch {
-    console.log('[홈택스봇] 로그인 대기 시간 초과');
+  // 로그인 감지: 5초마다 폴링, 최대 10분
+  console.log('[홈택스봇] 로그인 대기 중 (최대 10분)...');
+  const loggedIn = await pollForLogin(page, 600000);
+  if (!loggedIn) {
+    console.log('[홈택스봇] 로그인 대기 시간 초과 — 브라우저를 닫습니다.');
     await browser.close();
     return;
   }
 
-  console.log('[홈택스봇] 로그인 완료. 세금계산서 발급 메뉴로 이동 중...');
-  await page.waitForTimeout(1500);
+  console.log('[홈택스봇] 로그인 확인! 건별발급 페이지로 이동 중...');
+  await page.waitForTimeout(2000);
 
   try {
     if (method === '분리' && products.length > 1) {
@@ -129,29 +161,53 @@ async function openHometax(vendor, customer, issueDate, hometaxMethod) {
   }
 }
 
-// ── 건별발급 메뉴 탐색 ─────────────────────────────────────────
-async function navigateToTaxInvoice(page) {
-  // 직접 URL로 이동 시도 (가장 안정적)
-  try {
-    await page.goto(
-      'https://www.hometax.go.kr/websquareServlet/websquare?w2xPath=/ui/pp/UTSEIBG011M00.xml',
-      { waitUntil: 'networkidle2', timeout: 20000 }
-    );
-    await page.waitForTimeout(2000);
-    return;
-  } catch {}
+// ── 건별발급 페이지 이동 ──────────────────────────────────────
+const INVOICE_URLS = [
+  'https://www.hometax.go.kr/websquareServlet/websquare?w2xPath=/ui/pp/UTSEIBG011M00.xml',
+  'https://www.hometax.go.kr/websquareServlet/websquare?w2xPath=/ui/pp/UTSEIBG01.xml',
+];
 
-  // URL 실패 시 메뉴 클릭으로 탐색
-  const menus = ['조회/발급', '전자세금계산서', '발급', '건별발급'];
-  for (const keyword of menus) {
-    await page.evaluate((kw) => {
-      const el = Array.from(document.querySelectorAll('a, li, span, div, button'))
-        .find(e => e.textContent.trim() === kw || e.textContent.includes(kw));
-      if (el) el.click();
-    }, keyword);
-    await page.waitForTimeout(1000);
+async function navigateToTaxInvoice(page) {
+  // 1단계: 알려진 URL로 직접 이동
+  for (const url of INVOICE_URLS) {
+    try {
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 15000 });
+      await page.waitForTimeout(2000);
+      // 건별발급 폼이 로드됐는지 확인
+      const found = await page.evaluate(() =>
+        document.body.innerText.includes('건별발급') ||
+        document.body.innerText.includes('전자세금계산서') ||
+        document.querySelector('input') !== null
+      );
+      if (found) { console.log('[홈택스봇] 건별발급 페이지 진입 완료'); return; }
+    } catch {}
   }
+
+  // 2단계: 메뉴 순서대로 클릭
+  console.log('[홈택스봇] URL 직접 이동 실패 — 메뉴 클릭 시도');
+  await page.goto('https://www.hometax.go.kr', { waitUntil: 'domcontentloaded', timeout: 15000 });
   await page.waitForTimeout(1500);
+
+  const menuSteps = [
+    { text: '조회/발급',     exact: false },
+    { text: '전자세금계산서', exact: false },
+    { text: '발급',          exact: true  },
+    { text: '건별발급',      exact: false },
+  ];
+
+  for (const step of menuSteps) {
+    const clicked = await page.evaluate(({ text, exact }) => {
+      const els = Array.from(document.querySelectorAll('a, li, span, div, button, td'));
+      const el = exact
+        ? els.find(e => e.textContent.trim() === text)
+        : els.find(e => e.textContent.includes(text));
+      if (el) { el.click(); return true; }
+      return false;
+    }, step);
+    console.log(`[홈택스봇] 메뉴 "${step.text}": ${clicked ? '클릭됨' : '못 찾음'}`);
+    await page.waitForTimeout(1200);
+  }
+  await page.waitForTimeout(2000);
 }
 
 // ── 세금계산서 폼 입력 ─────────────────────────────────────────
