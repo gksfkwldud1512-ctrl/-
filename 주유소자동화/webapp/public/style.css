@@ -547,3 +547,34 @@ th.sortable.sort-active .sort-icon { color: var(--primary); }
   gap: 8px;
   background: #f8fafc;
 }
+
+/* ── 세금계산서 일괄발행 탭 ──────────────────────────── */
+.col-products {
+  min-width: 160px;
+  max-width: 260px;
+}
+.product-tag {
+  display: inline-block;
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 1px 7px;
+  margin: 2px 2px 2px 0;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.bizno {
+  font-family: monospace;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  color: var(--text);
+}
+.row-disabled td {
+  opacity: 0.55;
+}
+#tax-table th, #tax-table td {
+  padding: 8px 10px;
+}
+

@@ -15,7 +15,7 @@
       <button class="tab-btn active" data-tab="statements">거래명세서 발행</button>
       <button class="tab-btn" data-tab="customers">고객 관리</button>
       <button class="tab-btn" data-tab="email">메일 발송</button>
-      <button class="tab-btn" data-tab="hometax">홈택스 세금계산서</button>
+      <button class="tab-btn" data-tab="hometax">세금계산서 일괄발행</button>
       <button class="tab-btn" data-tab="settings">설정</button>
     </nav>
   </div>
@@ -140,6 +140,18 @@
           <input type="text" id="c-phone" placeholder="010-0000-0000">
         </div>
         <div class="form-group">
+          <label>주소</label>
+          <input type="text" id="c-address" placeholder="사업장 주소 (선택)">
+        </div>
+        <div class="form-group">
+          <label>업태</label>
+          <input type="text" id="c-biztype" placeholder="예) 제조업 (선택)">
+        </div>
+        <div class="form-group">
+          <label>종목</label>
+          <input type="text" id="c-bizitem" placeholder="예) 기계부품 (선택)">
+        </div>
+        <div class="form-group">
           <label>출력방법</label>
           <select id="c-print-method" class="form-select">
             <option value="">기본(차량별-유종별)</option>
@@ -150,9 +162,9 @@
           </select>
         </div>
         <div class="form-group">
-          <label>세금계산서 발행방식</label>
-          <select id="c-hometax-method" class="form-select">
-            <option value="통합">통합발행 (1건)</option>
+          <label>세금계산서 발행구분</label>
+          <select id="c-tax-issuance" class="form-select">
+            <option value="합산">합산발행 (1장)</option>
             <option value="분리">유종별 분리발행</option>
           </select>
         </div>
@@ -242,48 +254,52 @@
     </div>
   </section>
 
-  <!-- ───── Tab 4: 홈택스 세금계산서 ───── -->
+  <!-- ───── Tab 4: 세금계산서 일괄발행 ───── -->
   <section id="tab-hometax" class="tab-content">
-    <div class="notice notice-warn">
-      ⚠️ 발행 버튼을 누르면 <strong>홈택스가 브라우저에서 열립니다.</strong> 공동인증서로 로그인 후 아래 데이터를 참고해 세금계산서를 직접 입력·발행하세요.<br>
+
+    <div class="notice notice-info">
+      📋 <strong>홈택스 일괄발행 Excel</strong>을 생성합니다. 생성된 파일을 홈택스 → 전자세금계산서 → 발급 → <strong>Excel 일괄발급</strong>에서 업로드하세요.<br>
       사업자번호가 없는 업체는 <strong>[고객 관리]</strong>에서 먼저 등록하세요.
     </div>
 
-    <!-- 자동 입력 패널 (발행 버튼 클릭 후 표시) -->
-    <div id="hometax-data-panel" class="card" style="display:none;">
+    <!-- 생성된 Excel 다운로드 패널 -->
+    <div id="tax-result-panel" class="card" style="display:none;">
       <div class="card-header">
-        <h2>📋 세금계산서 자동 입력</h2>
-        <button onclick="document.getElementById('hometax-data-panel').style.display='none'">✕ 닫기</button>
+        <h2>생성 완료</h2>
+        <button onclick="document.getElementById('tax-result-panel').style.display='none'">✕ 닫기</button>
       </div>
-      <div id="hometax-data-body" style="padding:16px;"></div>
+      <div id="tax-result-body" style="padding:16px;"></div>
     </div>
+
+    <!-- 업체 목록 -->
     <div class="card">
       <div class="card-header">
-        <h2>세금계산서 발행</h2>
+        <h2>세금계산서 일괄발행</h2>
         <div class="btn-group">
-          <button onclick="selectAll('hometax-check', true)">전체선택</button>
-          <button onclick="selectAll('hometax-check', false)">전체해제</button>
-          <button class="btn-primary" onclick="runHometaxSelected()">선택 업체 자동 발행</button>
+          <button onclick="selectAll('tax-check', true)">전체선택</button>
+          <button onclick="selectAll('tax-check', false)">전체해제</button>
+          <button class="btn-primary" onclick="generateTaxExcel()">선택 일괄발행 Excel 생성</button>
         </div>
       </div>
-      <table>
+      <table id="tax-table">
         <thead>
           <tr>
             <th class="col-chk">
-              <input type="checkbox" id="hometax-check-all"
-                     onchange="selectAll('hometax-check', this.checked)">
+              <input type="checkbox" id="tax-check-all"
+                     onchange="selectAll('tax-check', this.checked)">
             </th>
             <th>업체명</th>
             <th>사업자번호</th>
             <th class="col-num">공급가액</th>
             <th class="col-num">세액</th>
             <th class="col-num">합계금액</th>
-            <th class="col-method">발행방식</th>
-            <th class="col-status">상태</th>
+            <th class="col-products">유종/품목</th>
+            <th class="col-method">발행구분</th>
+            <th class="col-status">예상 장수</th>
           </tr>
         </thead>
-        <tbody id="hometax-tbody">
-          <tr class="empty-row"><td colspan="8">Excel 파일을 업로드하면 목록이 표시됩니다</td></tr>
+        <tbody id="tax-tbody">
+          <tr class="empty-row"><td colspan="9">Excel 파일을 업로드하면 목록이 표시됩니다</td></tr>
         </tbody>
       </table>
     </div>

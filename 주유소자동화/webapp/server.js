@@ -123,10 +123,22 @@ app.get('/api/customers', (req, res) => {
 
 // ── 고객 저장 ────────────────────────────────────────────────
 app.post('/api/customers', (req, res) => {
-  const { name, bizNo, contactName, email, phone, printMethod, hometaxMethod } = req.body;
+  const { name, bizNo, contactName, email, phone, address, bizType, bizItem, printMethod, hometaxMethod, taxIssuance } = req.body;
   if (!name) return res.status(400).json({ ok: false, error: '업체명은 필수입니다.' });
   const customers = readJSON(CUSTOMERS_FILE, []);
-  const customer  = { name, bizNo: bizNo || '', contactName: contactName || '', email: email || '', phone: phone || '', printMethod: printMethod || '', hometaxMethod: hometaxMethod || '통합' };
+  const customer  = {
+    name,
+    bizNo:         bizNo        || '',
+    contactName:   contactName  || '',
+    email:         email        || '',
+    phone:         phone        || '',
+    address:       address      || '',
+    bizType:       bizType      || '',
+    bizItem:       bizItem      || '',
+    printMethod:   printMethod  || '',
+    hometaxMethod: hometaxMethod || '통합',
+    taxIssuance:   taxIssuance  || '합산',
+  };
   const idx = customers.findIndex(c => c.name === name);
   if (idx >= 0) customers[idx] = customer;
   else customers.push(customer);
@@ -193,15 +205,20 @@ app.post('/api/import-customers', upload.single('file'), (req, res) => {
         contactName:  String(row['담당자명']             || '').trim(),
         email:        String(row['이메일']               || '').trim(),
         phone:        String(row['연락처']               || '').trim(),
+        address:      String(row['주소']                 || '').trim(),
+        bizType:      String(row['업태']                 || '').trim(),
+        bizItem:      String(row['종목']                 || '').trim(),
         printMethod:  String(row['출력방법']             || '').trim(),
         hometaxMethod:String(row['세금계산서발행방식']   || '').trim() || '통합',
+        taxIssuance:  String(row['세금계산서발행구분']   || '').trim() || '합산',
       };
 
       const idx = customers.findIndex(c => c.name === name);
       if (idx >= 0) {
-        ['bizNo','contactName','email','phone','printMethod','hometaxMethod'].forEach(k => {
-          if (incoming[k] && incoming[k] !== '통합') customers[idx][k] = incoming[k];
-          else if (incoming[k] === '통합' && k === 'hometaxMethod') customers[idx][k] = '통합';
+        ['bizNo','contactName','email','phone','address','bizType','bizItem','printMethod','hometaxMethod','taxIssuance'].forEach(k => {
+          if (incoming[k] && incoming[k] !== '통합' && incoming[k] !== '합산') customers[idx][k] = incoming[k];
+          else if (k === 'hometaxMethod') customers[idx][k] = incoming[k] || '통합';
+          else if (k === 'taxIssuance')   customers[idx][k] = incoming[k] || '합산';
         });
         updated++;
       } else {
@@ -232,6 +249,25 @@ app.post('/api/send-email', async (req, res) => {
     const { sendEmail } = require('./lib/emailSender');
     await sendEmail(settings, email, vendorName, fp, month, extraMemo || '');
     res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── 세금계산서 일괄발행 Excel 생성 ───────────────────────────
+app.post('/api/generate-tax-excel', (req, res) => {
+  try {
+    const { issueDate, year, month, taxMethods } = req.body;
+    if (!issueDate) return res.status(400).json({ ok: false, error: '발행일자를 입력하세요.' });
+
+    const vendors   = readJSON(vendorFile(year, month), []);
+    const customers = readJSON(CUSTOMERS_FILE, []);
+
+    if (!vendors.length) return res.status(400).json({ ok: false, error: 'Excel 파일을 먼저 업로드하세요.' });
+
+    const { generateTaxInvoiceExcel } = require('./lib/taxInvoiceGenerator');
+    const result = generateTaxInvoiceExcel(vendors, customers, issueDate, taxMethods || {}, OUTPUT_DIR);
+    res.json({ ok: true, ...result });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }

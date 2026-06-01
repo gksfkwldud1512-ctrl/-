@@ -15,7 +15,8 @@ const state = {
   hometaxStatus:       {},   // { 업체명: 'done'|'fail'|'running' }
   sort:                { col: 'name', dir: 'asc' },
   vendorPrintMethods:  {},   // { 업체명: 출력방법 } — 세션 내
-  hometaxMethods:      {},   // { 업체명: '통합'|'분리' } — 세션 내
+  hometaxMethods:      {},   // { 업체명: '통합'|'분리' } — 세션 내 (구 자동화용)
+  taxIssuanceMethods:  {},   // { 업체명: '합산'|'분리' } — 세션 내 (일괄발행용)
 };
 
 // ── 초기화 ───────────────────────────────────────────────────
@@ -137,7 +138,7 @@ function renderAll() {
   renderVendors();
   renderCustomers();
   renderEmail();
-  renderHometax();
+  renderTaxInvoice();
 }
 
 // 출력방법 드롭다운 options HTML
@@ -364,58 +365,137 @@ function renderEmail() {
   }).join('');
 }
 
-// ── 홈택스 발행방식 (세션 임시 저장) ────────────────────────
-function getHometaxMethod(vendorName) {
-  if (state.hometaxMethods[vendorName] !== undefined) return state.hometaxMethods[vendorName];
-  return state.customers.find(c => c.name === vendorName)?.hometaxMethod || '통합';
+// ── 세금계산서 발행구분 (세션 임시 저장) ─────────────────────
+function getTaxIssuance(vendorName) {
+  if (state.taxIssuanceMethods[vendorName] !== undefined)
+    return state.taxIssuanceMethods[vendorName];
+  return state.customers.find(c => c.name === vendorName)?.taxIssuance || '합산';
 }
-function updateHometaxMethod(name, value) {
-  state.hometaxMethods[name] = value;
-  renderHometax();
+function updateTaxIssuance(name, value) {
+  state.taxIssuanceMethods[name] = value;
+  renderTaxInvoice();
 }
 
-// ── 홈택스 목록 ─────────────────────────────────────────────
-function renderHometax() {
-  const tbody = document.getElementById('hometax-tbody');
+// 품목 집계 (브라우저 계산용, 서버와 동일 로직)
+function calcProductsForVendor(vendor) {
+  const map = {};
+  (vendor.txs || []).forEach(t => {
+    if (!map[t.product]) map[t.product] = { qty: 0, supply: 0, tax: 0 };
+    const supply = t.taxType === '면세' ? t.amount : Math.round(t.amount / 1.1);
+    const tax    = t.taxType === '면세' ? 0        : t.amount - supply;
+    map[t.product].qty    += t.qty;
+    map[t.product].supply += supply;
+    map[t.product].tax    += tax;
+  });
+  return Object.entries(map).map(([name, d]) => ({ name, ...d }));
+}
+
+// ── 세금계산서 일괄발행 목록 ──────────────────────────────────
+function renderTaxInvoice() {
+  const tbody = document.getElementById('tax-tbody');
+  if (!tbody) return;
   const creditVendors = state.vendors.filter(v => v.hasCredit);
 
   if (!creditVendors.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Excel 파일을 업로드하면 목록이 표시됩니다</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="9">Excel 파일을 업로드하면 목록이 표시됩니다</td></tr>';
     return;
   }
+
   tbody.innerHTML = creditVendors.map(v => {
-    const customer    = state.customers.find(c => c.name === v.name);
-    const hasBizNo    = !!customer?.bizNo;
-    const { supply, tax } = calcTax(v);
-    const status      = state.hometaxStatus[v.name];
-    const method      = getHometaxMethod(v.name);
-    const productCount = [...new Set((v.txs || []).map(t => t.product))].length;
-    const invoiceCount = method === '분리' ? productCount : 1;
+    const customer  = state.customers.find(c => c.name === v.name);
+    const hasBizNo  = !!customer?.bizNo;
+    const products  = calcProductsForVendor(v);
+    const method    = getTaxIssuance(v.name);
 
-    let statusBadge = '<span class="badge badge-no">대기</span>';
-    if (status === 'running')      statusBadge = '<span class="badge badge-sending">브라우저 열리는 중...</span>';
-    if (status === 'browser_open') statusBadge = '<span class="badge badge-warn">발행 대기 (로그인 후 입력)</span>';
-    if (status === 'done')         statusBadge = '<span class="badge badge-sent">발행 완료</span>';
-    if (status === 'fail')         statusBadge = '<span class="badge badge-fail">실패</span>';
+    const totalSupply = products.reduce((s, p) => s + p.supply, 0);
+    const totalTax    = products.reduce((s, p) => s + p.tax,    0);
 
-    const methodSel = `<select class="select-method" onchange="updateHometaxMethod('${esc(v.name)}', this.value)">
-      <option value="통합" ${method === '통합' ? 'selected' : ''}>통합 (1건)</option>
-      <option value="분리" ${method === '분리' ? 'selected' : ''}>분리 (${productCount}건)</option>
+    // 예상 장수 계산
+    let invoiceCount;
+    if (method === '분리') {
+      invoiceCount = products.length;
+    } else {
+      invoiceCount = Math.ceil(products.length / 4) || 1;
+    }
+
+    // 유종/품목 태그
+    const productTags = products.map(p =>
+      `<span class="product-tag">${esc(p.name)}</span>`
+    ).join('');
+
+    const methodSel = `<select class="select-method" onchange="updateTaxIssuance('${esc(v.name)}', this.value)">
+      <option value="합산" ${method === '합산' ? 'selected' : ''}>합산 (${Math.ceil(products.length/4)||1}장)</option>
+      <option value="분리" ${method === '분리' ? 'selected' : ''}>분리 (${products.length}장)</option>
     </select>`;
 
-    return `<tr>
+    const countBadge = `<span class="badge ${invoiceCount > 1 ? 'badge-warn' : 'badge-ok'}">${invoiceCount}장</span>`;
+
+    return `<tr class="${hasBizNo ? '' : 'row-disabled'}">
       <td class="col-chk">
-        <input type="checkbox" class="hometax-check" value="${esc(v.name)}" ${hasBizNo ? '' : 'disabled'}>
+        <input type="checkbox" class="tax-check" value="${esc(v.name)}" ${hasBizNo ? '' : 'disabled'}>
       </td>
       <td>${esc(v.name)}</td>
-      <td>${hasBizNo ? esc(customer.bizNo) : '<span class="badge badge-warn">사업자번호 미등록</span>'}</td>
-      <td class="col-num">${supply.toLocaleString()}원</td>
-      <td class="col-num">${tax.toLocaleString()}원</td>
+      <td>${hasBizNo
+        ? `<span class="bizno">${esc(customer.bizNo)}</span>`
+        : '<span class="badge badge-warn">사업자번호 미등록</span>'}</td>
+      <td class="col-num">${totalSupply.toLocaleString()}원</td>
+      <td class="col-num">${totalTax.toLocaleString()}원</td>
       <td class="col-num">${v.totalCredit.toLocaleString()}원</td>
+      <td class="col-products">${productTags}</td>
       <td class="col-method">${methodSel}</td>
-      <td class="col-status">${statusBadge}</td>
+      <td class="col-status">${countBadge}</td>
     </tr>`;
   }).join('');
+}
+
+// ── 세금계산서 일괄발행 Excel 생성 ───────────────────────────
+async function generateTaxExcel() {
+  const names = getChecked('tax-check');
+  if (!names.length) return toast('업체를 선택하세요.', 'warn');
+
+  // 선택한 업체의 발행구분만 전달
+  const taxMethods = {};
+  names.forEach(n => { taxMethods[n] = getTaxIssuance(n); });
+
+  toast('일괄발행 Excel 생성 중...', '');
+
+  const res = await api('POST', '/api/generate-tax-excel', {
+    issueDate: state.issueDate,
+    year:      state.year,
+    month:     state.month,
+    taxMethods,
+  });
+
+  if (!res.ok) return toast(`오류: ${res.error}`, 'error');
+
+  const panel = document.getElementById('tax-result-panel');
+  const body  = document.getElementById('tax-result-body');
+  const skipMsg = res.skipped?.length
+    ? `<p style="margin-top:8px; color:#92400e; font-size:13px;">⚠️ 사업자번호 미등록으로 제외된 업체: ${res.skipped.map(esc).join(', ')}</p>`
+    : '';
+
+  body.innerHTML = `
+    <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:12px;">
+      <div style="font-size:15px; font-weight:700; color:#15803d;">✅ 생성 완료</div>
+      <div>총 <strong>${res.count}행</strong> (세금계산서 ${res.count}장)</div>
+    </div>
+    <a href="/api/download/${encodeURIComponent(res.filename)}"
+       class="btn-primary"
+       style="display:inline-block; padding:10px 20px; text-decoration:none; border-radius:6px; font-weight:700;"
+       download>
+      ⬇ ${esc(res.filename)} 다운로드
+    </a>
+    <p style="margin-top:12px; font-size:12px; color:#64748b;">
+      홈택스 → 전자세금계산서 → 발급 → <strong>Excel 일괄발급</strong> → 파일 업로드
+    </p>
+    ${skipMsg}`;
+
+  panel.style.display = '';
+  panel.scrollIntoView({ behavior: 'smooth' });
+  toast(`✅ ${res.count}건 일괄발행 Excel 생성 완료`, 'success');
+
+  const fRes = await api('GET', '/api/files');
+  if (fRes.ok) state.files = fRes.files;
 }
 
 // ── 거래명세서 생성 ─────────────────────────────────────────
@@ -509,42 +589,6 @@ async function sendSelectedEmails() {
   if (sent) toast(`✅ ${sent}개 업체 메일 발송 완료`, 'success');
 }
 
-// ── 홈택스 자동화 ───────────────────────────────────────────
-async function runHometaxSelected() {
-  const names = getChecked('hometax-check');
-  if (!names.length) return toast('업체를 선택하세요.', 'warn');
-
-  const issueDate = state.issueDate.replace(/-/g, '/');
-  toast('홈택스 브라우저를 순서대로 엽니다.', '');
-
-  for (const name of names) {
-    state.hometaxStatus[name] = 'running';
-    renderHometax();
-
-    const hometaxMethod = getHometaxMethod(name);
-    const res = await api('POST', '/api/hometax', {
-      vendorName: name,
-      issueDate,
-      year:  state.year,
-      month: state.month,
-      hometaxMethod,
-    });
-
-    if (res.ok) {
-      state.hometaxStatus[name] = 'browser_open';
-      showHometaxDataPanel(res);
-      const label = res.hometaxMethod === '분리'
-        ? `홈택스가 열렸습니다. ${name} 분리발행 ${res.invoiceCount}건 — 아래 데이터 참고하여 입력하세요`
-        : `홈택스가 열렸습니다. 공동인증서 로그인 후 아래 데이터를 입력하세요`;
-      toast(label, 'success');
-    } else {
-      state.hometaxStatus[name] = 'fail';
-      toast(`${name} 오류: ${res.error}`, 'error');
-    }
-    renderHometax();
-    await sleep(1500);
-  }
-}
 
 // ── 고객 Excel 일괄 업로드 ─────────────────────────────────────
 async function importCustomers(file) {
@@ -581,11 +625,14 @@ async function saveCustomer() {
   const contactName   = document.getElementById('c-contact').value.trim();
   const email         = document.getElementById('c-email').value.trim();
   const phone         = document.getElementById('c-phone').value.trim();
+  const address       = document.getElementById('c-address').value.trim();
+  const bizType       = document.getElementById('c-biztype').value.trim();
+  const bizItem       = document.getElementById('c-bizitem').value.trim();
   const printMethod   = document.getElementById('c-print-method').value;
-  const hometaxMethod = document.getElementById('c-hometax-method').value;
+  const taxIssuance   = document.getElementById('c-tax-issuance').value;
   if (!name) return toast('업체명을 입력하세요.', 'warn');
 
-  const res = await api('POST', '/api/customers', { name, bizNo, contactName, email, phone, printMethod, hometaxMethod });
+  const res = await api('POST', '/api/customers', { name, bizNo, contactName, email, phone, address, bizType, bizItem, printMethod, taxIssuance });
   if (res.ok) {
     toast(`✅ ${name} 저장 완료`, 'success');
     closeCustomerForm();
@@ -600,13 +647,16 @@ async function saveCustomer() {
 function editCustomer(name) {
   const c = state.customers.find(c => c.name === name);
   if (!c) return;
-  document.getElementById('c-name').value           = c.name;
-  document.getElementById('c-bizno').value          = c.bizNo || '';
-  document.getElementById('c-contact').value        = c.contactName || '';
-  document.getElementById('c-email').value          = c.email || '';
-  document.getElementById('c-phone').value          = c.phone || '';
-  document.getElementById('c-print-method').value   = c.printMethod || '';
-  document.getElementById('c-hometax-method').value = c.hometaxMethod || '통합';
+  document.getElementById('c-name').value          = c.name;
+  document.getElementById('c-bizno').value         = c.bizNo || '';
+  document.getElementById('c-contact').value       = c.contactName || '';
+  document.getElementById('c-email').value         = c.email || '';
+  document.getElementById('c-phone').value         = c.phone || '';
+  document.getElementById('c-address').value       = c.address || '';
+  document.getElementById('c-biztype').value       = c.bizType || '';
+  document.getElementById('c-bizitem').value       = c.bizItem || '';
+  document.getElementById('c-print-method').value  = c.printMethod || '';
+  document.getElementById('c-tax-issuance').value  = c.taxIssuance || '합산';
   document.querySelector('[data-tab="customers"]').click();
   document.getElementById('customer-form-card').style.display = '';
   document.getElementById('customer-form-title').textContent  = `수정: ${name}`;
@@ -615,10 +665,11 @@ function editCustomer(name) {
 
 function closeCustomerForm() {
   document.getElementById('customer-form-card').style.display = 'none';
-  ['c-name','c-bizno','c-contact','c-email','c-phone'].forEach(id =>
+  ['c-name','c-bizno','c-contact','c-email','c-phone','c-address','c-biztype','c-bizitem'].forEach(id =>
     document.getElementById(id).value = ''
   );
   document.getElementById('c-print-method').value = '';
+  document.getElementById('c-tax-issuance').value = '합산';
 }
 
 async function deleteCustomer(name) {
@@ -632,105 +683,6 @@ async function deleteCustomer(name) {
   }
 }
 
-// ── 홈택스 발행 데이터 패널 ─────────────────────────────────
-let _htCurrentProduct = 0;
-
-function showHometaxDataPanel(data) {
-  const panel = document.getElementById('hometax-data-panel');
-  const body  = document.getElementById('hometax-data-body');
-  if (!panel || !body) return;
-
-  _htCurrentProduct = 0;
-  renderHometaxPanel(body, data);
-  panel.style.display = '';
-  panel.scrollIntoView({ behavior: 'smooth' });
-}
-
-function renderHometaxPanel(body, data) {
-  const fmt = n => Number(n).toLocaleString();
-  const isBunri = data.hometaxMethod === '분리';
-
-  const rows = data.products.map((p, i) => `
-    <tr style="${isBunri && i === _htCurrentProduct ? 'background:#dbeafe;font-weight:700;' : ''}">
-      <td>${isBunri ? `<span class="badge ${i < _htCurrentProduct ? 'badge-ok' : i === _htCurrentProduct ? 'badge-sending' : 'badge-no'}">${i < _htCurrentProduct ? '완료' : i === _htCurrentProduct ? '현재' : '대기'}</span> ` : ''}${esc(p.name)}</td>
-      <td class="col-num">${fmt(p.qty)}</td>
-      <td class="col-num">${fmt(p.supply)}원</td>
-      <td class="col-num">${fmt(p.tax)}원</td>
-      <td class="col-num">${fmt(p.amount)}원</td>
-    </tr>`).join('');
-
-  const stepGuide = isBunri
-    ? `<div style="margin-bottom:10px; padding:10px; background:#fef9c3; border-radius:6px; font-size:13px; color:#92400e;">
-        ⚡ <strong>분리발행 ${data.invoiceCount}건</strong> — 현재: ${data.products[_htCurrentProduct]?.name || ''}<br>
-        건별발급 화면에서 [자동 입력] → 발급 → 다시 건별발급 → [자동 입력] 반복
-       </div>`
-    : `<div style="margin-bottom:10px; padding:10px; background:#dbeafe; border-radius:6px; font-size:13px; color:#1e40af;">
-        📌 건별발급 화면에서 [자동 입력] 버튼을 클릭하세요
-       </div>`;
-
-  body.innerHTML = `
-    <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom:12px;">
-      <div><span style="font-size:12px;color:#64748b;">공급받는 자</span><br><strong>${esc(data.customer?.name || '')}</strong></div>
-      <div><span style="font-size:12px;color:#64748b;">사업자번호</span><br><strong>${esc(data.customer?.bizNo || '')}</strong></div>
-      <div><span style="font-size:12px;color:#64748b;">작성일자</span><br><strong>${esc(data.issueDate || '')}</strong></div>
-      <div><span style="font-size:12px;color:#64748b;">발행방식</span><br><strong>${isBunri ? `분리발행 (${data.invoiceCount}건)` : '통합발행 (1건)'}</strong></div>
-    </div>
-    ${stepGuide}
-    <table style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:14px;">
-      <thead><tr style="background:#f1f5f9;">
-        <th style="padding:8px 10px; text-align:left; border-bottom:1px solid #e2e8f0;">품목</th>
-        <th style="padding:8px 10px; text-align:right; border-bottom:1px solid #e2e8f0;">수량</th>
-        <th style="padding:8px 10px; text-align:right; border-bottom:1px solid #e2e8f0;">공급가액</th>
-        <th style="padding:8px 10px; text-align:right; border-bottom:1px solid #e2e8f0;">세액</th>
-        <th style="padding:8px 10px; text-align:right; border-bottom:1px solid #e2e8f0;">합계</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-      <tfoot><tr style="background:#f8fafc; font-weight:700;">
-        <td style="padding:8px 10px; border-top:2px solid #e2e8f0;">합계</td>
-        <td></td>
-        <td style="padding:8px 10px; text-align:right; border-top:2px solid #e2e8f0;">${fmt(data.totalSupply)}원</td>
-        <td style="padding:8px 10px; text-align:right; border-top:2px solid #e2e8f0;">${fmt(data.totalTax)}원</td>
-        <td style="padding:8px 10px; text-align:right; border-top:2px solid #e2e8f0;">${fmt(data.totalAmount)}원</td>
-      </tr></tfoot>
-    </table>
-    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <button class="btn-primary" id="btn-auto-fill" onclick="doHometaxFill()">
-        ⚡ 건별발급 화면에서 자동 입력
-      </button>
-      <button onclick="updateHometaxDone('${esc(data.customer?.name || '')}')">✅ 발행 완료 표시</button>
-    </div>
-    <div id="fill-status" style="margin-top:8px; font-size:13px; color:#64748b;"></div>`;
-}
-
-async function doHometaxFill() {
-  const btn    = document.getElementById('btn-auto-fill');
-  const status = document.getElementById('fill-status');
-  if (btn) { btn.disabled = true; btn.textContent = '입력 중...'; }
-  if (status) status.textContent = '건별발급 폼을 찾아 입력 중입니다...';
-
-  const res = await api('POST', '/api/hometax-fill', { productIndex: _htCurrentProduct });
-
-  if (res.ok) {
-    if (status) status.textContent = `✅ ${res.productName} 입력 완료! 내용 확인 후 발급 버튼을 클릭하세요.`;
-    if (btn) { btn.disabled = false; btn.textContent = '⚡ 건별발급 화면에서 자동 입력'; }
-    if (!res.isLast) {
-      _htCurrentProduct = res.nextIndex;
-      if (status) status.textContent += ` | 다음: 발급 후 건별발급 화면에서 다시 [자동 입력] 클릭 (남은 ${res.remaining}건)`;
-    }
-    toast(`✅ ${res.productName} 자동 입력 완료`, 'success');
-  } else {
-    if (status) status.textContent = `❌ ${res.error}`;
-    if (btn) { btn.disabled = false; btn.textContent = '⚡ 건별발급 화면에서 자동 입력'; }
-    toast(`입력 실패: ${res.error}`, 'error');
-  }
-}
-
-function updateHometaxDone(name) {
-  if (!name) return;
-  state.hometaxStatus[name] = 'done';
-  renderHometax();
-  toast(`✅ ${name} 발행 완료로 표시됐습니다`, 'success');
-}
 
 // ── 설정 ────────────────────────────────────────────────────
 async function saveSettings() {
