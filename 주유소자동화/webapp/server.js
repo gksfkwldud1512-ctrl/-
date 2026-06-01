@@ -157,30 +157,49 @@ app.get('/api/customer-template', async (req, res) => {
 app.post('/api/import-customers', upload.single('file'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ ok: false, error: '파일이 없습니다.' });
-    const { parseExcelRows } = require('./lib/excelParser');
-    const rows = parseExcelRows(req.file.path, '고객등록');
+
+    const XLSX = require('xlsx');
+    const wb   = XLSX.readFile(req.file.path);
+    const ws   = wb.Sheets['고객등록'] || wb.Sheets[wb.SheetNames[0]];
+
+    // 헤더 행 자동 탐지: '업체명'이 포함된 행을 찾아 그 행부터 파싱
+    const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    let headerIdx = 0;
+    for (let i = 0; i < Math.min(rawRows.length, 5); i++) {
+      if (rawRows[i].some(c => String(c).includes('업체명'))) { headerIdx = i; break; }
+    }
+    const headers = rawRows[headerIdx].map(h => String(h).trim());
+    const rows = rawRows.slice(headerIdx + 1).map(r => {
+      const obj = {};
+      headers.forEach((h, i) => { obj[h] = r[i]; });
+      return obj;
+    });
 
     const customers = readJSON(CUSTOMERS_FILE, []);
     let added = 0, updated = 0;
 
     rows.forEach(row => {
+      // '업체명 *' 또는 '업체명' 컬럼 모두 지원
       const name = String(row['업체명 *'] || row['업체명'] || '').trim();
-      if (!name || name.startsWith('★') || name.startsWith('출력방법') || name.startsWith('※')) return;
+      // 빈 행·안내문·합계 행 제외
+      if (!name || name.startsWith('★') || name.startsWith('총 ') ||
+          name.startsWith('출력방법') || name.startsWith('※')) return;
 
       const incoming = {
         name,
-        bizNo:        String(row['사업자번호']  || '').trim(),
-        contactName:  String(row['담당자명']     || '').trim(),
-        email:        String(row['이메일']       || '').trim(),
-        phone:        String(row['연락처']       || '').trim(),
-        printMethod:  String(row['출력방법']     || '').trim(),
+        bizNo:        String(row['사업자번호']           || '').trim(),
+        contactName:  String(row['담당자명']             || '').trim(),
+        email:        String(row['이메일']               || '').trim(),
+        phone:        String(row['연락처']               || '').trim(),
+        printMethod:  String(row['출력방법']             || '').trim(),
+        hometaxMethod:String(row['세금계산서발행방식']   || '').trim() || '통합',
       };
 
       const idx = customers.findIndex(c => c.name === name);
       if (idx >= 0) {
-        // 기존 업체: 빈 값이 아닌 필드만 덮어쓰기
-        ['bizNo','contactName','email','phone','printMethod'].forEach(k => {
-          if (incoming[k]) customers[idx][k] = incoming[k];
+        ['bizNo','contactName','email','phone','printMethod','hometaxMethod'].forEach(k => {
+          if (incoming[k] && incoming[k] !== '통합') customers[idx][k] = incoming[k];
+          else if (incoming[k] === '통합' && k === 'hometaxMethod') customers[idx][k] = '통합';
         });
         updated++;
       } else {
