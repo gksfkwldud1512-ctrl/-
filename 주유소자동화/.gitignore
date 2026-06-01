@@ -1,0 +1,26 @@
+# ── Node.js ───────────────────────────────────────
+**/node_modules/
+npm-debug.log*
+
+# ── 민감한 데이터 (GitHub에 올리지 않음) ──────────
+webapp/data/settings.json
+webapp/data/customers.json
+webapp/data/vendors*.json
+
+# ── 업로드/생성 파일 ────────────────────────────────
+webapp/uploads/
+webapp/output/
+
+# ── BOS 원본 Excel (거래 데이터) ─────────────────────
+마감자동화/*.xlsx
+마감자동화/거래명세서/
+
+# ── 단, 거래명세서 양식은 포함 ──────────────────────
+!마감자동화/거래명세서 양식/
+!마감자동화/거래명세서 양식/*.xlsx
+
+# ── OS / 에디터 ────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
