@@ -75,13 +75,14 @@
             <th class="col-num sortable" data-col="credit" onclick="setSort('credit')">외상 <span class="sort-icon" id="sort-credit">⇅</span></th>
             <th class="col-num sortable" data-col="other" onclick="setSort('other')">카드/현금 <span class="sort-icon" id="sort-other">⇅</span></th>
             <th class="col-num sortable" data-col="total" onclick="setSort('total')">합계 <span class="sort-icon" id="sort-total">⇅</span></th>
+            <th class="col-method">출력방법</th>
             <th class="col-status">거래명세서</th>
             <th class="col-action">다운로드</th>
           </tr>
         </thead>
         <tbody id="vendor-tbody">
           <tr class="empty-row">
-            <td colspan="7">Excel 파일을 업로드하면 업체 목록이 표시됩니다</td>
+            <td colspan="8">Excel 파일을 업로드하면 업체 목록이 표시됩니다</td>
           </tr>
         </tbody>
       </table>
@@ -90,16 +91,45 @@
 
   <!-- ───── Tab 2: 고객 관리 ───── -->
   <section id="tab-customers" class="tab-content">
+
+    <!-- Excel 일괄 등록 -->
     <div class="card">
-      <div class="card-header"><h2>고객 추가 / 수정</h2></div>
+      <div class="card-header"><h2>📋 Excel로 일괄 등록</h2></div>
+      <div class="notice notice-info" style="margin:0 0 12px 0;">
+        양식을 다운로드 → 업체 정보 작성 → 업로드하면 자동으로 등록됩니다.
+        기존에 등록된 업체는 정보가 업데이트되고, 새 업체는 추가됩니다.
+      </div>
+      <div class="import-row">
+        <a href="/api/customer-template" class="btn-upload" download>
+          ⬇ 양식 다운로드
+        </a>
+        <span class="import-divider">→ 작성 후 →</span>
+        <input type="file" id="customer-file-input" accept=".xlsx,.xls" hidden>
+        <button class="btn-upload btn-green" onclick="document.getElementById('customer-file-input').click()">
+          ⬆ 고객정보 업로드
+        </button>
+        <span id="customer-import-label" class="file-label"></span>
+      </div>
+    </div>
+
+    <!-- 개별 추가/수정 폼 -->
+    <div class="card" id="customer-form-card" style="display:none;">
+      <div class="card-header">
+        <h2 id="customer-form-title">개별 수정</h2>
+        <button onclick="closeCustomerForm()" style="font-size:13px;">✕ 닫기</button>
+      </div>
       <div class="form-row">
         <div class="form-group">
           <label>업체명 <span class="required">*</span></label>
-          <input type="text" id="c-name" placeholder="업체명">
+          <input type="text" id="c-name" placeholder="업체명" readonly style="background:#f1f5f9;">
         </div>
         <div class="form-group">
           <label>사업자번호</label>
           <input type="text" id="c-bizno" placeholder="000-00-00000">
+        </div>
+        <div class="form-group">
+          <label>담당자명</label>
+          <input type="text" id="c-contact" placeholder="홍길동">
         </div>
         <div class="form-group">
           <label>이메일</label>
@@ -109,12 +139,23 @@
           <label>연락처</label>
           <input type="text" id="c-phone" placeholder="010-0000-0000">
         </div>
+        <div class="form-group">
+          <label>출력방법</label>
+          <select id="c-print-method" class="form-select">
+            <option value="">기본(차량별-유종별)</option>
+            <option value="유종별">유종별</option>
+            <option value="판매일자순">판매일자순</option>
+            <option value="차량별-판매일자순">차량별-판매일자순</option>
+            <option value="차량별-유종별">차량별-유종별</option>
+          </select>
+        </div>
         <div class="form-group form-group-btn">
           <button class="btn-primary" onclick="saveCustomer()">저장</button>
-          <button onclick="clearCustomerForm()">초기화</button>
         </div>
       </div>
     </div>
+
+    <!-- 고객 목록 -->
     <div class="card">
       <div class="card-header">
         <h2>고객 목록</h2>
@@ -125,13 +166,15 @@
           <tr>
             <th>업체명</th>
             <th>사업자번호</th>
+            <th>담당자명</th>
             <th>이메일</th>
             <th>연락처</th>
+            <th class="col-method">출력방법</th>
             <th class="col-action">관리</th>
           </tr>
         </thead>
         <tbody id="customer-tbody">
-          <tr class="empty-row"><td colspan="5">등록된 고객이 없습니다</td></tr>
+          <tr class="empty-row"><td colspan="7">등록된 고객이 없습니다</td></tr>
         </tbody>
       </table>
     </div>

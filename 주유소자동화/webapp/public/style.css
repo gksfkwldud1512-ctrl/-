@@ -125,6 +125,18 @@ main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
   transition: background 0.15s;
 }
 .btn-upload:hover { background: var(--primary-dark); }
+.btn-upload.btn-green { background: #16a34a; text-decoration: none; display: inline-block; }
+.btn-upload.btn-green:hover { background: #15803d; }
+.import-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.import-divider {
+  color: var(--text-muted);
+  font-size: 13px;
+}
 .file-label {
   font-size: 13px;
   color: var(--text-muted);
@@ -234,6 +246,31 @@ tbody tr:hover td { background: #f8fafc; }
 .col-num   { text-align: right !important; }
 .col-status{ width: 100px; text-align: center !important; }
 .col-action{ width: 100px; text-align: center !important; }
+.col-method{ width: 160px; text-align: center !important; }
+
+.select-method {
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-family: inherit;
+  background: #fff;
+  color: var(--text);
+  width: 100%;
+}
+.select-method:focus { outline: none; border-color: var(--primary); }
+
+.form-select {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-family: inherit;
+  background: #fff;
+  color: var(--text);
+  transition: border-color 0.15s;
+}
+.form-select:focus { outline: none; border-color: var(--primary); }
 
 td.col-num   { text-align: right; }
 td.col-status{ text-align: center; }

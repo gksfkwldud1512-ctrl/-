@@ -79,7 +79,7 @@ app.get('/api/monthly-status', (req, res) => {
 // ── 거래명세서 생성 (외상 업체만) ────────────────────────────
 app.post('/api/generate', async (req, res) => {
   try {
-    const { vendorNames, issueDate, year, month } = req.body;
+    const { vendorNames, issueDate, year, month, printMethods } = req.body;
     if (!vendorNames?.length) return res.status(400).json({ ok: false, error: '업체를 선택하세요.' });
 
     const vendors   = readJSON(vendorFile(year, month), []);
@@ -92,7 +92,7 @@ app.post('/api/generate', async (req, res) => {
     if (!selected.length) return res.status(400).json({ ok: false, error: '선택한 업체 중 외상 거래가 없습니다.' });
 
     const { generateStatements } = require('./lib/statementGenerator');
-    const files = await generateStatements(selected, customers, OUTPUT_DIR, issueDate, year, month);
+    const files = await generateStatements(selected, customers, OUTPUT_DIR, issueDate, year, month, printMethods || {});
     res.json({ ok: true, files });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -123,10 +123,10 @@ app.get('/api/customers', (req, res) => {
 
 // ── 고객 저장 ────────────────────────────────────────────────
 app.post('/api/customers', (req, res) => {
-  const { name, bizNo, email, phone } = req.body;
+  const { name, bizNo, contactName, email, phone, printMethod } = req.body;
   if (!name) return res.status(400).json({ ok: false, error: '업체명은 필수입니다.' });
   const customers = readJSON(CUSTOMERS_FILE, []);
-  const customer  = { name, bizNo: bizNo || '', email: email || '', phone: phone || '' };
+  const customer  = { name, bizNo: bizNo || '', contactName: contactName || '', email: email || '', phone: phone || '', printMethod: printMethod || '' };
   const idx = customers.findIndex(c => c.name === name);
   if (idx >= 0) customers[idx] = customer;
   else customers.push(customer);
@@ -141,6 +141,59 @@ app.delete('/api/customers/:name', (req, res) => {
   );
   writeJSON(CUSTOMERS_FILE, customers);
   res.json({ ok: true });
+});
+
+// ── 고객 Excel 양식 다운로드 ──────────────────────────────────
+app.get('/api/customer-template', async (req, res) => {
+  const templatePath = path.join(__dirname, '고객등록양식.xlsx');
+  if (!fs.existsSync(templatePath)) {
+    const { createTemplate } = require('./lib/createCustomerTemplate');
+    await createTemplate(templatePath);
+  }
+  res.download(templatePath, '고객등록양식.xlsx');
+});
+
+// ── 고객 Excel 업로드 & 병합 ──────────────────────────────────
+app.post('/api/import-customers', upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ ok: false, error: '파일이 없습니다.' });
+    const { parseExcelRows } = require('./lib/excelParser');
+    const rows = parseExcelRows(req.file.path, '고객등록');
+
+    const customers = readJSON(CUSTOMERS_FILE, []);
+    let added = 0, updated = 0;
+
+    rows.forEach(row => {
+      const name = String(row['업체명 *'] || row['업체명'] || '').trim();
+      if (!name || name.startsWith('★') || name.startsWith('출력방법') || name.startsWith('※')) return;
+
+      const incoming = {
+        name,
+        bizNo:        String(row['사업자번호']  || '').trim(),
+        contactName:  String(row['담당자명']     || '').trim(),
+        email:        String(row['이메일']       || '').trim(),
+        phone:        String(row['연락처']       || '').trim(),
+        printMethod:  String(row['출력방법']     || '').trim(),
+      };
+
+      const idx = customers.findIndex(c => c.name === name);
+      if (idx >= 0) {
+        // 기존 업체: 빈 값이 아닌 필드만 덮어쓰기
+        ['bizNo','contactName','email','phone','printMethod'].forEach(k => {
+          if (incoming[k]) customers[idx][k] = incoming[k];
+        });
+        updated++;
+      } else {
+        customers.push(incoming);
+        added++;
+      }
+    });
+
+    writeJSON(CUSTOMERS_FILE, customers);
+    res.json({ ok: true, added, updated, total: customers.length });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 // ── 메일 발송 ────────────────────────────────────────────────

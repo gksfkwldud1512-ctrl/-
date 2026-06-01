@@ -63,4 +63,13 @@ function parseExcel(filePath) {
   );
 }
 
-module.exports = { parseExcel };
+// 일반 Excel → JSON 변환 (고객 등록 양식 등 범용)
+function parseExcelRows(filePath, sheetName) {
+  const wb = XLSX.readFile(filePath);
+  const ws = sheetName && wb.Sheets[sheetName]
+    ? wb.Sheets[sheetName]
+    : wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws, { defval: '' });
+}
+
+module.exports = { parseExcel, parseExcelRows };

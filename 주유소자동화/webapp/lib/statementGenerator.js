@@ -59,8 +59,56 @@ function calcTax(amount, taxType) {
   return { supply, tax: amount - supply };
 }
 
+// ─── 출력방법별 데이터 정렬 ──────────────────────────────────────
+function organizeTransactions(txs, printMethod) {
+  if (printMethod === '유종별') {
+    const pm = {};
+    txs.forEach(t => {
+      const pk = t.product || '기타';
+      if (!pm[pk]) pm[pk] = [];
+      pm[pk].push(t);
+    });
+    return Object.entries(pm).map(([product, list]) => ({
+      label: product, product: null,
+      txs: list.sort((a, b) => a.date.localeCompare(b.date)),
+    }));
+  }
+  if (printMethod === '판매일자순') {
+    return [{ label: null, product: null,
+      txs: [...txs].sort((a, b) => a.date.localeCompare(b.date)) }];
+  }
+  if (printMethod === '차량별-판매일자순') {
+    const vm = {};
+    txs.forEach(t => {
+      const vk = t.vehicle || '(없음)';
+      if (!vm[vk]) vm[vk] = [];
+      vm[vk].push(t);
+    });
+    return Object.entries(vm).map(([vehicle, list]) => ({
+      label: vehicle, product: null,
+      txs: list.sort((a, b) => a.date.localeCompare(b.date)),
+    }));
+  }
+  // 기본: 차량별-유종별
+  const vm = {};
+  txs.forEach(t => {
+    const vk = t.vehicle || '(없음)';
+    if (!vm[vk]) vm[vk] = {};
+    if (!vm[vk][t.product]) vm[vk][t.product] = [];
+    vm[vk][t.product].push(t);
+  });
+  const groups = [];
+  for (const [, prods] of Object.entries(vm)) {
+    for (const [product, list] of Object.entries(prods)) {
+      groups.push({ label: product, product,
+        txs: list.sort((a, b) => a.date.localeCompare(b.date)) });
+    }
+  }
+  return groups;
+}
+
 // ─── 거래명세서 생성 ─────────────────────────────────────────────
-async function createStatement(cust, customer, outputDir, issueDate, year, month) {
+async function createStatement(cust, customer, outputDir, issueDate, year, month, printMethod) {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('거래명세서', {
     pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
@@ -179,82 +227,78 @@ async function createStatement(cust, customer, outputDir, issueDate, year, month
     ['P8',    '판매금액'],
   ].forEach(([rng, val]) => mergeCell(ws, rng, val, { font: fntD(9) }));
 
-  // ── 데이터 행 (family:3, 높이 지정 없음) ─────────────────────
-  const vehicleMap = {};
-  cust.txs.forEach(t => {
-    const vk = t.vehicle || '(없음)';
-    if (!vehicleMap[vk]) vehicleMap[vk] = {};
-    if (!vehicleMap[vk][t.product]) vehicleMap[vk][t.product] = [];
-    vehicleMap[vk][t.product].push(t);
-  });
+  // ── 데이터 행 (출력방법 적용) ────────────────────────────────
+  const groups        = organizeTransactions(cust.txs, printMethod);
+  const showSubtotals = printMethod !== '판매일자순';
+  const trackByProd   = groups.some(g => g.product !== null);
 
   const productTotals = {};
   let gQty = 0, gSup = 0, gTax = 0, gAmt = 0;
   let r = 9;
 
-  for (const [, prods] of Object.entries(vehicleMap)) {
-    for (const [prod, txs] of Object.entries(prods)) {
-      const sorted = [...txs].sort((a, b) => a.date.localeCompare(b.date));
-      let vQty = 0, vSup = 0, vTx = 0, vAmt = 0;
+  for (const group of groups) {
+    let vQty = 0, vSup = 0, vTx = 0, vAmt = 0;
 
-      sorted.forEach(t => {
-        const { supply, tax } = calcTax(t.amount, t.taxType);
-        // 높이 지정 없음 (원본 양식 기본값 사용)
-        mergeCell(ws, `A${r}:B${r}`, t.date,       { font: fntD(9) });
-        mergeCell(ws, `C${r}:E${r}`, t.vehicle,    { font: fntD(9) });
-        cell(ws,      `F${r}`,       prod,          { font: fntD(9) });
-        cell(ws,      `G${r}`,       'L',           { font: fntD(9) });
-        cell(ws,      `H${r}`,       t.qty,         { font: fntD(9), fmt: '#,##0.00' });
-        mergeCell(ws, `I${r}:K${r}`, t.unitPrice,  { font: fntD(9), h: 'right', fmt: '#,##0' });
-        mergeCell(ws, `L${r}:M${r}`, supply,        { font: fntD(9), h: 'right', fmt: '#,##0' });
-        mergeCell(ws, `N${r}:O${r}`, tax,            { font: fntD(9), h: 'right', fmt: '#,##0' });
-        cell(ws,      `P${r}`,       t.amount,      { font: fntD(9), h: 'right', fmt: '#,##0' });
-
-        vQty += t.qty; vSup += supply; vTx += tax; vAmt += t.amount;
-        r++;
-      });
-
-      // 소계 행
-      mergeCell(ws, `A${r}:B${r}`, '',              { font: fntD(9) });
-      mergeCell(ws, `C${r}:E${r}`, '',              { font: fntD(9) });
-      cell(ws,      `F${r}`,       `${prod} 계`,    { font: fntD(9, true) });
-      cell(ws,      `G${r}`,       'L',              { font: fntD(9, true) });
-      cell(ws,      `H${r}`,       vQty,             { font: fntD(9, true), fmt: '#,##0.00' });
-      mergeCell(ws, `I${r}:K${r}`, 0,               { font: fntD(9, true), h: 'center' });
-      mergeCell(ws, `L${r}:M${r}`, vSup,            { font: fntD(9, true), h: 'right', fmt: '#,##0' });
-      mergeCell(ws, `N${r}:O${r}`, vTx,             { font: fntD(9, true), h: 'right', fmt: '#,##0' });
-      cell(ws,      `P${r}`,       vAmt,             { font: fntD(9, true), h: 'right', fmt: '#,##0' });
+    group.txs.forEach(t => {
+      const { supply, tax } = calcTax(t.amount, t.taxType);
+      mergeCell(ws, `A${r}:B${r}`, t.date,         { font: fntD(9) });
+      mergeCell(ws, `C${r}:E${r}`, t.vehicle || '', { font: fntD(9) });
+      cell(ws,      `F${r}`,       t.product,       { font: fntD(9) });
+      cell(ws,      `G${r}`,       'L',             { font: fntD(9) });
+      cell(ws,      `H${r}`,       t.qty,           { font: fntD(9), fmt: '#,##0.00' });
+      mergeCell(ws, `I${r}:K${r}`, t.unitPrice,    { font: fntD(9), h: 'right', fmt: '#,##0' });
+      mergeCell(ws, `L${r}:M${r}`, supply,          { font: fntD(9), h: 'right', fmt: '#,##0' });
+      mergeCell(ws, `N${r}:O${r}`, tax,             { font: fntD(9), h: 'right', fmt: '#,##0' });
+      cell(ws,      `P${r}`,       t.amount,        { font: fntD(9), h: 'right', fmt: '#,##0' });
+      vQty += t.qty; vSup += supply; vTx += tax; vAmt += t.amount;
       r++;
+    });
 
-      if (!productTotals[prod]) productTotals[prod] = { qty: 0, sup: 0, tax: 0, amt: 0 };
-      productTotals[prod].qty += vQty;
-      productTotals[prod].sup += vSup;
-      productTotals[prod].tax += vTx;
-      productTotals[prod].amt += vAmt;
-      gQty += vQty; gSup += vSup; gTax += vTx; gAmt += vAmt;
+    if (showSubtotals && group.label) {
+      mergeCell(ws, `A${r}:B${r}`, '',                   { font: fntD(9) });
+      mergeCell(ws, `C${r}:E${r}`, '',                   { font: fntD(9) });
+      cell(ws,      `F${r}`,       `${group.label} 계`,  { font: fntD(9, true) });
+      cell(ws,      `G${r}`,       'L',                   { font: fntD(9, true) });
+      cell(ws,      `H${r}`,       vQty,                  { font: fntD(9, true), fmt: '#,##0.00' });
+      mergeCell(ws, `I${r}:K${r}`, 0,                    { font: fntD(9, true), h: 'center' });
+      mergeCell(ws, `L${r}:M${r}`, vSup,                 { font: fntD(9, true), h: 'right', fmt: '#,##0' });
+      mergeCell(ws, `N${r}:O${r}`, vTx,                  { font: fntD(9, true), h: 'right', fmt: '#,##0' });
+      cell(ws,      `P${r}`,       vAmt,                  { font: fntD(9, true), h: 'right', fmt: '#,##0' });
+      r++;
+    }
+
+    if (trackByProd && group.product) {
+      if (!productTotals[group.product]) productTotals[group.product] = { qty: 0, sup: 0, tax: 0, amt: 0 };
+      productTotals[group.product].qty += vQty;
+      productTotals[group.product].sup += vSup;
+      productTotals[group.product].tax += vTx;
+      productTotals[group.product].amt += vAmt;
+    }
+    gQty += vQty; gSup += vSup; gTax += vTx; gAmt += vAmt;
+  }
+
+  // ── 유종 합계 행 (차량별-유종별 모드에서만) ────────────────────
+  if (trackByProd) {
+    for (const [prod, tot] of Object.entries(productTotals)) {
+      ws.getRow(r).height = 17.25;
+      mergeCell(ws, `A${r}:G${r}`, `${prod} 합계`, { font: fntD(12, true) });
+      cell(ws,      `H${r}`,       tot.qty,         { font: fntD(12, true), fmt: '#,##0.00' });
+      mergeCell(ws, `I${r}:K${r}`, '',              { font: fntD(12, true) });
+      mergeCell(ws, `L${r}:M${r}`, tot.sup,        { font: fntD(12, true), h: 'right', fmt: '#,##0' });
+      mergeCell(ws, `N${r}:O${r}`, tot.tax,        { font: fntD(12, true), h: 'right', fmt: '#,##0' });
+      cell(ws,      `P${r}`,       tot.amt,        { font: fntD(12, true), h: 'right', fmt: '#,##0' });
+      r++;
     }
   }
 
-  // ── 유종 합계 행 (높이 17.25, family:3) ─────────────────────
-  for (const [prod, tot] of Object.entries(productTotals)) {
-    ws.getRow(r).height = 17.25;
-    mergeCell(ws, `A${r}:G${r}`, `${prod} 합계`,  { font: fntD(12, true) });
-    cell(ws,      `H${r}`,       tot.qty,          { font: fntD(12, true), fmt: '#,##0.00' });
-    mergeCell(ws, `I${r}:K${r}`, '',               { font: fntD(12, true) });
-    mergeCell(ws, `L${r}:M${r}`, tot.sup,          { font: fntD(12, true), h: 'right', fmt: '#,##0' });
-    mergeCell(ws, `N${r}:O${r}`, tot.tax,          { font: fntD(12, true), h: 'right', fmt: '#,##0' });
-    cell(ws,      `P${r}`,       tot.amt,          { font: fntD(12, true), h: 'right', fmt: '#,##0' });
-    r++;
-  }
-
-  // ── 총합계 행 (높이 17.25) ───────────────────────────────────
+  // ── 총합계 행 ────────────────────────────────────────────────
   ws.getRow(r).height = 17.25;
-  mergeCell(ws, `A${r}:G${r}`, '총합계',           { font: fntD(12, true) });
-  cell(ws,      `H${r}`,       gQty,               { font: fntD(12, true), fmt: '#,##0.00' });
-  mergeCell(ws, `I${r}:K${r}`, '',                 { font: fntD(12, true) });
-  mergeCell(ws, `L${r}:M${r}`, gSup,              { font: fntD(12, true), h: 'right', fmt: '#,##0' });
-  mergeCell(ws, `N${r}:O${r}`, gTax,              { font: fntD(12, true), h: 'right', fmt: '#,##0' });
-  cell(ws,      `P${r}`,       gAmt,              { font: fntD(12, true), h: 'right', fmt: '#,##0' });
+  mergeCell(ws, `A${r}:G${r}`, '총합계',            { font: fntD(12, true) });
+  cell(ws,      `H${r}`,       gQty,                { font: fntD(12, true), fmt: '#,##0.00' });
+  mergeCell(ws, `I${r}:K${r}`, '',                  { font: fntD(12, true) });
+  mergeCell(ws, `L${r}:M${r}`, gSup,               { font: fntD(12, true), h: 'right', fmt: '#,##0' });
+  mergeCell(ws, `N${r}:O${r}`, gTax,               { font: fntD(12, true), h: 'right', fmt: '#,##0' });
+  cell(ws,      `P${r}`,       gAmt,               { font: fntD(12, true), h: 'right', fmt: '#,##0' });
 
   // ── 저장 ─────────────────────────────────────────────────────
   const safeName = cust.name.replace(/[\\/:*?"<>|]/g, '_');
@@ -265,11 +309,12 @@ async function createStatement(cust, customer, outputDir, issueDate, year, month
   return filename;
 }
 
-async function generateStatements(vendors, customers, outputDir, issueDate, year, month) {
+async function generateStatements(vendors, customers, outputDir, issueDate, year, month, printMethods = {}) {
   const files = [];
   for (const v of vendors) {
-    const customer = customers.find(c => c.name === v.name) || null;
-    const filename  = await createStatement(v, customer, outputDir, issueDate, year, month);
+    const customer    = customers.find(c => c.name === v.name) || null;
+    const printMethod = printMethods[v.name] || customer?.printMethod || '';
+    const filename    = await createStatement(v, customer, outputDir, issueDate, year, month, printMethod);
     files.push(filename);
   }
   return files;

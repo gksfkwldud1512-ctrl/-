@@ -29,9 +29,8 @@ echo.
 echo  종료하려면 이 창을 닫거나 Ctrl+C 를 누르세요.
 echo.
 
-:: 브라우저 자동 열기
-timeout /t 2 /nobreak >nul
-start "" http://localhost:3000
+:: 서버 먼저 시작, 2초 후 브라우저 열기 (별도 창에서 비동기 실행)
+start "" cmd /c "timeout /t 2 /nobreak >nul && start http://localhost:3000"
 
 node server.js
 

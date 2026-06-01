@@ -1,17 +1,20 @@
 'use strict';
 
 // ── 상태 ─────────────────────────────────────────────────────
+const PRINT_METHODS = ['유종별', '판매일자순', '차량별-판매일자순', '차량별-유종별'];
+
 const state = {
-  vendors:       [],
-  customers:     [],
-  files:         [],
-  monthlyStatus: {},   // { "05": true, "06": false, ... }
-  year:          new Date().getFullYear(),
-  month:         new Date().getMonth() + 1,
-  issueDate:     '',
-  emailStatus:   {},   // { 업체명: 'sent'|'fail'|'sending' }
-  hometaxStatus: {},   // { 업체명: 'done'|'fail'|'running' }
-  sort:          { col: 'name', dir: 'asc' },  // 정렬 상태
+  vendors:            [],
+  customers:          [],
+  files:              [],
+  monthlyStatus:      {},   // { "05": true, "06": false, ... }
+  year:               new Date().getFullYear(),
+  month:              new Date().getMonth() + 1,
+  issueDate:          '',
+  emailStatus:        {},   // { 업체명: 'sent'|'fail'|'sending' }
+  hometaxStatus:      {},   // { 업체명: 'done'|'fail'|'running' }
+  sort:               { col: 'name', dir: 'asc' },
+  vendorPrintMethods: {},   // { 업체명: 출력방법 } — 세션 내 선택값
 };
 
 // ── 초기화 ───────────────────────────────────────────────────
@@ -84,6 +87,9 @@ function initFileUpload() {
   document.getElementById('file-input').addEventListener('change', e => {
     if (e.target.files[0]) uploadExcel(e.target.files[0]);
   });
+  document.getElementById('customer-file-input').addEventListener('change', e => {
+    if (e.target.files[0]) importCustomers(e.target.files[0]);
+  });
 }
 
 async function loadAll() {
@@ -124,6 +130,19 @@ function renderAll() {
   renderCustomers();
   renderEmail();
   renderHometax();
+}
+
+// 출력방법 드롭다운 options HTML
+function printMethodOptions(current) {
+  const opts = [['', '기본(차량별-유종별)'], ...PRINT_METHODS.map(m => [m, m])];
+  return opts.map(([val, label]) =>
+    `<option value="${val}"${current === val ? ' selected' : ''}>${label}</option>`
+  ).join('');
+}
+
+// 업체 출력방법 변경 (세션 내 임시 저장)
+function updateVendorPrintMethod(name, value) {
+  state.vendorPrintMethods[name] = value;
 }
 
 // 파일명 생성 (서버와 동일한 규칙)
@@ -200,7 +219,7 @@ function updateSortIcons() {
 function renderVendors() {
   const tbody = document.getElementById('vendor-tbody');
   if (!state.vendors.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Excel 파일을 업로드하면 업체 목록이 표시됩니다</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Excel 파일을 업로드하면 업체 목록이 표시됩니다</td></tr>';
     return;
   }
 
@@ -243,12 +262,19 @@ function renderVendors() {
       ? `<a href="/api/download/${encodeURIComponent(filename)}" class="btn-link" download>다운로드</a>`
       : '-';
 
+    const savedMethod = state.vendorPrintMethods[v.name]
+      ?? (state.customers.find(c => c.name === v.name)?.printMethod ?? '');
+    const methodCell = v.hasCredit
+      ? `<select class="select-method" onchange="updateVendorPrintMethod('${esc(v.name)}', this.value)">${printMethodOptions(savedMethod)}</select>`
+      : dash();
+
     return `<tr>
       <td class="col-chk">${checkCell}</td>
       <td>${esc(v.name)}</td>
       <td class="col-num">${creditCell}</td>
       <td class="col-num">${otherCell}</td>
       <td class="col-num">${total.toLocaleString()}원</td>
+      <td class="col-method">${methodCell}</td>
       <td class="col-status">${statCell}</td>
       <td class="col-action">${dlCell}</td>
     </tr>`;
@@ -263,6 +289,7 @@ function renderVendors() {
     <td class="col-num">${sumAll.toLocaleString()}원</td>
     <td></td>
     <td></td>
+    <td></td>
   </tr>`;
 
   tbody.innerHTML = rows.join('') + totalRow;
@@ -275,14 +302,16 @@ function renderCustomers() {
   count.textContent = `${state.customers.length}명`;
 
   if (!state.customers.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">등록된 고객이 없습니다</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">등록된 고객이 없습니다</td></tr>';
     return;
   }
   tbody.innerHTML = state.customers.map(c => `<tr>
     <td>${esc(c.name)}</td>
     <td>${esc(c.bizNo) || dash()}</td>
+    <td>${esc(c.contactName) || dash()}</td>
     <td>${esc(c.email) || dash()}</td>
     <td>${esc(c.phone) || dash()}</td>
+    <td class="col-method">${c.printMethod ? `<span class="badge badge-no">${esc(c.printMethod)}</span>` : dash()}</td>
     <td class="col-action">
       <button class="btn-sm" onclick='editCustomer(${JSON.stringify(c.name)})'>수정</button>
       <button class="btn-sm btn-danger" onclick='deleteCustomer(${JSON.stringify(c.name)})'>삭제</button>
@@ -366,7 +395,9 @@ async function generateSelected() {
   const names = getChecked('vendor-check');
   if (!names.length) return toast('업체를 선택하세요.', 'warn');
 
-  const issueDate = state.issueDate.replace(/-/g, '/');
+  const issueDate    = state.issueDate.replace(/-/g, '/');
+  const printMethods = {};
+  names.forEach(n => { if (state.vendorPrintMethods[n]) printMethods[n] = state.vendorPrintMethods[n]; });
   toast(`${names.length}개 업체 거래명세서 생성 중...`, '');
 
   const res = await api('POST', '/api/generate', {
@@ -374,6 +405,7 @@ async function generateSelected() {
     issueDate,
     year:  state.year,
     month: state.month,
+    printMethods,
   });
 
   if (res.ok) {
@@ -442,18 +474,48 @@ async function runHometaxSelected() {
   }
 }
 
+// ── 고객 Excel 일괄 업로드 ─────────────────────────────────────
+async function importCustomers(file) {
+  const label = document.getElementById('customer-import-label');
+  label.textContent = `업로드 중: ${file.name}`;
+
+  const form = new FormData();
+  form.append('file', file);
+
+  try {
+    const res  = await fetch('/api/import-customers', { method: 'POST', body: form });
+    const data = await res.json();
+    if (data.ok) {
+      label.textContent = `✅ 완료`;
+      toast(`✅ 신규 ${data.added}개 추가, ${data.updated}개 업데이트 (총 ${data.total}개)`, 'success');
+      const cRes = await api('GET', '/api/customers');
+      if (cRes.ok) state.customers = cRes.customers;
+      renderAll();
+    } else {
+      label.textContent = '업로드 실패';
+      toast(`오류: ${data.error}`, 'error');
+    }
+  } catch {
+    label.textContent = '업로드 실패';
+    toast('서버 연결 오류', 'error');
+  }
+  document.getElementById('customer-file-input').value = '';
+}
+
 // ── 고객 관리 ───────────────────────────────────────────────
 async function saveCustomer() {
-  const name  = document.getElementById('c-name').value.trim();
-  const bizNo = document.getElementById('c-bizno').value.trim();
-  const email = document.getElementById('c-email').value.trim();
-  const phone = document.getElementById('c-phone').value.trim();
+  const name        = document.getElementById('c-name').value.trim();
+  const bizNo       = document.getElementById('c-bizno').value.trim();
+  const contactName = document.getElementById('c-contact').value.trim();
+  const email       = document.getElementById('c-email').value.trim();
+  const phone       = document.getElementById('c-phone').value.trim();
+  const printMethod = document.getElementById('c-print-method').value;
   if (!name) return toast('업체명을 입력하세요.', 'warn');
 
-  const res = await api('POST', '/api/customers', { name, bizNo, email, phone });
+  const res = await api('POST', '/api/customers', { name, bizNo, contactName, email, phone, printMethod });
   if (res.ok) {
     toast(`✅ ${name} 저장 완료`, 'success');
-    clearCustomerForm();
+    closeCustomerForm();
     const cRes = await api('GET', '/api/customers');
     if (cRes.ok) state.customers = cRes.customers;
     renderAll();
@@ -465,11 +527,24 @@ async function saveCustomer() {
 function editCustomer(name) {
   const c = state.customers.find(c => c.name === name);
   if (!c) return;
-  document.getElementById('c-name').value  = c.name;
-  document.getElementById('c-bizno').value = c.bizNo;
-  document.getElementById('c-email').value = c.email;
-  document.getElementById('c-phone').value = c.phone;
+  document.getElementById('c-name').value         = c.name;
+  document.getElementById('c-bizno').value        = c.bizNo || '';
+  document.getElementById('c-contact').value      = c.contactName || '';
+  document.getElementById('c-email').value        = c.email || '';
+  document.getElementById('c-phone').value        = c.phone || '';
+  document.getElementById('c-print-method').value = c.printMethod || '';
   document.querySelector('[data-tab="customers"]').click();
+  document.getElementById('customer-form-card').style.display = '';
+  document.getElementById('customer-form-title').textContent  = `수정: ${name}`;
+  document.getElementById('customer-form-card').scrollIntoView({ behavior: 'smooth' });
+}
+
+function closeCustomerForm() {
+  document.getElementById('customer-form-card').style.display = 'none';
+  ['c-name','c-bizno','c-contact','c-email','c-phone'].forEach(id =>
+    document.getElementById(id).value = ''
+  );
+  document.getElementById('c-print-method').value = '';
 }
 
 async function deleteCustomer(name) {
@@ -481,12 +556,6 @@ async function deleteCustomer(name) {
     if (cRes.ok) state.customers = cRes.customers;
     renderAll();
   }
-}
-
-function clearCustomerForm() {
-  ['c-name','c-bizno','c-email','c-phone'].forEach(id =>
-    document.getElementById(id).value = ''
-  );
 }
 
 // ── 설정 ────────────────────────────────────────────────────
