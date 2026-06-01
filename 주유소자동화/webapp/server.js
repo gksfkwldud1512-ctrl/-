@@ -162,11 +162,13 @@ app.post('/api/import-customers', upload.single('file'), (req, res) => {
     const wb   = XLSX.readFile(req.file.path);
     const ws   = wb.Sheets['고객등록'] || wb.Sheets[wb.SheetNames[0]];
 
-    // 헤더 행 자동 탐지: '업체명'이 포함된 행을 찾아 그 행부터 파싱
+    // 헤더 행 자동 탐지: 셀 값이 정확히 '업체명 *' 또는 '업체명'인 행을 찾아 파싱
     const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
     let headerIdx = 0;
     for (let i = 0; i < Math.min(rawRows.length, 5); i++) {
-      if (rawRows[i].some(c => String(c).includes('업체명'))) { headerIdx = i; break; }
+      if (rawRows[i].some(c => String(c).trim() === '업체명 *' || String(c).trim() === '업체명')) {
+        headerIdx = i; break;
+      }
     }
     const headers = rawRows[headerIdx].map(h => String(h).trim());
     const rows = rawRows.slice(headerIdx + 1).map(r => {
