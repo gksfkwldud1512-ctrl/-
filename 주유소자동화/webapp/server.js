@@ -123,10 +123,10 @@ app.get('/api/customers', (req, res) => {
 
 // ── 고객 저장 ────────────────────────────────────────────────
 app.post('/api/customers', (req, res) => {
-  const { name, bizNo, contactName, email, phone, printMethod } = req.body;
+  const { name, bizNo, contactName, email, phone, printMethod, hometaxMethod } = req.body;
   if (!name) return res.status(400).json({ ok: false, error: '업체명은 필수입니다.' });
   const customers = readJSON(CUSTOMERS_FILE, []);
-  const customer  = { name, bizNo: bizNo || '', contactName: contactName || '', email: email || '', phone: phone || '', printMethod: printMethod || '' };
+  const customer  = { name, bizNo: bizNo || '', contactName: contactName || '', email: email || '', phone: phone || '', printMethod: printMethod || '', hometaxMethod: hometaxMethod || '통합' };
   const idx = customers.findIndex(c => c.name === name);
   if (idx >= 0) customers[idx] = customer;
   else customers.push(customer);
@@ -199,7 +199,7 @@ app.post('/api/import-customers', upload.single('file'), (req, res) => {
 // ── 메일 발송 ────────────────────────────────────────────────
 app.post('/api/send-email', async (req, res) => {
   try {
-    const { vendorName, email, filename, month } = req.body;
+    const { vendorName, email, filename, month, extraMemo } = req.body;
     const settings = readJSON(SETTINGS_FILE, {});
     if (!settings.smtpUser || !settings.smtpPass)
       return res.status(400).json({ ok: false, error: 'SMTP 설정 없음 — [설정] 탭에서 입력하세요.' });
@@ -209,7 +209,7 @@ app.post('/api/send-email', async (req, res) => {
       return res.status(400).json({ ok: false, error: '거래명세서 파일 없음 — 먼저 생성하세요.' });
 
     const { sendEmail } = require('./lib/emailSender');
-    await sendEmail(settings, email, vendorName, fp, month);
+    await sendEmail(settings, email, vendorName, fp, month, extraMemo || '');
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -230,11 +230,15 @@ app.post('/api/hometax', async (req, res) => {
     if (!customer.bizNo)
       return res.status(400).json({ ok: false, error: `${vendorName} 사업자번호 없음 — [고객 관리]에 등록하세요.` });
 
-    const { openHometax } = require('./lib/hometaxBot');
-    openHometax(vendor, customer, issueDate, year, month).catch(e =>
+    const hometaxMethod = req.body.hometaxMethod || customer.hometaxMethod || '통합';
+    const { openHometax, calcTaxData } = require('./lib/hometaxBot');
+    const productCount = Object.keys(calcTaxData(vendor)).length;
+    const invoiceCount = hometaxMethod === '분리' ? productCount : 1;
+
+    openHometax(vendor, customer, issueDate, hometaxMethod).catch(e =>
       console.error('[홈택스봇]', e.message)
     );
-    res.json({ ok: true, message: '홈택스 브라우저를 열었습니다.' });
+    res.json({ ok: true, message: '홈택스 브라우저를 열었습니다.', hometaxMethod, invoiceCount });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }

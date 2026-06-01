@@ -137,6 +137,7 @@ main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
   color: var(--text-muted);
   font-size: 13px;
 }
+.email-body-wrap { padding: 12px 16px; }
 .file-label {
   font-size: 13px;
   color: var(--text-muted);
@@ -435,3 +436,114 @@ th.sortable.sort-active .sort-icon { color: var(--primary); }
 .toast.success { background: #15803d; }
 .toast.error   { background: var(--error-fg); }
 .toast.warn    { background: #d97706; }
+
+/* ── 전체처리 버튼 ────────────────────────────────── */
+.btn-all {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #fff;
+  border: none;
+  padding: 8px 18px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  white-space: nowrap;
+  margin-left: auto;
+  transition: opacity 0.15s, transform 0.1s;
+  box-shadow: 0 2px 6px rgba(217,119,6,0.4);
+}
+.btn-all:hover  { opacity: 0.9; transform: translateY(-1px); }
+.btn-all:active { transform: translateY(0); }
+
+/* ── 모달 ─────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-box {
+  background: #fff;
+  border-radius: 10px;
+  width: 520px;
+  max-width: 95vw;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  overflow: hidden;
+}
+.modal-head {
+  background: linear-gradient(135deg, #1e3a5f, #2563eb);
+  color: #fff;
+  padding: 18px 24px;
+  font-size: 17px;
+  font-weight: 700;
+}
+.modal-head span { font-size: 13px; font-weight: 400; opacity: 0.8; margin-left: 8px; }
+.modal-body { padding: 20px 24px; }
+
+/* 단계 표시 */
+.ap-steps { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
+.ap-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: #f8fafc;
+  transition: all 0.2s;
+}
+.ap-step.active  { border-color: var(--primary); background: var(--info-bg); }
+.ap-step.done    { border-color: #86efac; background: var(--success-bg); }
+.ap-step.failed  { border-color: #fca5a5; background: var(--error-bg); }
+.ap-step-icon { font-size: 20px; width: 28px; text-align: center; }
+.ap-step-info { flex: 1; }
+.ap-step-title { font-weight: 700; font-size: 14px; color: var(--text); }
+.ap-step-desc  { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.ap-step.active  .ap-step-title { color: var(--primary); }
+.ap-step.done    .ap-step-title { color: var(--success-fg); }
+.ap-step.failed  .ap-step-title { color: var(--error-fg); }
+
+/* 프로그레스 바 */
+.ap-progress-wrap {
+  background: #e2e8f0;
+  border-radius: 8px;
+  height: 8px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.ap-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #2563eb, #7c3aed);
+  border-radius: 8px;
+  transition: width 0.4s ease;
+}
+
+/* 로그 */
+.ap-log {
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  max-height: 160px;
+  overflow-y: auto;
+  line-height: 1.8;
+}
+.ap-log-item       { display: flex; align-items: center; gap: 6px; }
+.ap-log-item.ok    { color: var(--success-fg); }
+.ap-log-item.fail  { color: var(--error-fg); }
+.ap-log-item.info  { color: var(--primary); }
+
+.modal-foot {
+  padding: 14px 24px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  background: #f8fafc;
+}

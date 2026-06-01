@@ -149,6 +149,13 @@
             <option value="차량별-유종별">차량별-유종별</option>
           </select>
         </div>
+        <div class="form-group">
+          <label>세금계산서 발행방식</label>
+          <select id="c-hometax-method" class="form-select">
+            <option value="통합">통합발행 (1건)</option>
+            <option value="분리">유종별 분리발행</option>
+          </select>
+        </div>
         <div class="form-group form-group-btn">
           <button class="btn-primary" onclick="saveCustomer()">저장</button>
         </div>
@@ -182,6 +189,27 @@
 
   <!-- ───── Tab 3: 메일 발송 ───── -->
   <section id="tab-email" class="tab-content">
+
+    <!-- 공통 메일 문구 -->
+    <div class="card">
+      <div class="card-header"><h2>✉️ 공통 메일 내용</h2></div>
+      <div class="email-body-wrap">
+        <div class="notice notice-info" style="margin:0 0 10px 0; font-size:12px;">
+          아래 내용이 모든 메일에 공통으로 포함됩니다. 빈칸이면 기본 문구가 사용됩니다.
+        </div>
+        <div class="form-group" style="padding: 0 0 12px 0;">
+          <label style="font-size:12px; font-weight:600; color:#64748b; margin-bottom:4px; display:block;">추가 메모 (선택)</label>
+          <textarea id="email-extra-memo" rows="3"
+            placeholder="예) 문의사항은 054-000-0000으로 연락 주시기 바랍니다."
+            style="width:100%; padding:8px 10px; border:1px solid #e2e8f0; border-radius:6px; font-family:inherit; font-size:13px; resize:vertical; line-height:1.6;"></textarea>
+        </div>
+        <details style="font-size:12px; color:#64748b;">
+          <summary style="cursor:pointer; font-weight:600;">기본 메일 본문 미리보기</summary>
+          <pre id="email-preview" style="margin-top:8px; padding:10px; background:#f8fafc; border-radius:4px; white-space:pre-wrap; font-family:inherit; line-height:1.8;"></pre>
+        </details>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-header">
         <h2>메일 발송</h2>
@@ -241,11 +269,12 @@
             <th class="col-num">공급가액</th>
             <th class="col-num">세액</th>
             <th class="col-num">합계금액</th>
+            <th class="col-method">발행방식</th>
             <th class="col-status">상태</th>
           </tr>
         </thead>
         <tbody id="hometax-tbody">
-          <tr class="empty-row"><td colspan="7">Excel 파일을 업로드하면 목록이 표시됩니다</td></tr>
+          <tr class="empty-row"><td colspan="8">Excel 파일을 업로드하면 목록이 표시됩니다</td></tr>
         </tbody>
       </table>
     </div>

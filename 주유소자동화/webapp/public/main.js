@@ -4,17 +4,18 @@
 const PRINT_METHODS = ['유종별', '판매일자순', '차량별-판매일자순', '차량별-유종별'];
 
 const state = {
-  vendors:            [],
-  customers:          [],
-  files:              [],
-  monthlyStatus:      {},   // { "05": true, "06": false, ... }
-  year:               new Date().getFullYear(),
-  month:              new Date().getMonth() + 1,
-  issueDate:          '',
-  emailStatus:        {},   // { 업체명: 'sent'|'fail'|'sending' }
-  hometaxStatus:      {},   // { 업체명: 'done'|'fail'|'running' }
-  sort:               { col: 'name', dir: 'asc' },
-  vendorPrintMethods: {},   // { 업체명: 출력방법 } — 세션 내 선택값
+  vendors:             [],
+  customers:           [],
+  files:               [],
+  monthlyStatus:       {},   // { "05": true, "06": false, ... }
+  year:                new Date().getFullYear(),
+  month:               new Date().getMonth() + 1,
+  issueDate:           '',
+  emailStatus:         {},   // { 업체명: 'sent'|'fail'|'sending' }
+  hometaxStatus:       {},   // { 업체명: 'done'|'fail'|'running' }
+  sort:                { col: 'name', dir: 'asc' },
+  vendorPrintMethods:  {},   // { 업체명: 출력방법 } — 세션 내
+  hometaxMethods:      {},   // { 업체명: '통합'|'분리' } — 세션 내
 };
 
 // ── 초기화 ───────────────────────────────────────────────────
@@ -22,6 +23,7 @@ window.addEventListener('DOMContentLoaded', () => {
   initYearMonth();
   initTabs();
   initFileUpload();
+  initEmailPreview();
   loadAll();
 });
 
@@ -356,25 +358,43 @@ function renderEmail() {
   }).join('');
 }
 
+// ── 홈택스 발행방식 (세션 임시 저장) ────────────────────────
+function getHometaxMethod(vendorName) {
+  if (state.hometaxMethods[vendorName] !== undefined) return state.hometaxMethods[vendorName];
+  return state.customers.find(c => c.name === vendorName)?.hometaxMethod || '통합';
+}
+function updateHometaxMethod(name, value) {
+  state.hometaxMethods[name] = value;
+  renderHometax();
+}
+
 // ── 홈택스 목록 ─────────────────────────────────────────────
 function renderHometax() {
   const tbody = document.getElementById('hometax-tbody');
   const creditVendors = state.vendors.filter(v => v.hasCredit);
 
   if (!creditVendors.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Excel 파일을 업로드하면 목록이 표시됩니다</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Excel 파일을 업로드하면 목록이 표시됩니다</td></tr>';
     return;
   }
   tbody.innerHTML = creditVendors.map(v => {
-    const customer = state.customers.find(c => c.name === v.name);
-    const hasBizNo = !!customer?.bizNo;
+    const customer    = state.customers.find(c => c.name === v.name);
+    const hasBizNo    = !!customer?.bizNo;
     const { supply, tax } = calcTax(v);
-    const status = state.hometaxStatus[v.name];
+    const status      = state.hometaxStatus[v.name];
+    const method      = getHometaxMethod(v.name);
+    const productCount = [...new Set((v.txs || []).map(t => t.product))].length;
+    const invoiceCount = method === '분리' ? productCount : 1;
 
     let statusBadge = '<span class="badge badge-no">대기</span>';
     if (status === 'running') statusBadge = '<span class="badge badge-sending">처리중...</span>';
     if (status === 'done')    statusBadge = '<span class="badge badge-sent">완료</span>';
     if (status === 'fail')    statusBadge = '<span class="badge badge-fail">실패</span>';
+
+    const methodSel = `<select class="select-method" onchange="updateHometaxMethod('${esc(v.name)}', this.value)">
+      <option value="통합" ${method === '통합' ? 'selected' : ''}>통합 (1건)</option>
+      <option value="분리" ${method === '분리' ? 'selected' : ''}>분리 (${productCount}건)</option>
+    </select>`;
 
     return `<tr>
       <td class="col-chk">
@@ -385,6 +405,7 @@ function renderHometax() {
       <td class="col-num">${supply.toLocaleString()}원</td>
       <td class="col-num">${tax.toLocaleString()}원</td>
       <td class="col-num">${v.totalCredit.toLocaleString()}원</td>
+      <td class="col-method">${methodSel}</td>
       <td class="col-status">${statusBadge}</td>
     </tr>`;
   }).join('');
@@ -418,10 +439,43 @@ async function generateSelected() {
   }
 }
 
+// ── 메일 공통 문구 미리보기 ─────────────────────────────────
+function initEmailPreview() {
+  const textarea = document.getElementById('email-extra-memo');
+  if (textarea) {
+    textarea.addEventListener('input', updateEmailPreview);
+    updateEmailPreview();
+  }
+}
+
+function getEmailMemo() {
+  return document.getElementById('email-extra-memo')?.value.trim() || '';
+}
+
+function updateEmailPreview() {
+  const el = document.getElementById('email-preview');
+  if (!el) return;
+  const memo = getEmailMemo();
+  const mo   = state.month;
+  el.textContent = [
+    `안녕하세요, [업체명] 담당자님.`,
+    ``,
+    `(주)미소주유소 ${mo}월 거래명세서를 첨부파일로 보내드립니다.`,
+    `확인 후 문의사항이 있으시면 연락 주시기 바랍니다.`,
+    memo ? `` : null,
+    memo || null,
+    ``,
+    `감사합니다.`,
+    `(주)미소주유소 드림`,
+  ].filter(l => l !== null).join('\n');
+}
+
 // ── 메일 발송 ───────────────────────────────────────────────
 async function sendSelectedEmails() {
   const names = getChecked('email-check');
   if (!names.length) return toast('업체를 선택하세요.', 'warn');
+
+  const extraMemo = getEmailMemo();
 
   for (const name of names) {
     const customer = state.customers.find(c => c.name === name);
@@ -436,6 +490,7 @@ async function sendSelectedEmails() {
       email:      customer.email,
       filename,
       month:      state.month,
+      extraMemo,
     });
 
     state.emailStatus[name] = res.ok ? 'sent' : 'fail';
@@ -459,16 +514,24 @@ async function runHometaxSelected() {
     state.hometaxStatus[name] = 'running';
     renderHometax();
 
+    const hometaxMethod = getHometaxMethod(name);
     const res = await api('POST', '/api/hometax', {
       vendorName: name,
       issueDate,
       year:  state.year,
       month: state.month,
+      hometaxMethod,
     });
 
     state.hometaxStatus[name] = res.ok ? 'done' : 'fail';
-    if (res.ok) toast(`${name} — 공동인증서 로그인 후 자동 입력됩니다`, 'success');
-    else        toast(`${name} 오류: ${res.error}`, 'error');
+    if (res.ok) {
+      const label = res.hometaxMethod === '분리'
+        ? `${name} — 분리발행 ${res.invoiceCount}건 순서대로 입력됩니다`
+        : `${name} — 통합발행 1건 입력됩니다`;
+      toast(label + ' (공동인증서 로그인 필요)', 'success');
+    } else {
+      toast(`${name} 오류: ${res.error}`, 'error');
+    }
     renderHometax();
     await sleep(1500);
   }
@@ -504,15 +567,16 @@ async function importCustomers(file) {
 
 // ── 고객 관리 ───────────────────────────────────────────────
 async function saveCustomer() {
-  const name        = document.getElementById('c-name').value.trim();
-  const bizNo       = document.getElementById('c-bizno').value.trim();
-  const contactName = document.getElementById('c-contact').value.trim();
-  const email       = document.getElementById('c-email').value.trim();
-  const phone       = document.getElementById('c-phone').value.trim();
-  const printMethod = document.getElementById('c-print-method').value;
+  const name          = document.getElementById('c-name').value.trim();
+  const bizNo         = document.getElementById('c-bizno').value.trim();
+  const contactName   = document.getElementById('c-contact').value.trim();
+  const email         = document.getElementById('c-email').value.trim();
+  const phone         = document.getElementById('c-phone').value.trim();
+  const printMethod   = document.getElementById('c-print-method').value;
+  const hometaxMethod = document.getElementById('c-hometax-method').value;
   if (!name) return toast('업체명을 입력하세요.', 'warn');
 
-  const res = await api('POST', '/api/customers', { name, bizNo, contactName, email, phone, printMethod });
+  const res = await api('POST', '/api/customers', { name, bizNo, contactName, email, phone, printMethod, hometaxMethod });
   if (res.ok) {
     toast(`✅ ${name} 저장 완료`, 'success');
     closeCustomerForm();
@@ -527,12 +591,13 @@ async function saveCustomer() {
 function editCustomer(name) {
   const c = state.customers.find(c => c.name === name);
   if (!c) return;
-  document.getElementById('c-name').value         = c.name;
-  document.getElementById('c-bizno').value        = c.bizNo || '';
-  document.getElementById('c-contact').value      = c.contactName || '';
-  document.getElementById('c-email').value        = c.email || '';
-  document.getElementById('c-phone').value        = c.phone || '';
-  document.getElementById('c-print-method').value = c.printMethod || '';
+  document.getElementById('c-name').value           = c.name;
+  document.getElementById('c-bizno').value          = c.bizNo || '';
+  document.getElementById('c-contact').value        = c.contactName || '';
+  document.getElementById('c-email').value          = c.email || '';
+  document.getElementById('c-phone').value          = c.phone || '';
+  document.getElementById('c-print-method').value   = c.printMethod || '';
+  document.getElementById('c-hometax-method').value = c.hometaxMethod || '통합';
   document.querySelector('[data-tab="customers"]').click();
   document.getElementById('customer-form-card').style.display = '';
   document.getElementById('customer-form-title').textContent  = `수정: ${name}`;
