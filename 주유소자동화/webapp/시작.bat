@@ -5,7 +5,7 @@ cd /d "%~dp0"
 
 echo.
 echo  ========================================
-echo   Starting Web App...
+echo   Miso Gas Station Automation v2.0.0
 echo   http://localhost:3000
 echo  ========================================
 echo.
