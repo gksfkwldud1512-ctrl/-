@@ -94,15 +94,21 @@ function generateTaxInvoiceExcel(vendors, customers, issueDate, taxMethods, outp
   const dataRows = [];
   const skipped  = [];
 
+  // taxMethods 키 = 사용자가 체크한 업체만
+  const selectedNames = Object.keys(taxMethods);
+
   for (const vendor of vendors) {
     if (!vendor.hasCredit) continue;
+    // 체크된 업체만 처리
+    if (!selectedNames.includes(vendor.name)) continue;
+
     const customer = customers.find(c => c.name === vendor.name) || { name: vendor.name };
     if (!customer.bizNo) { skipped.push(vendor.name); continue; }
 
     const products = calcProducts(vendor);
     if (!products.length) continue;
 
-    const method = taxMethods[vendor.name] || '합산';
+    const method = taxMethods[vendor.name];
 
     if (method === '분리') {
       for (const p of products) {
