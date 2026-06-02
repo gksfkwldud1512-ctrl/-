@@ -10,18 +10,147 @@
 
 <header>
   <div class="header-inner">
-    <div class="logo">⛽ 미소주유소 자동화</div>
-    <nav>
+    <div class="logo">⛽ 미소주유소 자동화 <span id="app-version" class="version-badge"></span></div>
+    <nav class="nav-main">
+      <button class="main-tab" data-group="usage">사용방법</button>
+      <button class="main-tab" data-group="daily">일마감</button>
+      <button class="main-tab active" data-group="monthly">월마감</button>
+    </nav>
+  </div>
+  <div class="subnav" id="subnav">
+    <div class="subnav-inner">
       <button class="tab-btn active" data-tab="statements">거래명세서 발행</button>
       <button class="tab-btn" data-tab="customers">고객 관리</button>
       <button class="tab-btn" data-tab="email">메일 발송</button>
       <button class="tab-btn" data-tab="hometax">세금계산서 일괄발행</button>
       <button class="tab-btn" data-tab="settings">설정</button>
-    </nav>
+    </div>
   </div>
 </header>
 
 <main>
+
+  <!-- ───── 대분류: 사용방법 ───── -->
+  <section id="group-usage" class="group-content">
+    <div class="card placeholder-card">
+      <div class="placeholder-icon">📖</div>
+      <h2>사용방법</h2>
+      <p>이 앱의 사용 방법 안내가 이곳에 표시됩니다.</p>
+      <p class="placeholder-sub">준비 중입니다.</p>
+    </div>
+  </section>
+
+  <!-- ───── 대분류: 일마감 ───── -->
+  <section id="group-daily" class="group-content">
+
+    <!-- 툴바 -->
+    <div class="toolbar">
+      <div class="toolbar-group">
+        <label class="label-sm">조회 년월</label>
+        <select id="daily-year"></select>
+        <span>년</span>
+        <select id="daily-month"></select>
+        <span>월</span>
+      </div>
+      <div class="toolbar-group" style="margin-left:auto; gap:8px;">
+        <input type="file" id="bos-file-input" accept=".xlsx,.xls" hidden>
+        <button class="btn-upload" onclick="document.getElementById('bos-file-input').click()">
+          📂 BOS 데이터 업로드
+        </button>
+        <input type="file" id="card-file-input" accept=".xlsx,.xls" hidden>
+        <button class="btn-upload btn-teal" onclick="document.getElementById('card-file-input').click()">
+          💳 이지샵 카드내역 업로드
+        </button>
+        <input type="file" id="bank-file-input" accept=".xlsx,.xls,.xls" hidden>
+        <button class="btn-upload btn-purple" onclick="document.getElementById('bank-file-input').click()">
+          🏦 계좌 입금내역 업로드
+        </button>
+      </div>
+    </div>
+
+    <!-- 매입단가 이력 -->
+    <div class="card">
+      <div class="card-header">
+        <h2>매입단가 이력</h2>
+        <span style="font-size:12px; color:#64748b;">입력한 날짜부터 다음 변경일 전까지 자동 적용</span>
+      </div>
+      <!-- 등록 폼 -->
+      <div class="pp-add-row">
+        <div class="form-group" style="flex:0 0 140px;">
+          <label>적용 시작일</label>
+          <input type="date" id="pp-date">
+        </div>
+        <div class="form-group" style="flex:0 0 110px;">
+          <label>유종</label>
+          <select id="pp-fuel" class="form-select">
+            <option value="경유">경유</option>
+            <option value="휘발유">휘발유</option>
+            <option value="등유">등유</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:0 0 130px;">
+          <label>단가 (원/L)</label>
+          <input type="number" id="pp-price" placeholder="예) 1934">
+        </div>
+        <div class="form-group-btn" style="padding-top:20px;">
+          <button class="btn-primary" onclick="addPurchasePrice()">추가</button>
+        </div>
+      </div>
+      <!-- 이력 테이블 -->
+      <table id="pp-table" style="margin-top:0;">
+        <thead>
+          <tr>
+            <th>적용 시작일</th>
+            <th>유종</th>
+            <th class="col-num">단가</th>
+            <th class="col-action">삭제</th>
+          </tr>
+        </thead>
+        <tbody id="pp-tbody">
+          <tr class="empty-row"><td colspan="4">등록된 단가 이력이 없습니다</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 일별 현황 테이블 -->
+    <div class="card">
+      <div class="card-header">
+        <h2>일별 판매 현황</h2>
+        <span id="daily-summary-label" style="font-size:13px; color:#64748b;"></span>
+      </div>
+      <div class="daily-table-wrap">
+        <table id="daily-table">
+          <thead>
+            <tr>
+              <th rowspan="2" class="daily-col-date">날짜</th>
+              <th colspan="3" class="group-gasoline">휘발유</th>
+              <th colspan="3" class="group-diesel">경유</th>
+              <th colspan="3" class="group-kerosene">등유</th>
+              <th colspan="2" class="group-other">유외상품</th>
+              <th colspan="1" class="group-carwash">세차</th>
+              <th colspan="2" class="group-card">카드(이지샵)</th>
+              <th rowspan="2" class="daily-col-profit">영업이익</th>
+              <th rowspan="2" class="group-match">카드대사</th>
+            </tr>
+            <tr>
+              <th class="group-gasoline">L</th><th class="group-gasoline">드럼</th><th class="group-gasoline">매출</th>
+              <th class="group-diesel">L</th><th class="group-diesel">드럼</th><th class="group-diesel">매출</th>
+              <th class="group-kerosene">L</th><th class="group-kerosene">드럼</th><th class="group-kerosene">매출</th>
+              <th class="group-other">매출</th><th class="group-other">원가(수기)</th>
+              <th class="group-carwash">매출</th>
+              <th class="group-card">수수료</th><th class="group-card">입금예정일</th>
+            </tr>
+          </thead>
+          <tbody id="daily-tbody">
+            <tr class="empty-row">
+              <td colspan="17">BOS 데이터를 업로드하면 현황이 표시됩니다</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </section>
 
   <!-- ───── Tab 1: 거래명세서 발행 ───── -->
   <section id="tab-statements" class="tab-content active">

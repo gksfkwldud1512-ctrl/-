@@ -1,5 +1,14 @@
 'use strict';
 
+// ── 일마감 상태 ──────────────────────────────────────────────
+const dailyState = {
+  year:           new Date().getFullYear(),
+  month:          new Date().getMonth() + 1,
+  days:           [],   // 해당 월 일별 데이터
+  purchasePrices: {},   // { "2026-05": { 휘발유, 경유, 등유 } }
+  bankDeposits:   {},   // { "2026-05-08": { "신한카드": 9637628, ... } }
+};
+
 // ── 상태 ─────────────────────────────────────────────────────
 const PRINT_METHODS = ['유종별', '판매일자순', '차량별-판매일자순', '차량별-유종별'];
 
@@ -22,11 +31,19 @@ const state = {
 
 // ── 초기화 ───────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
+  fetch('/api/version').then(r => r.json()).then(d => {
+    const el = document.getElementById('app-version');
+    if (el) el.textContent = `v${d.version}`;
+  });
   initYearMonth();
+  initDailyYearMonth();
   initTabs();
   initFileUpload();
+  initDailyUpload();
   initEmailPreview();
   loadAll();
+  loadDailyPurchasePrices();
+  loadBankDeposits();
 });
 
 function initYearMonth() {
@@ -80,15 +97,43 @@ function updateIssueDate() {
 }
 
 function initTabs() {
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-      btn.classList.add('active');
-      document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
-      renderAll();
-    });
+  document.querySelectorAll('.main-tab').forEach(btn => {
+    btn.addEventListener('click', () => switchGroup(btn.dataset.group));
   });
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchSubTab(btn.dataset.tab));
+  });
+}
+
+function switchGroup(group) {
+  document.querySelectorAll('.main-tab').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.main-tab[data-group="${group}"]`).classList.add('active');
+
+  const subnav = document.getElementById('subnav');
+
+  if (group === 'monthly') {
+    subnav.classList.remove('hidden');
+    document.querySelectorAll('.group-content').forEach(s => s.classList.remove('active'));
+    const activeBtn = document.querySelector('.tab-btn.active');
+    const activeTab = activeBtn ? activeBtn.dataset.tab : 'statements';
+    switchSubTab(activeTab);
+  } else {
+    subnav.classList.add('hidden');
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.group-content').forEach(s => s.classList.remove('active'));
+    document.getElementById(`group-${group}`).classList.add('active');
+    if (group === 'daily') loadDailyMonth();
+  }
+}
+
+function switchSubTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  const btn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
+  if (btn) btn.classList.add('active');
+  const section = document.getElementById(`tab-${tab}`);
+  if (section) section.classList.add('active');
+  renderAll();
 }
 
 function initFileUpload() {
@@ -285,9 +330,13 @@ function renderVendors() {
       ? `<select class="select-method" onchange="updateVendorPrintMethod('${esc(v.name)}', this.value)">${printMethodOptions(savedMethod)}</select>`
       : dash();
 
+    const errorBadge = v.hasError
+      ? `<button class="btn-error" onclick="showErrorModal('${esc(v.name)}')">⚠ 오류확인</button>`
+      : '';
+
     return `<tr>
       <td class="col-chk">${checkCell}</td>
-      <td>${esc(v.name)}</td>
+      <td>${esc(v.name)}${errorBadge}</td>
       <td class="col-num">${creditCell}</td>
       <td class="col-num">${otherCell}</td>
       <td class="col-num">${total.toLocaleString()}원</td>
@@ -780,7 +829,11 @@ async function uploadExcel(file) {
       label.textContent = `✅ ${file.name} (${data.vendors.length}개 업체)`;
 
       const creditCount = data.vendors.filter(v => v.hasCredit).length;
+      const errorCount  = data.vendors.filter(v => v.hasError).length;
       toast(`✅ 전체 ${data.vendors.length}개 업체 로드 (외상 ${creditCount}개)`, 'success');
+      if (errorCount > 0) {
+        setTimeout(() => toast(`⚠ ${errorCount}개 업체에서 오류 가능성이 발견됐습니다. 업체명 옆 [오류확인] 버튼을 확인하세요.`, 'warn'), 1000);
+      }
 
       const [mRes, fRes] = await Promise.all([
         api('GET', `/api/monthly-status?year=${state.year}`),
@@ -839,6 +892,488 @@ function toast(msg, type = '') {
   el.className = `toast show ${type}`;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.className = 'toast'; }, 3500);
+}
+
+// ── 일마감 ───────────────────────────────────────────────────
+
+function initDailyYearMonth() {
+  const selYear  = document.getElementById('daily-year');
+  const selMonth = document.getElementById('daily-month');
+  if (!selYear || !selMonth) return;
+  const now = new Date();
+  for (let y = now.getFullYear() - 1; y <= now.getFullYear() + 1; y++) {
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y;
+    if (y === now.getFullYear()) opt.selected = true;
+    selYear.appendChild(opt);
+  }
+  for (let m = 1; m <= 12; m++) {
+    const opt = document.createElement('option');
+    opt.value = m; opt.textContent = m;
+    if (m === now.getMonth() + 1) opt.selected = true;
+    selMonth.appendChild(opt);
+  }
+  dailyState.year  = Number(selYear.value);
+  dailyState.month = Number(selMonth.value);
+
+  selYear.addEventListener('change', () => { dailyState.year  = Number(selYear.value);  loadDailyMonth(); });
+  selMonth.addEventListener('change', () => { dailyState.month = Number(selMonth.value); loadDailyMonth(); });
+}
+
+function initDailyUpload() {
+  document.getElementById('bos-file-input')?.addEventListener('change', e => {
+    if (e.target.files[0]) uploadBos(e.target.files[0]);
+  });
+  document.getElementById('card-file-input')?.addEventListener('change', e => {
+    if (e.target.files[0]) uploadCard(e.target.files[0]);
+  });
+  document.getElementById('bank-file-input')?.addEventListener('change', e => {
+    if (e.target.files[0]) uploadBank(e.target.files[0]);
+  });
+}
+
+async function uploadBos(file) {
+  toast('BOS 데이터 업로드 중...', '');
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const res  = await fetch('/api/daily/upload-bos', { method: 'POST', body: form });
+    const data = await res.json();
+    if (data.ok) {
+      toast(`✅ ${data.date} BOS 데이터 업로드 완료`, 'success');
+      await loadDailyMonth();
+    } else {
+      toast(`오류: ${data.error}`, 'error');
+    }
+  } catch (e) { toast(`업로드 오류: ${e.message}`, 'error'); console.error(e); }
+  document.getElementById('bos-file-input').value = '';
+}
+
+async function uploadCard(file) {
+  toast('이지샵 카드내역 업로드 중...', '');
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const res  = await fetch('/api/daily/upload-card', { method: 'POST', body: form });
+    const data = await res.json();
+    if (data.ok) {
+      toast(`✅ ${data.date} 카드내역 업로드 완료`, 'success');
+      await loadDailyMonth();
+    } else {
+      toast(`오류: ${data.error}`, 'error');
+    }
+  } catch (e) { toast(`업로드 오류: ${e.message}`, 'error'); console.error(e); }
+  document.getElementById('card-file-input').value = '';
+}
+
+async function uploadBank(file) {
+  toast('계좌 입금내역 업로드 중...', '');
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const res  = await fetch('/api/daily/upload-bank', { method: 'POST', body: form });
+    const data = await res.json();
+    if (data.ok) {
+      toast(`✅ 은행 입금내역 ${data.dateCount}일치 업로드 완료`, 'success');
+      await loadBankDeposits();
+      renderDailyTable();
+    } else {
+      toast(`오류: ${data.error}`, 'error');
+    }
+  } catch (e) { toast(`업로드 오류: ${e.message}`, 'error'); console.error(e); }
+  document.getElementById('bank-file-input').value = '';
+}
+
+async function loadBankDeposits() {
+  const res = await api('GET', '/api/daily/bank-deposits');
+  dailyState.bankDeposits = (res.ok && res.deposits) ? res.deposits : {};
+}
+
+function calcBankMatch(day) {
+  const expected = day.card?.depositExpected;
+  const deposits = dailyState.bankDeposits || {};
+  if (!expected || !Object.keys(deposits).length) return null;
+
+  const errors = [];
+  for (const [depDate, cards] of Object.entries(expected)) {
+    const actual = deposits[depDate] || {};
+    for (const [cardCo, expAmt] of Object.entries(cards)) {
+      const actAmt = actual[cardCo] || 0;
+      if (expAmt !== actAmt) {
+        errors.push({ depDate, cardCo, expected: expAmt, actual: actAmt, diff: actAmt - expAmt });
+      }
+    }
+    // 실제 입금에는 있는데 예정에 없는 카드사
+    for (const [cardCo, actAmt] of Object.entries(actual)) {
+      if (!cards[cardCo]) {
+        errors.push({ depDate, cardCo, expected: 0, actual: actAmt, diff: actAmt });
+      }
+    }
+  }
+  return { errors, hasError: errors.length > 0 };
+}
+
+async function loadDailyPurchasePrices() {
+  const res = await api('GET', '/api/daily/purchase-prices');
+  if (res.ok) dailyState.purchasePrices = Array.isArray(res.prices) ? res.prices : [];
+  renderPurchasePriceTable();
+}
+
+function renderPurchasePriceTable() {
+  const tbody = document.getElementById('pp-tbody');
+  if (!tbody) return;
+  const list = dailyState.purchasePrices;
+  if (!list.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">등록된 단가 이력이 없습니다</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(e => `<tr>
+    <td>${e.date}</td>
+    <td>${esc(e.fuel)}</td>
+    <td class="col-num"><strong>${Number(e.price).toLocaleString()}원</strong></td>
+    <td class="col-action">
+      <button class="btn-sm btn-danger" onclick="deletePurchasePrice('${e.date}','${esc(e.fuel)}')">삭제</button>
+    </td>
+  </tr>`).join('');
+}
+
+// 날짜 기준으로 해당 유종의 적용 단가 찾기 (입력일 이하 최신값)
+function getPriceForDate(date, fuel) {
+  const list = dailyState.purchasePrices.filter(e => e.fuel === fuel && e.date <= date);
+  if (!list.length) return 0;
+  return list[list.length - 1].price; // 정렬되어 있으므로 마지막이 최신
+}
+
+async function addPurchasePrice() {
+  const date  = document.getElementById('pp-date').value;
+  const fuel  = document.getElementById('pp-fuel').value;
+  const price = Number(document.getElementById('pp-price').value);
+  if (!date) return toast('적용 시작일을 선택하세요.', 'warn');
+  if (!price) return toast('단가를 입력하세요.', 'warn');
+  const res = await api('POST', '/api/daily/purchase-prices', { date, fuel, price });
+  if (res.ok) {
+    dailyState.purchasePrices = res.prices;
+    renderPurchasePriceTable();
+    renderDailyTable();
+    document.getElementById('pp-price').value = '';
+    toast(`✅ ${date} ${fuel} ${price.toLocaleString()}원 등록 완료`, 'success');
+  } else {
+    toast(`오류: ${res.error}`, 'error');
+  }
+}
+
+async function deletePurchasePrice(date, fuel) {
+  if (!confirm(`${date} ${fuel} 단가를 삭제하시겠습니까?`)) return;
+  const res = await api('DELETE', '/api/daily/purchase-prices', { date, fuel });
+  if (res.ok) {
+    dailyState.purchasePrices = res.prices;
+    renderPurchasePriceTable();
+    renderDailyTable();
+    toast('삭제 완료', 'success');
+  }
+}
+
+async function loadDailyMonth() {
+  const ym  = `${dailyState.year}-${String(dailyState.month).padStart(2,'0')}`;
+  const res = await api('GET', `/api/daily/month/${ym}`);
+  if (res.ok) {
+    dailyState.days = res.days;
+    renderDailyTable();
+  }
+}
+
+function calcDailyProfit(day) {
+  const bos = day.bos;
+  if (!bos || !bos.date) return null;
+
+  // 단가가 하나도 없으면 null
+  const hasPrices = dailyState.purchasePrices.length > 0;
+  if (!hasPrices) return null;
+
+  let profit = 0;
+  ['휘발유', '경유', '등유'].forEach(fuel => {
+    const f   = bos.fuels?.[fuel];
+    const buy = getPriceForDate(bos.date, fuel);
+    if (f && buy) profit += f.amount - (f.qty * buy);
+  });
+  profit += (bos.carwash?.amount || 0);
+  profit += (bos.others?.amount  || 0) - (day.otherCost || 0);
+  return Math.round(profit);
+}
+
+function renderDailyTable() {
+  const tbody = document.getElementById('daily-tbody');
+  if (!tbody) return;
+
+  if (!dailyState.days.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="15">BOS 데이터를 업로드하면 현황이 표시됩니다</td></tr>';
+    updateDailySummary(null);
+    return;
+  }
+
+  let totals = { 휘발유L: 0, 경유L: 0, 등유L: 0, 휘발유A: 0, 경유A: 0, 등유A: 0, otherA: 0, carwashA: 0, profit: 0, cardFee: 0 };
+
+  const rows = dailyState.days.map(day => {
+    const bos  = day.bos;
+    const card = day.card;
+    const date = day.date || '';
+    const md   = date.slice(5); // "05-05"
+
+    const gL  = bos?.fuels?.['휘발유']?.qty    || 0;
+    const dL  = bos?.fuels?.['경유']?.qty      || 0;
+    const kL  = bos?.fuels?.['등유']?.qty      || 0;
+    const gA  = bos?.fuels?.['휘발유']?.amount || 0;
+    const dA  = bos?.fuels?.['경유']?.amount   || 0;
+    const kA  = bos?.fuels?.['등유']?.amount   || 0;
+    const otA = bos?.others?.amount  || 0;  // 유외상품
+    const cwA = bos?.carwash?.amount || 0;  // 세차
+    const otC = day.otherCost || 0;
+    const cardFee = card?.totalFee || 0;
+    const profit  = calcDailyProfit(day);
+
+    totals.휘발유L += gL; totals.경유L += dL; totals.등유L += kL;
+    totals.휘발유A += gA; totals.경유A += dA; totals.등유A += kA;
+    totals.otherA  += otA;
+    totals.carwashA += cwA;
+    totals.profit  += profit ?? 0;
+    totals.cardFee += cardFee;
+
+    const drum = v => v > 0 ? (v / 200).toFixed(2) : '-';
+    const won  = v => v > 0 ? v.toLocaleString() : '-';
+    const pf   = profit != null ? `<span class="${profit >= 0 ? 'profit-pos' : 'profit-neg'}">${profit.toLocaleString()}원</span>` : '-';
+
+    const m      = day.matching;
+    const bm     = calcBankMatch(day);
+    const hasBankData = Object.keys(dailyState.bankDeposits).length > 0 && day.card?.depositExpected;
+
+    const cardBadge = !m ? '' :
+      m.totalMatch
+        ? `<span class="badge-match-ok">✅</span>`
+        : `<button class="btn-match-err" onclick="showMatchingModal('${date}')">⚠ ${m.errors.length}건</button>`;
+
+    const bankBadge = !hasBankData ? '' :
+      (!bm || !bm.hasError)
+        ? `<span class="badge-match-ok">✅</span>`
+        : `<button class="btn-match-err" onclick="showMatchingModal('${date}')">⚠ ${bm.errors.length}건</button>`;
+
+    const matchBadge = `${cardBadge}${bankBadge ? '<br>' + bankBadge : ''}`;
+
+    return `<tr>
+      <td class="daily-col-date">${md}</td>
+      <td>${won(gL)}</td><td>${drum(gL)}</td><td>${won(gA)}</td>
+      <td>${won(dL)}</td><td>${drum(dL)}</td><td>${won(dA)}</td>
+      <td>${won(kL)}</td><td>${drum(kL)}</td><td>${won(kA)}</td>
+      <td>${won(otA)}</td>
+      <td><input class="input-other-cost" type="number" value="${otC || ''}" placeholder="0"
+           onchange="saveOtherCost('${date}', this.value)"></td>
+      <td>${won(cwA)}</td>
+      <td>${cardFee > 0 ? cardFee.toLocaleString() : '-'}</td>
+      <td>${card?.depositDate || '-'}</td>
+      <td class="daily-col-profit">${pf}</td>
+      <td style="text-align:center;">${matchBadge}</td>
+    </tr>`;
+  });
+
+  const totalPf    = dailyState.purchasePrices.length
+    ? `<span class="${totals.profit >= 0 ? 'profit-pos' : 'profit-neg'}">${totals.profit.toLocaleString()}원</span>`
+    : '단가 미입력';
+
+  const totalRow = `<tr class="total-row">
+    <td class="daily-col-date">합계</td>
+    <td>${totals.휘발유L.toLocaleString()}</td><td>${(totals.휘발유L/200).toFixed(2)}</td><td>${totals.휘발유A.toLocaleString()}</td>
+    <td>${totals.경유L.toLocaleString()}</td><td>${(totals.경유L/200).toFixed(2)}</td><td>${totals.경유A.toLocaleString()}</td>
+    <td>${totals.등유L.toLocaleString()}</td><td>${(totals.등유L/200).toFixed(2)}</td><td>${totals.등유A.toLocaleString()}</td>
+    <td>${totals.otherA.toLocaleString()}</td><td>-</td>
+    <td>${totals.carwashA.toLocaleString()}</td>
+    <td>${totals.cardFee.toLocaleString()}</td><td>-</td>
+    <td class="daily-col-profit">${totalPf}</td>
+    <td>-</td>
+  </tr>`;
+
+  tbody.innerHTML = rows.join('') + totalRow;
+  updateDailySummary(totals);
+}
+
+function updateDailySummary(totals) {
+  const el = document.getElementById('daily-summary-label');
+  if (!el) return;
+  if (!totals) { el.textContent = ''; return; }
+  const totalSales = totals.휘발유A + totals.경유A + totals.등유A + totals.otherA + totals.carwashA;
+  el.textContent = `총매출 ${totalSales.toLocaleString()}원 | 영업이익 ${totals.profit.toLocaleString()}원`;
+}
+
+async function saveOtherCost(date, value) {
+  const cost = Number(value) || 0;
+  const idx  = dailyState.days.findIndex(d => d.date === date);
+  if (idx !== -1) dailyState.days[idx].otherCost = cost;
+  await api('POST', `/api/daily/${date}/other-cost`, { cost });
+  renderDailyTable();
+}
+
+// ── 카드 대사 모달 ───────────────────────────────────────────
+function showMatchingModal(date) {
+  const day = dailyState.days.find(d => d.date === date);
+  if (!day?.matching) return;
+  const m = day.matching;
+
+  const typeLabel = { bos_only: 'BOS에만 있음', easy_only: '이지샵에만 있음', amount_mismatch: '금액 불일치' };
+  const typeBadge = { bos_only: 'badge-warn', easy_only: 'badge-warn', amount_mismatch: 'badge-fail' };
+
+  const summaryClass = m.totalMatch ? 'match-summary-ok' : 'match-summary-err';
+  const summaryIcon  = m.totalMatch ? '✅' : '⚠';
+  const totalDiffStr = m.totalDiff !== 0
+    ? `<span class="price-diff">&nbsp;(차액 ${Math.abs(m.totalDiff).toLocaleString()}원)</span>` : '';
+
+  // 오류 유형별 섹션
+  const typeOrder = ['bos_only', 'easy_only', 'amount_mismatch'];
+  let errSections = '';
+  typeOrder.forEach(type => {
+    const list = m.errors.filter(e => e.type === type);
+    if (!list.length) return;
+    errSections += `<p class="error-section-title" style="margin-top:16px;">${
+      type === 'bos_only' ? '① BOS에만 있는 거래' :
+      type === 'easy_only' ? '② 이지샵에만 있는 거래' : '③ 금액 불일치'
+    }</p>
+    <table class="error-table">
+      <thead><tr>
+        <th>승인번호</th><th>카드사</th><th>카드번호</th><th>유종</th>
+        ${type === 'amount_mismatch'
+          ? '<th>BOS 금액</th><th>이지샵 금액</th><th>차액</th>'
+          : `<th>${type === 'bos_only' ? 'BOS' : '이지샵'} 금액</th>`}
+      </tr></thead>
+      <tbody>${list.map(e => `<tr>
+        <td><code>${esc(e.approvalNo)}</code></td>
+        <td>${esc(e.cardCompany)}</td>
+        <td><code>${esc(e.cardNo)}</code></td>
+        <td>${esc(e.product || e.fuel || '')}</td>
+        ${type === 'amount_mismatch'
+          ? `<td>${e.bosAmount.toLocaleString()}원</td>
+             <td>${e.easyAmount.toLocaleString()}원</td>
+             <td class="price-diff">${e.diff > 0 ? '+' : ''}${e.diff.toLocaleString()}원</td>`
+          : `<td>${(e.bosAmount ?? e.easyAmount).toLocaleString()}원</td>`}
+      </tr>`).join('')}</tbody>
+    </table>`;
+  });
+
+  if (!errSections) {
+    errSections = '<p style="color:#15803d; font-weight:600; margin-top:12px;">✅ 모든 카드 거래가 정상 매칭됩니다.</p>';
+  }
+
+  // ── 은행 입금 대사 섹션 ──────────────────────────────────────
+  const bm = calcBankMatch(day);
+  let bankSection = '';
+  if (!day.card?.depositExpected) {
+    bankSection = '<p class="error-section-title" style="margin-top:18px;">🏦 입금 대사</p><p style="color:#94a3b8; font-size:12px;">이지샵 데이터를 먼저 업로드하세요.</p>';
+  } else if (!Object.keys(dailyState.bankDeposits).length) {
+    bankSection = '<p class="error-section-title" style="margin-top:18px;">🏦 입금 대사</p><p style="color:#94a3b8; font-size:12px;">계좌 입금내역을 업로드하면 대사 결과를 확인할 수 있습니다.</p>';
+  } else {
+    const rows = [];
+    const expected = day.card.depositExpected;
+    for (const [depDate, cards] of Object.entries(expected)) {
+      const actual = (dailyState.bankDeposits || {})[depDate] || {};
+      const allCards = new Set([...Object.keys(cards), ...Object.keys(actual)]);
+      for (const cardCo of allCards) {
+        const exp = cards[cardCo] || 0;
+        const act = actual[cardCo] || 0;
+        const diff = act - exp;
+        const ok = exp === act;
+        rows.push(`<tr>
+          <td>${depDate}</td>
+          <td>${esc(cardCo)}</td>
+          <td>${exp.toLocaleString()}원</td>
+          <td>${act > 0 ? act.toLocaleString() + '원' : '<span style="color:#dc2626">미입금</span>'}</td>
+          <td class="${ok ? '' : 'price-diff'}">${ok ? '✅' : (diff > 0 ? '+' : '') + diff.toLocaleString() + '원'}</td>
+        </tr>`);
+      }
+    }
+    const bmIcon = (!bm || !bm.hasError) ? '✅ 전체 일치' : `⚠ ${bm.errors.length}건 불일치`;
+    bankSection = `<p class="error-section-title" style="margin-top:18px;">🏦 입금 대사 — ${bmIcon}</p>
+    <table class="error-table">
+      <thead><tr><th>입금예정일</th><th>카드사</th><th>예정금액</th><th>실제입금</th><th>차액</th></tr></thead>
+      <tbody>${rows.join('')}</tbody>
+    </table>`;
+  }
+
+  const html = `
+    <div class="modal-overlay" id="matching-modal" onclick="if(event.target===this)closeMatchingModal()">
+      <div class="modal-box" style="width:700px;">
+        <div class="modal-head">📋 카드 대사 — <span>${date}</span></div>
+        <div class="modal-body">
+          <div class="${summaryClass}">
+            ${summaryIcon} BOS 합계 <strong>${m.bosTotal.toLocaleString()}원</strong>
+            &nbsp;/&nbsp; 이지샵 합계 <strong>${m.easyTotal.toLocaleString()}원</strong>
+            ${totalDiffStr}
+          </div>
+          ${errSections}
+          ${bankSection}
+        </div>
+        <div class="modal-foot">
+          <button class="btn-primary" onclick="closeMatchingModal()">닫기</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function closeMatchingModal() {
+  document.getElementById('matching-modal')?.remove();
+}
+
+// ── 오류 상세 모달 ───────────────────────────────────────────
+function showErrorModal(name) {
+  const vendor = state.vendors.find(v => v.name === name);
+  if (!vendor || !vendor.errors?.length) return;
+
+  const priceErrors = vendor.errors.filter(e => e.type === 'price');
+  const dupErrors   = vendor.errors.filter(e => e.type === 'duplicate');
+
+  let body = '';
+
+  if (priceErrors.length) {
+    body += `<p class="error-section-title">1. 일일단가 불일치</p>
+    <table class="error-table">
+      <thead><tr><th>날짜</th><th>유종</th><th>입력된 단가</th></tr></thead>
+      <tbody>${priceErrors.map(e => `
+        <tr>
+          <td>${esc(e.date)}</td>
+          <td>${esc(e.product)}</td>
+          <td>${e.prices.map(p => `<span class="price-diff">${p.toLocaleString()}원</span>`).join(' / ')}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+  }
+
+  if (dupErrors.length) {
+    body += `<p class="error-section-title" style="margin-top:18px;">2. 중복주유 의심</p>
+    <table class="error-table">
+      <thead><tr><th>날짜</th><th>차량번호</th><th>유종</th><th>주유량</th><th>건수</th></tr></thead>
+      <tbody>${dupErrors.map(e => `
+        <tr>
+          <td>${esc(e.date)}</td>
+          <td>${esc(e.vehicle)}</td>
+          <td>${esc(e.product)}</td>
+          <td>${Number(e.qty).toLocaleString()}L</td>
+          <td class="dup-count">${e.count}건 중복</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+  }
+
+  const html = `
+    <div class="modal-overlay" id="error-modal" onclick="if(event.target===this)closeErrorModal()">
+      <div class="modal-box" style="width:620px;">
+        <div class="modal-head">⚠ 오류 상세 <span>${esc(name)}</span></div>
+        <div class="modal-body">${body}</div>
+        <div class="modal-foot">
+          <button class="btn-primary" onclick="closeErrorModal()">닫기</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function closeErrorModal() {
+  document.getElementById('error-modal')?.remove();
 }
 
 async function api(method, url, body) {

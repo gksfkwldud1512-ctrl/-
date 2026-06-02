@@ -32,7 +32,6 @@ body {
 /* ── Header ──────────────────────────────────────── */
 header {
   background: var(--header-bg);
-  padding: 0 24px;
   position: sticky;
   top: 0;
   z-index: 100;
@@ -43,24 +42,72 @@ header {
   align-items: center;
   gap: 32px;
   height: 56px;
+  padding: 0 24px;
 }
 .logo {
   color: #fff;
   font-size: 18px;
   font-weight: bold;
   white-space: nowrap;
-}
-nav {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  gap: 8px;
 }
+.version-badge {
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(255,255,255,0.15);
+  color: #93c5fd;
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+}
+
+/* 대분류 탭 */
+.nav-main {
+  display: flex;
+  gap: 2px;
+}
+.main-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: #94a3b8;
+  padding: 8px 22px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+  border-radius: 0;
+  letter-spacing: 0.3px;
+}
+.main-tab:hover  { color: #e2e8f0; background: rgba(255,255,255,0.06); }
+.main-tab.active { color: #fff; border-bottom-color: #60a5fa; }
+
+/* 소분류 탭 바 */
+.subnav {
+  background: #162d4a;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  padding: 0 24px;
+}
+.subnav.hidden { display: none; }
+.subnav-inner {
+  display: flex;
+  gap: 2px;
+  height: 40px;
+  align-items: center;
+}
+
+/* 소분류 버튼 */
 .tab-btn {
   background: transparent;
   border: none;
   color: #94a3b8;
-  padding: 8px 16px;
+  padding: 6px 14px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   font-family: inherit;
   border-radius: var(--radius);
   transition: background 0.15s, color 0.15s;
@@ -74,6 +121,19 @@ main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
 
 .tab-content { display: none; }
 .tab-content.active { display: block; }
+
+.group-content { display: none; }
+.group-content.active { display: block; }
+
+.placeholder-card {
+  text-align: center;
+  padding: 60px 24px;
+  color: var(--text-muted);
+}
+.placeholder-icon { font-size: 48px; margin-bottom: 16px; }
+.placeholder-card h2 { font-size: 22px; color: var(--text); margin-bottom: 10px; }
+.placeholder-card p  { font-size: 15px; line-height: 1.8; }
+.placeholder-sub     { margin-top: 8px; font-size: 13px; color: #94a3b8; }
 
 /* ── Toolbar ─────────────────────────────────────── */
 .toolbar {
@@ -578,4 +638,166 @@ th.sortable.sort-active .sort-icon { color: var(--primary); }
 #tax-table th, #tax-table td {
   padding: 8px 10px;
 }
+
+/* ── 일마감 ──────────────────────────────────────────────────── */
+.btn-teal {
+  background: #0d9488;
+}
+.btn-teal:hover { background: #0f766e; }
+.btn-purple {
+  background: #7c3aed;
+}
+.btn-purple:hover { background: #6d28d9; }
+
+.pp-add-row {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  align-items: flex-end;
+  flex-wrap: wrap;
+  background: #f8fafc;
+}
+
+.daily-table-wrap {
+  overflow-x: auto;
+  padding: 0 0 8px;
+}
+
+#daily-table {
+  min-width: 1000px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+#daily-table th, #daily-table td {
+  padding: 7px 10px;
+  white-space: nowrap;
+  text-align: right;
+  border-bottom: 1px solid #f1f5f9;
+}
+#daily-table th {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  background: #f8fafc;
+}
+#daily-table .daily-col-date,
+#daily-table td.daily-col-date { text-align: center; font-weight: 600; }
+#daily-table .daily-col-profit,
+#daily-table td.daily-col-profit { font-weight: 700; color: var(--success-fg); }
+#daily-table tbody tr:hover td { background: #f8fafc; }
+#daily-table .total-row td { background: #f1f5f9 !important; font-weight: 700; border-top: 2px solid var(--border); }
+
+/* 유종별 컬럼 그룹 색 */
+.group-gasoline { background: #fffbeb !important; }
+.group-diesel   { background: #eff6ff !important; }
+.group-kerosene { background: #f0fdf4 !important; }
+.group-other    { background: #fdf4ff !important; }
+.group-carwash  { background: #f0fdfa !important; }
+.group-card     { background: #fff7ed !important; }
+
+/* 수기 입력 셀 */
+.input-other-cost {
+  width: 90px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  text-align: right;
+}
+.input-other-cost:focus { outline: none; border-color: var(--primary); }
+
+.profit-pos { color: var(--success-fg); font-weight: 700; }
+.profit-neg { color: var(--error-fg);   font-weight: 700; }
+
+/* ── 카드 대사 ───────────────────────────────────────────────── */
+.group-match { background: #f8fafc !important; text-align: center !important; }
+
+.badge-match-ok {
+  background: var(--success-bg);
+  color: var(--success-fg);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.btn-match-err {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-match-err:hover { background: #fee2e2; }
+
+.match-summary-ok {
+  padding: 10px 14px;
+  background: var(--success-bg);
+  border: 1px solid #86efac;
+  border-radius: var(--radius);
+  font-size: 13px;
+  color: var(--success-fg);
+  margin-bottom: 4px;
+}
+.match-summary-err {
+  padding: 10px 14px;
+  background: var(--warn-bg);
+  border: 1px solid #fde68a;
+  border-radius: var(--radius);
+  font-size: 13px;
+  color: var(--warn-fg);
+  margin-bottom: 4px;
+}
+
+/* ── 오류 뱃지 ───────────────────────────────────────────────── */
+.btn-error {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  cursor: pointer;
+  margin-left: 6px;
+  vertical-align: middle;
+  line-height: 1.4;
+}
+.btn-error:hover { background: #fee2e2; border-color: #f87171; }
+
+/* ── 오류 모달 내용 ──────────────────────────────────────────── */
+.error-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #dc2626;
+  margin-bottom: 8px;
+}
+.error-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.error-table th {
+  background: #f8fafc;
+  padding: 7px 10px;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+.error-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.price-diff  { color: #dc2626; font-weight: 700; }
+.dup-count   { color: #dc2626; font-weight: 700; }
 

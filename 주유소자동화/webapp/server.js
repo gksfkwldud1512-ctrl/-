@@ -3,12 +3,15 @@ const express = require('express');
 const multer  = require('multer');
 const path    = require('path');
 const fs      = require('fs');
+const { version } = require('./package.json');
 
 const app  = express();
 const PORT = 3000;
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/api/version', (req, res) => res.json({ version }));
 
 const DATA_DIR    = path.join(__dirname, 'data');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
@@ -26,23 +29,18 @@ const upload = multer({
   fileFilter: (req, file, cb) => cb(null, /\.(xlsx|xls)$/i.test(file.originalname)),
 });
 
-const CUSTOMERS_FILE = path.join(DATA_DIR, 'customers.json');
-const SETTINGS_FILE  = path.join(DATA_DIR, 'settings.json');
+const CUSTOMERS_FILE      = path.join(DATA_DIR, 'customers.json');
+const SETTINGS_FILE       = path.join(DATA_DIR, 'settings.json');
+const PURCHASE_PRICES_FILE = path.join(DATA_DIR, 'purchase_prices.json');
+const DAILY_DIR            = path.join(DATA_DIR, 'daily');
+const BANK_DEPOSITS_FILE   = path.join(DATA_DIR, 'bank_deposits.json');
 
-function completionFile(year, month) {
-  const mo = String(month).padStart(2, '0');
-  return path.join(DATA_DIR, `completion_${year}_${mo}.json`);
-}
-function completionDef() { return { statements: [], emails: [], taxInvoices: [] }; }
-function addCompletion(year, month, type, names) {
-  const file = completionFile(year, month);
-  const data = readJSON(file, completionDef());
-  if (!Array.isArray(data[type])) data[type] = [];
-  (Array.isArray(names) ? names : [names]).forEach(n => {
-    if (n && !data[type].includes(n)) data[type].push(n);
-  });
-  writeJSON(file, data);
-}
+if (!fs.existsSync(DAILY_DIR)) fs.mkdirSync(DAILY_DIR, { recursive: true });
+
+const { parseBosDaily }    = require('./lib/dailyBosParser');
+const { parseEasyshop }    = require('./lib/easyshopParser');
+const { matchCards }       = require('./lib/cardMatcher');
+const { parseBankDeposits } = require('./lib/bankParser');
 
 function vendorFile(year, month) {
   const mo = String(month).padStart(2, '0');
@@ -108,7 +106,6 @@ app.post('/api/generate', async (req, res) => {
 
     const { generateStatements } = require('./lib/statementGenerator');
     const files = await generateStatements(selected, customers, OUTPUT_DIR, issueDate, year, month, printMethods || {});
-    addCompletion(year, month, 'statements', selected.map(v => v.name));
     res.json({ ok: true, files });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -253,7 +250,7 @@ app.post('/api/import-customers', upload.single('file'), (req, res) => {
 // ── 메일 발송 ────────────────────────────────────────────────
 app.post('/api/send-email', async (req, res) => {
   try {
-    const { vendorName, email, filename, year, month, extraMemo } = req.body;
+    const { vendorName, email, filename, month, extraMemo } = req.body;
     const settings = readJSON(SETTINGS_FILE, {});
     if (!settings.smtpUser || !settings.smtpPass)
       return res.status(400).json({ ok: false, error: 'SMTP 설정 없음 — [설정] 탭에서 입력하세요.' });
@@ -264,7 +261,6 @@ app.post('/api/send-email', async (req, res) => {
 
     const { sendEmail } = require('./lib/emailSender');
     await sendEmail(settings, email, vendorName, fp, month, extraMemo || '');
-    addCompletion(year || new Date().getFullYear(), month, 'emails', vendorName);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -284,8 +280,6 @@ app.post('/api/generate-tax-excel', (req, res) => {
 
     const { generateTaxInvoiceExcel } = require('./lib/taxInvoiceGenerator');
     const result = generateTaxInvoiceExcel(vendors, customers, issueDate, taxMethods || {}, OUTPUT_DIR);
-    const includedNames = Object.keys(taxMethods || {}).filter(n => !result.skipped?.includes(n));
-    addCompletion(year, month, 'taxInvoices', includedNames);
     res.json({ ok: true, ...result });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -374,26 +368,117 @@ app.post('/api/settings', (req, res) => {
   res.json({ ok: true });
 });
 
-// ── 완료 상태 조회 ────────────────────────────────────────────
-app.get('/api/completion', (req, res) => {
-  const year  = req.query.year  || new Date().getFullYear();
-  const month = req.query.month || new Date().getMonth() + 1;
-  res.json({ ok: true, completion: readJSON(completionFile(year, month), completionDef()) });
+// ── 일마감 ───────────────────────────────────────────────────
+
+function dailyFile(date) { return path.join(DAILY_DIR, `${date}.json`); }
+
+function runMatching(daily) {
+  if (daily.bos?.cardTxs && daily.card?.cardTxs) {
+    daily.matching = matchCards(daily.bos.cardTxs, daily.card.cardTxs);
+  } else {
+    delete daily.matching;
+  }
+}
+
+// BOS 업로드
+app.post('/api/daily/upload-bos', upload.single('file'), (req, res) => {
+  if (!req.file) return res.json({ ok: false, error: '파일 없음' });
+  try {
+    const parsed   = parseBosDaily(req.file.path);
+    const existing = readJSON(dailyFile(parsed.date), { date: parsed.date });
+    existing.bos   = parsed;
+    runMatching(existing);
+    writeJSON(dailyFile(parsed.date), existing);
+    res.json({ ok: true, date: parsed.date, data: existing });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
-// ── 완료 상태 수동 토글 ───────────────────────────────────────
-app.patch('/api/completion', (req, res) => {
-  const { year, month, type, name, done } = req.body;
-  const file = completionFile(year, month);
-  const data = readJSON(file, completionDef());
-  if (!Array.isArray(data[type])) data[type] = [];
-  if (done) {
-    if (!data[type].includes(name)) data[type].push(name);
-  } else {
-    data[type] = data[type].filter(n => n !== name);
-  }
-  writeJSON(file, data);
+// 이지샵 카드 업로드
+app.post('/api/daily/upload-card', upload.single('file'), (req, res) => {
+  if (!req.file) return res.json({ ok: false, error: '파일 없음' });
+  try {
+    const parsed   = parseEasyshop(req.file.path);
+    const existing = readJSON(dailyFile(parsed.date), { date: parsed.date });
+    existing.card  = parsed;
+    runMatching(existing);
+    writeJSON(dailyFile(parsed.date), existing);
+    res.json({ ok: true, date: parsed.date, data: existing });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
+// 매입단가 조회
+app.get('/api/daily/purchase-prices', (req, res) => {
+  res.json({ ok: true, prices: readJSON(PURCHASE_PRICES_FILE, []) });
+});
+// 매입단가 추가 { date, fuel, price }
+app.post('/api/daily/purchase-prices', (req, res) => {
+  const { date, fuel, price } = req.body;
+  if (!date || !fuel || !price) return res.json({ ok: false, error: '날짜/유종/단가를 모두 입력하세요.' });
+  const list = readJSON(PURCHASE_PRICES_FILE, []);
+  // 같은 날짜+유종이 있으면 덮어쓰기
+  const idx = list.findIndex(e => e.date === date && e.fuel === fuel);
+  if (idx >= 0) list[idx].price = +price;
+  else list.push({ date, fuel, price: +price });
+  list.sort((a, b) => a.date.localeCompare(b.date) || a.fuel.localeCompare(b.fuel));
+  writeJSON(PURCHASE_PRICES_FILE, list);
+  res.json({ ok: true, prices: list });
+});
+// 매입단가 삭제 { date, fuel }
+app.delete('/api/daily/purchase-prices', (req, res) => {
+  const { date, fuel } = req.body;
+  const list = readJSON(PURCHASE_PRICES_FILE, []).filter(e => !(e.date === date && e.fuel === fuel));
+  writeJSON(PURCHASE_PRICES_FILE, list);
+  res.json({ ok: true, prices: list });
+});
+
+// 유외상품 원가 수기 저장
+app.post('/api/daily/:date/other-cost', (req, res) => {
+  const { date }   = req.params;
+  const { cost }   = req.body;
+  const existing   = readJSON(dailyFile(date), null);
+  if (!existing) return res.json({ ok: false, error: '데이터 없음' });
+  existing.otherCost = +cost || 0;
+  writeJSON(dailyFile(date), existing);
   res.json({ ok: true });
+});
+
+// 월별 전체 조회
+app.get('/api/daily/month/:yearMonth', (req, res) => {
+  const ym   = req.params.yearMonth;
+  const days = fs.readdirSync(DAILY_DIR)
+    .filter(f => f.startsWith(ym) && f.endsWith('.json'))
+    .map(f => readJSON(path.join(DAILY_DIR, f), {}))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  res.json({ ok: true, days });
+});
+
+// 은행 입금내역 조회 — :date 보다 반드시 먼저 등록
+app.get('/api/daily/bank-deposits', (req, res) => {
+  res.json({ ok: true, deposits: readJSON(BANK_DEPOSITS_FILE, {}) });
+});
+
+// 일별 조회 — catch-all이므로 구체 경로 뒤에 위치
+app.get('/api/daily/:date', (req, res) => {
+  res.json({ ok: true, data: readJSON(dailyFile(req.params.date), null) });
+});
+
+// 은행 입금내역 업로드 (월 1회)
+app.post('/api/daily/upload-bank', upload.single('file'), (req, res) => {
+  if (!req.file) return res.json({ ok: false, error: '파일 없음' });
+  try {
+    const newDeposits = parseBankDeposits(req.file.path);
+    const existing    = readJSON(BANK_DEPOSITS_FILE, {});
+    // 날짜별 카드사별 병합
+    for (const [date, cards] of Object.entries(newDeposits)) {
+      if (!existing[date]) existing[date] = {};
+      for (const [card, amt] of Object.entries(cards)) {
+        existing[date][card] = amt; // 덮어쓰기 (재업로드 시 최신값 적용)
+      }
+    }
+    writeJSON(BANK_DEPOSITS_FILE, existing);
+    const dateCount = Object.keys(newDeposits).length;
+    res.json({ ok: true, dateCount });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
 app.listen(PORT, () => {
