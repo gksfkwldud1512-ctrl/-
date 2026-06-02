@@ -376,18 +376,35 @@ function updateTaxIssuance(name, value) {
   renderTaxInvoice();
 }
 
-// 품목 집계 (브라우저 계산용, 서버와 동일 로직)
+// 유종 제품 (그 외는 유외상품으로 합산)
+const FUEL_PRODUCTS = new Set(['휘발유', '경유', '등유']);
+
+// 품목 집계 (브라우저 계산용 — taxInvoiceGenerator.js와 동일 로직)
 function calcProductsForVendor(vendor) {
-  const map = {};
+  const fuelMap = {};
+  let nonFuelSupply = 0, nonFuelTax = 0;
+
   (vendor.txs || []).forEach(t => {
-    if (!map[t.product]) map[t.product] = { qty: 0, supply: 0, tax: 0 };
     const supply = t.taxType === '면세' ? t.amount : Math.round(t.amount / 1.1);
     const tax    = t.taxType === '면세' ? 0        : t.amount - supply;
-    map[t.product].qty    += t.qty;
-    map[t.product].supply += supply;
-    map[t.product].tax    += tax;
+    const qty    = Math.floor(t.qty);
+
+    if (FUEL_PRODUCTS.has(t.product)) {
+      if (!fuelMap[t.product]) fuelMap[t.product] = { qty: 0, supply: 0, tax: 0 };
+      fuelMap[t.product].qty    += qty;
+      fuelMap[t.product].supply += supply;
+      fuelMap[t.product].tax    += tax;
+    } else {
+      nonFuelSupply += supply;
+      nonFuelTax    += tax;
+    }
   });
-  return Object.entries(map).map(([name, d]) => ({ name, ...d }));
+
+  const result = Object.entries(fuelMap).map(([name, d]) => ({ name, ...d }));
+  if (nonFuelSupply > 0) {
+    result.push({ name: '유외상품', qty: 0, supply: nonFuelSupply, tax: nonFuelTax });
+  }
+  return result;
 }
 
 // ── 세금계산서 일괄발행 목록 ──────────────────────────────────

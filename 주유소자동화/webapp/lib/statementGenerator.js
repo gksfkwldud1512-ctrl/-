@@ -241,16 +241,17 @@ async function createStatement(cust, customer, outputDir, issueDate, year, month
 
     group.txs.forEach(t => {
       const { supply, tax } = calcTax(t.amount, t.taxType);
+      const qty = Math.floor(t.qty);  // 소수점 절사
       mergeCell(ws, `A${r}:B${r}`, t.date,         { font: fntD(9) });
       mergeCell(ws, `C${r}:E${r}`, t.vehicle || '', { font: fntD(9) });
       cell(ws,      `F${r}`,       t.product,       { font: fntD(9) });
       cell(ws,      `G${r}`,       'L',             { font: fntD(9) });
-      cell(ws,      `H${r}`,       t.qty,           { font: fntD(9), fmt: '#,##0.00' });
+      cell(ws,      `H${r}`,       qty,             { font: fntD(9), fmt: '#,##0' });
       mergeCell(ws, `I${r}:K${r}`, t.unitPrice,    { font: fntD(9), h: 'right', fmt: '#,##0' });
       mergeCell(ws, `L${r}:M${r}`, supply,          { font: fntD(9), h: 'right', fmt: '#,##0' });
       mergeCell(ws, `N${r}:O${r}`, tax,             { font: fntD(9), h: 'right', fmt: '#,##0' });
       cell(ws,      `P${r}`,       t.amount,        { font: fntD(9), h: 'right', fmt: '#,##0' });
-      vQty += t.qty; vSup += supply; vTx += tax; vAmt += t.amount;
+      vQty += qty; vSup += supply; vTx += tax; vAmt += t.amount;
       r++;
     });
 
@@ -259,7 +260,7 @@ async function createStatement(cust, customer, outputDir, issueDate, year, month
       mergeCell(ws, `C${r}:E${r}`, '',                   { font: fntD(9) });
       cell(ws,      `F${r}`,       `${group.label} 계`,  { font: fntD(9, true) });
       cell(ws,      `G${r}`,       'L',                   { font: fntD(9, true) });
-      cell(ws,      `H${r}`,       vQty,                  { font: fntD(9, true), fmt: '#,##0.00' });
+      cell(ws,      `H${r}`,       vQty,                  { font: fntD(9, true), fmt: '#,##0' });
       mergeCell(ws, `I${r}:K${r}`, 0,                    { font: fntD(9, true), h: 'center' });
       mergeCell(ws, `L${r}:M${r}`, vSup,                 { font: fntD(9, true), h: 'right', fmt: '#,##0' });
       mergeCell(ws, `N${r}:O${r}`, vTx,                  { font: fntD(9, true), h: 'right', fmt: '#,##0' });
@@ -282,7 +283,7 @@ async function createStatement(cust, customer, outputDir, issueDate, year, month
     for (const [prod, tot] of Object.entries(productTotals)) {
       ws.getRow(r).height = 17.25;
       mergeCell(ws, `A${r}:G${r}`, `${prod} 합계`, { font: fntD(12, true) });
-      cell(ws,      `H${r}`,       tot.qty,         { font: fntD(12, true), fmt: '#,##0.00' });
+      cell(ws,      `H${r}`,       tot.qty,         { font: fntD(12, true), fmt: '#,##0' });
       mergeCell(ws, `I${r}:K${r}`, '',              { font: fntD(12, true) });
       mergeCell(ws, `L${r}:M${r}`, tot.sup,        { font: fntD(12, true), h: 'right', fmt: '#,##0' });
       mergeCell(ws, `N${r}:O${r}`, tot.tax,        { font: fntD(12, true), h: 'right', fmt: '#,##0' });
@@ -294,7 +295,7 @@ async function createStatement(cust, customer, outputDir, issueDate, year, month
   // ── 총합계 행 ────────────────────────────────────────────────
   ws.getRow(r).height = 17.25;
   mergeCell(ws, `A${r}:G${r}`, '총합계',            { font: fntD(12, true) });
-  cell(ws,      `H${r}`,       gQty,                { font: fntD(12, true), fmt: '#,##0.00' });
+  cell(ws,      `H${r}`,       gQty,                { font: fntD(12, true), fmt: '#,##0' });
   mergeCell(ws, `I${r}:K${r}`, '',                  { font: fntD(12, true) });
   mergeCell(ws, `L${r}:M${r}`, gSup,               { font: fntD(12, true), h: 'right', fmt: '#,##0' });
   mergeCell(ws, `N${r}:O${r}`, gTax,               { font: fntD(12, true), h: 'right', fmt: '#,##0' });

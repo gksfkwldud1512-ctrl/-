@@ -12,21 +12,39 @@ const SUPPLIER = {
   email:   'sjj03055@naver.com',
 };
 
+// 유종 제품 (그 외는 유외상품으로 합산)
+const FUEL_PRODUCTS = new Set(['휘발유', '경유', '등유']);
+
 function fmtDate(issueDate) {
   return String(issueDate).replace(/[-/]/g, '');
 }
 
 function calcProducts(vendor) {
-  const map = {};
+  const fuelMap = {};
+  let nonFuelSupply = 0, nonFuelTax = 0;
+
   (vendor.txs || []).forEach(t => {
-    if (!map[t.product]) map[t.product] = { qty: 0, supply: 0, tax: 0 };
     const supply = t.taxType === '면세' ? t.amount : Math.round(t.amount / 1.1);
     const tax    = t.taxType === '면세' ? 0        : t.amount - supply;
-    map[t.product].qty    += t.qty;
-    map[t.product].supply += supply;
-    map[t.product].tax    += tax;
+    const qty    = Math.floor(t.qty);  // 소수점 절사
+
+    if (FUEL_PRODUCTS.has(t.product)) {
+      if (!fuelMap[t.product]) fuelMap[t.product] = { qty: 0, supply: 0, tax: 0 };
+      fuelMap[t.product].qty    += qty;
+      fuelMap[t.product].supply += supply;
+      fuelMap[t.product].tax    += tax;
+    } else {
+      nonFuelSupply += supply;
+      nonFuelTax    += tax;
+    }
   });
-  return Object.entries(map).map(([name, d]) => ({ name, ...d }));
+
+  const result = Object.entries(fuelMap).map(([name, d]) => ({ name, ...d }));
+  if (nonFuelSupply > 0) {
+    // 유외상품은 수량 없음 (혼합 품목이라 의미 없음)
+    result.push({ name: '유외상품', qty: '', supply: nonFuelSupply, tax: nonFuelTax });
+  }
+  return result;
 }
 
 function buildDataRow(issueDate, customer, products) {
