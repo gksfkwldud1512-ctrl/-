@@ -109,13 +109,22 @@ function buildDataRow(issueDate, customer, products) {
 }
 
 function generateTaxInvoiceExcel(vendors, customers, issueDate, taxMethods, outputDir) {
-  // ── 템플릿 파일을 베이스로 사용 (서식/색상/시트 구조 보존) ──────
-  const templatePath = path.join(outputDir, '..', '세금계산서등록양식(일반).xlsx');
+  // ── 템플릿 파일 탐색: 각종양식/ 폴더 우선, 없으면 webapp 루트 ──────
+  const templateDir  = path.join(outputDir, '..', '각종양식');
+  const candidates   = [
+    ...(fs.existsSync(templateDir)
+      ? fs.readdirSync(templateDir)
+          .filter(f => f.includes('세금계산서등록양식') && f.endsWith('.xlsx'))
+          .map(f => path.join(templateDir, f))
+      : []),
+    path.join(outputDir, '..', '세금계산서등록양식(일반).xlsx'),
+  ];
+  const templatePath = candidates.find(p => fs.existsSync(p));
 
-  if (!fs.existsSync(templatePath)) {
+  if (!templatePath) {
     throw new Error(
-      '템플릿 파일이 없습니다: 세금계산서등록양식(일반).xlsx\n' +
-      'webapp 폴더에 해당 파일을 넣어주세요.'
+      '템플릿 파일이 없습니다.\n' +
+      'webapp/각종양식/ 폴더에 세금계산서등록양식(일반).xlsx 파일을 넣어주세요.'
     );
   }
 
