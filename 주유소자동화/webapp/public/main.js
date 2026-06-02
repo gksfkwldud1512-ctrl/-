@@ -13,6 +13,7 @@ const state = {
   issueDate:           '',
   emailStatus:         {},   // { 업체명: 'sent'|'fail'|'sending' }
   hometaxStatus:       {},   // { 업체명: 'done'|'fail'|'running' }
+  completion:          { statements: [], emails: [], taxInvoices: [] }, // 영구 완료 상태
   sort:                { col: 'name', dir: 'asc' },
   vendorPrintMethods:  {},   // { 업체명: 출력방법 } — 세션 내
   hometaxMethods:      {},   // { 업체명: '통합'|'분리' } — 세션 내 (구 자동화용)
@@ -100,17 +101,19 @@ function initFileUpload() {
 }
 
 async function loadAll() {
-  const [vRes, cRes, fRes, mRes, sRes] = await Promise.all([
+  const [vRes, cRes, fRes, mRes, sRes, compRes] = await Promise.all([
     api('GET', `/api/vendors?year=${state.year}&month=${state.month}`),
     api('GET', '/api/customers'),
     api('GET', '/api/files'),
     api('GET', `/api/monthly-status?year=${state.year}`),
     api('GET', '/api/settings'),
+    api('GET', `/api/completion?year=${state.year}&month=${state.month}`),
   ]);
-  if (vRes.ok) state.vendors       = vRes.vendors;
-  if (cRes.ok) state.customers     = cRes.customers;
-  if (fRes.ok) state.files         = fRes.files;
-  if (mRes.ok) state.monthlyStatus = mRes.months;
+  if (vRes.ok)    state.vendors       = vRes.vendors;
+  if (cRes.ok)    state.customers     = cRes.customers;
+  if (fRes.ok)    state.files         = fRes.files;
+  if (mRes.ok)    state.monthlyStatus = mRes.months;
+  if (compRes.ok) state.completion    = compRes.completion;
   if (sRes.ok && sRes.smtpUser) {
     document.getElementById('smtp-user').value = sRes.smtpUser;
     if (sRes.hasPass) document.getElementById('smtp-pass').placeholder = '저장됨 (변경 시 입력)';
@@ -121,14 +124,16 @@ async function loadAll() {
 }
 
 async function loadForMonth() {
-  const [vRes, mRes, fRes] = await Promise.all([
+  const [vRes, mRes, fRes, compRes] = await Promise.all([
     api('GET', `/api/vendors?year=${state.year}&month=${state.month}`),
     api('GET', `/api/monthly-status?year=${state.year}`),
     api('GET', '/api/files'),
+    api('GET', `/api/completion?year=${state.year}&month=${state.month}`),
   ]);
-  if (vRes.ok) state.vendors       = vRes.vendors;
-  if (mRes.ok) state.monthlyStatus = mRes.months;
-  if (fRes.ok) state.files         = fRes.files;
+  if (vRes.ok)    state.vendors       = vRes.vendors;
+  if (mRes.ok)    state.monthlyStatus = mRes.months;
+  if (fRes.ok)    state.files         = fRes.files;
+  if (compRes.ok) state.completion    = compRes.completion;
   renderAll();
 }
 
@@ -261,9 +266,12 @@ function renderVendors() {
       ? `${other.toLocaleString()}원`
       : `<span style="color:#94a3b8">-</span>`;
 
+    const stmtDone = state.completion.statements.includes(v.name);
     const statCell = v.hasCredit
       ? (hasFile
-          ? '<span class="badge badge-ok">생성됨</span>'
+          ? (stmtDone
+              ? '<span class="badge badge-done">완료</span>'
+              : '<span class="badge badge-ok">생성됨</span>')
           : '<span class="badge badge-no">미생성</span>')
       : '<span class="badge" style="background:#f1f5f9;color:#94a3b8">해당없음</span>';
 
@@ -345,11 +353,18 @@ function renderEmail() {
     const hasEmail  = !!customer?.email;
     const canSelect = hasFile && hasEmail;
     const status    = state.emailStatus[v.name];
+    const emailDone = state.completion.emails.includes(v.name);
 
-    let statusBadge = '<span class="badge badge-no">대기</span>';
-    if (status === 'sending') statusBadge = '<span class="badge badge-sending">발송중...</span>';
-    if (status === 'sent')    statusBadge = '<span class="badge badge-sent">발송완료</span>';
-    if (status === 'fail')    statusBadge = '<span class="badge badge-fail">실패</span>';
+    let statusBadge;
+    if (emailDone || status === 'sent') {
+      statusBadge = '<span class="badge badge-done">완료</span>';
+    } else if (status === 'sending') {
+      statusBadge = '<span class="badge badge-sending">발송중...</span>';
+    } else if (status === 'fail') {
+      statusBadge = '<span class="badge badge-fail">실패</span>';
+    } else {
+      statusBadge = '<span class="badge badge-no">대기</span>';
+    }
 
     return `<tr>
       <td class="col-chk">
@@ -445,7 +460,10 @@ function renderTaxInvoice() {
       <option value="분리" ${method === '분리' ? 'selected' : ''}>분리 (${products.length}장)</option>
     </select>`;
 
-    const countBadge = `<span class="badge ${invoiceCount > 1 ? 'badge-warn' : 'badge-ok'}">${invoiceCount}장</span>`;
+    const taxDone    = state.completion.taxInvoices.includes(v.name);
+    const countBadge = taxDone
+      ? '<span class="badge badge-done">완료</span>'
+      : `<span class="badge ${invoiceCount > 1 ? 'badge-warn' : 'badge-ok'}">${invoiceCount}장</span>`;
 
     return `<tr class="${hasBizNo ? '' : 'row-disabled'}">
       <td class="col-chk">
@@ -511,8 +529,13 @@ async function generateTaxExcel() {
   panel.scrollIntoView({ behavior: 'smooth' });
   toast(`✅ ${res.count}건 일괄발행 Excel 생성 완료`, 'success');
 
-  const fRes = await api('GET', '/api/files');
-  if (fRes.ok) state.files = fRes.files;
+  const [fRes, compRes] = await Promise.all([
+    api('GET', '/api/files'),
+    api('GET', `/api/completion?year=${state.year}&month=${state.month}`),
+  ]);
+  if (fRes.ok)    state.files      = fRes.files;
+  if (compRes.ok) state.completion = compRes.completion;
+  renderTaxInvoice();
 }
 
 // ── 거래명세서 생성 ─────────────────────────────────────────
@@ -535,8 +558,12 @@ async function generateSelected() {
 
   if (res.ok) {
     toast(`✅ ${res.files.length}개 파일 생성 완료`, 'success');
-    const fRes = await api('GET', '/api/files');
-    if (fRes.ok) state.files = fRes.files;
+    const [fRes, compRes] = await Promise.all([
+      api('GET', '/api/files'),
+      api('GET', `/api/completion?year=${state.year}&month=${state.month}`),
+    ]);
+    if (fRes.ok)    state.files      = fRes.files;
+    if (compRes.ok) state.completion = compRes.completion;
     renderAll();
   } else {
     toast(`오류: ${res.error}`, 'error');
@@ -593,11 +620,15 @@ async function sendSelectedEmails() {
       vendorName: name,
       email:      customer.email,
       filename,
+      year:       state.year,
       month:      state.month,
       extraMemo,
     });
 
     state.emailStatus[name] = res.ok ? 'sent' : 'fail';
+    if (res.ok && !state.completion.emails.includes(name)) {
+      state.completion.emails.push(name);
+    }
     renderEmail();
     if (!res.ok) toast(`${name} 발송 실패: ${res.error}`, 'error');
   }

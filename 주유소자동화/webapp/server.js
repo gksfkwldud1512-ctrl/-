@@ -29,6 +29,21 @@ const upload = multer({
 const CUSTOMERS_FILE = path.join(DATA_DIR, 'customers.json');
 const SETTINGS_FILE  = path.join(DATA_DIR, 'settings.json');
 
+function completionFile(year, month) {
+  const mo = String(month).padStart(2, '0');
+  return path.join(DATA_DIR, `completion_${year}_${mo}.json`);
+}
+function completionDef() { return { statements: [], emails: [], taxInvoices: [] }; }
+function addCompletion(year, month, type, names) {
+  const file = completionFile(year, month);
+  const data = readJSON(file, completionDef());
+  if (!Array.isArray(data[type])) data[type] = [];
+  (Array.isArray(names) ? names : [names]).forEach(n => {
+    if (n && !data[type].includes(n)) data[type].push(n);
+  });
+  writeJSON(file, data);
+}
+
 function vendorFile(year, month) {
   const mo = String(month).padStart(2, '0');
   return path.join(DATA_DIR, `vendors_${year}_${mo}.json`);
@@ -93,6 +108,7 @@ app.post('/api/generate', async (req, res) => {
 
     const { generateStatements } = require('./lib/statementGenerator');
     const files = await generateStatements(selected, customers, OUTPUT_DIR, issueDate, year, month, printMethods || {});
+    addCompletion(year, month, 'statements', selected.map(v => v.name));
     res.json({ ok: true, files });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -237,7 +253,7 @@ app.post('/api/import-customers', upload.single('file'), (req, res) => {
 // ── 메일 발송 ────────────────────────────────────────────────
 app.post('/api/send-email', async (req, res) => {
   try {
-    const { vendorName, email, filename, month, extraMemo } = req.body;
+    const { vendorName, email, filename, year, month, extraMemo } = req.body;
     const settings = readJSON(SETTINGS_FILE, {});
     if (!settings.smtpUser || !settings.smtpPass)
       return res.status(400).json({ ok: false, error: 'SMTP 설정 없음 — [설정] 탭에서 입력하세요.' });
@@ -248,6 +264,7 @@ app.post('/api/send-email', async (req, res) => {
 
     const { sendEmail } = require('./lib/emailSender');
     await sendEmail(settings, email, vendorName, fp, month, extraMemo || '');
+    addCompletion(year || new Date().getFullYear(), month, 'emails', vendorName);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -267,6 +284,8 @@ app.post('/api/generate-tax-excel', (req, res) => {
 
     const { generateTaxInvoiceExcel } = require('./lib/taxInvoiceGenerator');
     const result = generateTaxInvoiceExcel(vendors, customers, issueDate, taxMethods || {}, OUTPUT_DIR);
+    const includedNames = Object.keys(taxMethods || {}).filter(n => !result.skipped?.includes(n));
+    addCompletion(year, month, 'taxInvoices', includedNames);
     res.json({ ok: true, ...result });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -352,6 +371,28 @@ app.post('/api/settings', (req, res) => {
   if (smtpPass)  s.smtpPass  = smtpPass;
   if (certPass)  s.certPass  = certPass;
   writeJSON(SETTINGS_FILE, s);
+  res.json({ ok: true });
+});
+
+// ── 완료 상태 조회 ────────────────────────────────────────────
+app.get('/api/completion', (req, res) => {
+  const year  = req.query.year  || new Date().getFullYear();
+  const month = req.query.month || new Date().getMonth() + 1;
+  res.json({ ok: true, completion: readJSON(completionFile(year, month), completionDef()) });
+});
+
+// ── 완료 상태 수동 토글 ───────────────────────────────────────
+app.patch('/api/completion', (req, res) => {
+  const { year, month, type, name, done } = req.body;
+  const file = completionFile(year, month);
+  const data = readJSON(file, completionDef());
+  if (!Array.isArray(data[type])) data[type] = [];
+  if (done) {
+    if (!data[type].includes(name)) data[type].push(name);
+  } else {
+    data[type] = data[type].filter(n => n !== name);
+  }
+  writeJSON(file, data);
   res.json({ ok: true });
 });
 
