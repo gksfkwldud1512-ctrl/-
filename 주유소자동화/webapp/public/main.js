@@ -1003,6 +1003,20 @@ function initDailyUpload() {
   });
 }
 
+function switchToUploadedMonth(dateStr) {
+  if (!dateStr) return;
+  const [y, m] = dateStr.split('-').map(Number);
+  if (!y || !m) return;
+  if (dailyState.year !== y || dailyState.month !== m) {
+    dailyState.year  = y;
+    dailyState.month = m;
+    const selYear  = document.getElementById('daily-year');
+    const selMonth = document.getElementById('daily-month');
+    if (selYear)  selYear.value  = y;
+    if (selMonth) selMonth.value = m;
+  }
+}
+
 async function uploadBos(file) {
   toast('BOS 데이터 업로드 중...', '');
   const form = new FormData();
@@ -1011,7 +1025,9 @@ async function uploadBos(file) {
     const res  = await fetch('/api/daily/upload-bos', { method: 'POST', body: form });
     const data = await res.json();
     if (data.ok) {
-      toast(`✅ ${data.date} BOS 데이터 업로드 완료`, 'success');
+      const label = data.count > 1 ? `${data.count}일치` : data.date;
+      toast(`✅ BOS 데이터 업로드 완료 (${label})`, 'success');
+      switchToUploadedMonth(data.date);
       await loadDailyMonth();
     } else {
       toast(`오류: ${data.error}`, 'error');
@@ -1028,7 +1044,9 @@ async function uploadCard(file) {
     const res  = await fetch('/api/daily/upload-card', { method: 'POST', body: form });
     const data = await res.json();
     if (data.ok) {
-      toast(`✅ ${data.date} 카드내역 업로드 완료`, 'success');
+      const label = data.count > 1 ? `${data.count}일치` : data.date;
+      toast(`✅ 카드내역 업로드 완료 (${label})`, 'success');
+      switchToUploadedMonth(data.date);
       await loadDailyMonth();
     } else {
       toast(`오류: ${data.error}`, 'error');
@@ -1169,6 +1187,7 @@ function calcDailyProfit(day) {
   });
   profit += (bos.carwash?.amount || 0);
   profit += (bos.others?.amount  || 0) - (day.otherCost || 0);
+  profit -= (day.card?.totalFee  || 0);  // 카드 수수료 차감
   return Math.round(profit);
 }
 
@@ -1284,50 +1303,60 @@ async function saveOtherCost(date, value) {
 // ── 카드 대사 모달 ───────────────────────────────────────────
 function showMatchingModal(date) {
   const day = dailyState.days.find(d => d.date === date);
-  if (!day?.matching) return;
+  if (!day) return;
   const m = day.matching;
 
-  const typeLabel = { bos_only: 'BOS에만 있음', easy_only: '이지샵에만 있음', amount_mismatch: '금액 불일치' };
-  const typeBadge = { bos_only: 'badge-warn', easy_only: 'badge-warn', amount_mismatch: 'badge-fail' };
+  // ── 카드 대사 섹션 (BOS ↔ 이지샵) ───────────────────────────
+  let cardMatchSection = '';
+  if (!m) {
+    cardMatchSection = '<p style="color:#94a3b8; font-size:12px; margin-top:8px;">BOS 또는 이지샵 데이터가 없어 카드 대사를 수행할 수 없습니다.</p>';
+  } else {
+    const summaryClass = m.totalMatch ? 'match-summary-ok' : 'match-summary-err';
+    const summaryIcon  = m.totalMatch ? '✅' : '⚠';
+    const totalDiffStr = m.totalDiff !== 0
+      ? `<span class="price-diff">&nbsp;(차액 ${Math.abs(m.totalDiff).toLocaleString()}원)</span>` : '';
 
-  const summaryClass = m.totalMatch ? 'match-summary-ok' : 'match-summary-err';
-  const summaryIcon  = m.totalMatch ? '✅' : '⚠';
-  const totalDiffStr = m.totalDiff !== 0
-    ? `<span class="price-diff">&nbsp;(차액 ${Math.abs(m.totalDiff).toLocaleString()}원)</span>` : '';
+    const typeOrder = ['bos_only', 'easy_only', 'amount_mismatch'];
+    let errSections = '';
+    typeOrder.forEach(type => {
+      const list = m.errors.filter(e => e.type === type);
+      if (!list.length) return;
+      errSections += `<p class="error-section-title" style="margin-top:16px;">${
+        type === 'bos_only' ? '① BOS에만 있는 거래' :
+        type === 'easy_only' ? '② 이지샵에만 있는 거래' : '③ 금액 불일치'
+      }</p>
+      <table class="error-table">
+        <thead><tr>
+          <th>승인번호</th><th>카드사</th><th>카드번호</th><th>유종</th>
+          ${type === 'amount_mismatch'
+            ? '<th>BOS 금액</th><th>이지샵 금액</th><th>차액</th>'
+            : `<th>${type === 'bos_only' ? 'BOS' : '이지샵'} 금액</th>`}
+        </tr></thead>
+        <tbody>${list.map(e => `<tr>
+          <td><code>${esc(e.approvalNo)}</code></td>
+          <td>${esc(e.cardCompany)}</td>
+          <td><code>${esc(e.cardNo)}</code></td>
+          <td>${esc(e.product || e.fuel || '')}</td>
+          ${type === 'amount_mismatch'
+            ? `<td>${e.bosAmount.toLocaleString()}원</td>
+               <td>${e.easyAmount.toLocaleString()}원</td>
+               <td class="price-diff">${e.diff > 0 ? '+' : ''}${e.diff.toLocaleString()}원</td>`
+            : `<td>${(e.bosAmount ?? e.easyAmount).toLocaleString()}원</td>`}
+        </tr>`).join('')}</tbody>
+      </table>`;
+    });
 
-  // 오류 유형별 섹션
-  const typeOrder = ['bos_only', 'easy_only', 'amount_mismatch'];
-  let errSections = '';
-  typeOrder.forEach(type => {
-    const list = m.errors.filter(e => e.type === type);
-    if (!list.length) return;
-    errSections += `<p class="error-section-title" style="margin-top:16px;">${
-      type === 'bos_only' ? '① BOS에만 있는 거래' :
-      type === 'easy_only' ? '② 이지샵에만 있는 거래' : '③ 금액 불일치'
-    }</p>
-    <table class="error-table">
-      <thead><tr>
-        <th>승인번호</th><th>카드사</th><th>카드번호</th><th>유종</th>
-        ${type === 'amount_mismatch'
-          ? '<th>BOS 금액</th><th>이지샵 금액</th><th>차액</th>'
-          : `<th>${type === 'bos_only' ? 'BOS' : '이지샵'} 금액</th>`}
-      </tr></thead>
-      <tbody>${list.map(e => `<tr>
-        <td><code>${esc(e.approvalNo)}</code></td>
-        <td>${esc(e.cardCompany)}</td>
-        <td><code>${esc(e.cardNo)}</code></td>
-        <td>${esc(e.product || e.fuel || '')}</td>
-        ${type === 'amount_mismatch'
-          ? `<td>${e.bosAmount.toLocaleString()}원</td>
-             <td>${e.easyAmount.toLocaleString()}원</td>
-             <td class="price-diff">${e.diff > 0 ? '+' : ''}${e.diff.toLocaleString()}원</td>`
-          : `<td>${(e.bosAmount ?? e.easyAmount).toLocaleString()}원</td>`}
-      </tr>`).join('')}</tbody>
-    </table>`;
-  });
+    if (!errSections) {
+      errSections = '<p style="color:#15803d; font-weight:600; margin-top:12px;">✅ 모든 카드 거래가 정상 매칭됩니다.</p>';
+    }
 
-  if (!errSections) {
-    errSections = '<p style="color:#15803d; font-weight:600; margin-top:12px;">✅ 모든 카드 거래가 정상 매칭됩니다.</p>';
+    cardMatchSection = `
+      <div class="${summaryClass}">
+        ${summaryIcon} BOS 합계 <strong>${m.bosTotal.toLocaleString()}원</strong>
+        &nbsp;/&nbsp; 이지샵 합계 <strong>${m.easyTotal.toLocaleString()}원</strong>
+        ${totalDiffStr}
+      </div>
+      ${errSections}`;
   }
 
   // ── 은행 입금 대사 섹션 ──────────────────────────────────────
@@ -1368,14 +1397,10 @@ function showMatchingModal(date) {
   const html = `
     <div class="modal-overlay" id="matching-modal" onclick="if(event.target===this)closeMatchingModal()">
       <div class="modal-box" style="width:700px;">
-        <div class="modal-head">📋 카드 대사 — <span>${date}</span></div>
+        <div class="modal-head">📋 대사 현황 — <span>${date}</span></div>
         <div class="modal-body">
-          <div class="${summaryClass}">
-            ${summaryIcon} BOS 합계 <strong>${m.bosTotal.toLocaleString()}원</strong>
-            &nbsp;/&nbsp; 이지샵 합계 <strong>${m.easyTotal.toLocaleString()}원</strong>
-            ${totalDiffStr}
-          </div>
-          ${errSections}
+          <p class="error-section-title">💳 카드 대사 (BOS ↔ 이지샵)</p>
+          ${cardMatchSection}
           ${bankSection}
         </div>
         <div class="modal-foot">

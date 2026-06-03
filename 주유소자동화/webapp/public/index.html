@@ -118,6 +118,21 @@
         <h2>일별 판매 현황</h2>
         <span id="daily-summary-label" style="font-size:13px; color:#64748b;"></span>
       </div>
+      <details style="padding:0 16px 12px; font-size:12px; color:#64748b;">
+        <summary style="cursor:pointer; font-weight:600; color:#475569; user-select:none;">영업이익 계산 방법 보기</summary>
+        <div style="margin-top:10px; padding:12px; background:#f8fafc; border-radius:6px; line-height:2;">
+          <strong>영업이익 =</strong><br>
+          &nbsp;&nbsp;(휘발유 매출 − 휘발유 수량 × 매입단가)<br>
+          &nbsp;+ (경유 매출 − 경유 수량 × 매입단가)<br>
+          &nbsp;+ (등유 매출 − 등유 수량 × 매입단가)<br>
+          &nbsp;+ 세차 매출<br>
+          &nbsp;+ (유외상품 매출 − 수기 입력 원가)<br>
+          &nbsp;− <strong>카드 수수료</strong> (이지샵 업로드 시 자동 반영)<br>
+          <br>
+          <span style="color:#94a3b8;">※ 매입단가 미입력 시 이익 계산 불가 ("−" 표시)</span><br>
+          <span style="color:#94a3b8;">※ 매입단가는 적용 시작일 기준으로 자동 선택됩니다</span>
+        </div>
+      </details>
       <div class="daily-table-wrap">
         <table id="daily-table">
           <thead>

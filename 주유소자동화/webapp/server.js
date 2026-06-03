@@ -405,29 +405,37 @@ function runMatching(daily) {
   }
 }
 
-// BOS 업로드
+// BOS 업로드 (단일 날짜 또는 월별 파일 모두 처리)
 app.post('/api/daily/upload-bos', upload.single('file'), (req, res) => {
   if (!req.file) return res.json({ ok: false, error: '파일 없음' });
   try {
-    const parsed   = parseBosDaily(req.file.path);
-    const existing = readJSON(dailyFile(parsed.date), { date: parsed.date });
-    existing.bos   = parsed;
-    runMatching(existing);
-    writeJSON(dailyFile(parsed.date), existing);
-    res.json({ ok: true, date: parsed.date, data: existing });
+    const days = parseBosDaily(req.file.path);
+    let lastDate = '';
+    for (const parsed of days) {
+      const existing = readJSON(dailyFile(parsed.date), { date: parsed.date });
+      existing.bos   = parsed;
+      runMatching(existing);
+      writeJSON(dailyFile(parsed.date), existing);
+      lastDate = parsed.date;
+    }
+    res.json({ ok: true, count: days.length, date: lastDate });
   } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
-// 이지샵 카드 업로드
+// 이지샵 카드 업로드 (단일 날짜 또는 월별 파일 모두 처리)
 app.post('/api/daily/upload-card', upload.single('file'), (req, res) => {
   if (!req.file) return res.json({ ok: false, error: '파일 없음' });
   try {
-    const parsed   = parseEasyshop(req.file.path);
-    const existing = readJSON(dailyFile(parsed.date), { date: parsed.date });
-    existing.card  = parsed;
-    runMatching(existing);
-    writeJSON(dailyFile(parsed.date), existing);
-    res.json({ ok: true, date: parsed.date, data: existing });
+    const days = parseEasyshop(req.file.path);
+    let lastDate = '';
+    for (const parsed of days) {
+      const existing = readJSON(dailyFile(parsed.date), { date: parsed.date });
+      existing.card  = parsed;
+      runMatching(existing);
+      writeJSON(dailyFile(parsed.date), existing);
+      lastDate = parsed.date;
+    }
+    res.json({ ok: true, count: days.length, date: lastDate });
   } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 

@@ -11,7 +11,7 @@ function normalizeCardName(raw) {
   if (/BC|비씨/i.test(s))        return '비씨카드';
   if (/신한/i.test(s))           return '신한카드';
   if (/현대/i.test(s))           return '현대카드';
-  if (/하나\d{6,}/i.test(s))     return '하나카드';  // "하나961643475..." 형태만
+  if (/하나카드|하나체크|하나구외환|하나\d{6,}/i.test(s)) return '하나카드';
   if (/우리/i.test(s))           return '우리카드';
   return null; // 카드사 아님
 }
