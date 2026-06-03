@@ -171,9 +171,16 @@
       <div class="toolbar-group upload-group">
         <input type="file" id="file-input" accept=".xlsx,.xls" hidden>
         <button class="btn-upload" onclick="document.getElementById('file-input').click()">
-          📂 Excel 업로드
+          📂 BOS Excel 업로드
         </button>
         <span id="file-label" class="file-label">파일을 선택하세요</span>
+      </div>
+      <div class="toolbar-group upload-group">
+        <input type="file" id="delivery-file-input" accept=".xlsx,.xls" hidden>
+        <button class="btn-upload btn-orange" onclick="document.getElementById('delivery-file-input').click()">
+          🛵 배달 Excel 업로드
+        </button>
+        <span id="delivery-file-label" class="file-label"></span>
       </div>
     </div>
 
@@ -205,6 +212,7 @@
             <th class="col-num sortable" data-col="other" onclick="setSort('other')">카드/현금 <span class="sort-icon" id="sort-other">⇅</span></th>
             <th class="col-num sortable" data-col="total" onclick="setSort('total')">합계 <span class="sort-icon" id="sort-total">⇅</span></th>
             <th class="col-method">출력방법</th>
+            <th class="col-method">발행방식</th>
             <th class="col-status">거래명세서</th>
             <th class="col-action">다운로드</th>
           </tr>
@@ -295,6 +303,13 @@
           <select id="c-tax-issuance" class="form-select">
             <option value="합산">합산발행 (1장)</option>
             <option value="분리">유종별 분리발행</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>배달 분리 발행</label>
+          <select id="c-split-delivery" class="form-select">
+            <option value="">미사용</option>
+            <option value="true">사용 (스탠드/배달 2부)</option>
           </select>
         </div>
         <div class="form-group form-group-btn">

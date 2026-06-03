@@ -24,7 +24,8 @@ const state = {
   hometaxStatus:       {},   // { 업체명: 'done'|'fail'|'running' }
   completion:          { statements: [], emails: [], taxInvoices: [] }, // 영구 완료 상태
   sort:                { col: 'name', dir: 'asc' },
-  vendorPrintMethods:  {},   // { 업체명: 출력방법 } — 세션 내
+  vendorPrintMethods:   {},   // { 업체명: 출력방법 } — 세션 내
+  vendorSplitDelivery: {},   // { 업체명: true|false } — 배달/주유 분리 발행
   hometaxMethods:      {},   // { 업체명: '통합'|'분리' } — 세션 내 (구 자동화용)
   taxIssuanceMethods:  {},   // { 업체명: '합산'|'분리' } — 세션 내 (일괄발행용)
 };
@@ -140,6 +141,9 @@ function initFileUpload() {
   document.getElementById('file-input').addEventListener('change', e => {
     if (e.target.files[0]) uploadExcel(e.target.files[0]);
   });
+  document.getElementById('delivery-file-input').addEventListener('change', e => {
+    if (e.target.files[0]) uploadDeliveryExcel(e.target.files[0]);
+  });
   document.getElementById('customer-file-input').addEventListener('change', e => {
     if (e.target.files[0]) importCustomers(e.target.files[0]);
   });
@@ -155,7 +159,12 @@ async function loadAll() {
     api('GET', `/api/completion?year=${state.year}&month=${state.month}`),
   ]);
   if (vRes.ok)    state.vendors       = vRes.vendors;
-  if (cRes.ok)    state.customers     = cRes.customers;
+  if (cRes.ok) {
+    state.customers = cRes.customers;
+    cRes.customers.forEach(c => {
+      if (c.splitDelivery) state.vendorSplitDelivery[c.name] = true;
+    });
+  }
   if (fRes.ok)    state.files         = fRes.files;
   if (mRes.ok)    state.monthlyStatus = mRes.months;
   if (compRes.ok) state.completion    = compRes.completion;
@@ -199,16 +208,27 @@ function printMethodOptions(current) {
   ).join('');
 }
 
-// 업체 출력방법 변경 (세션 내 임시 저장)
+// 업체 출력방법 변경 → customers.json 자동 저장
 function updateVendorPrintMethod(name, value) {
   state.vendorPrintMethods[name] = value;
+  const existing = state.customers.find(c => c.name === name) || { name };
+  api('POST', '/api/customers', { ...existing, printMethod: value });
+}
+
+// 발행방식 변경 → customers.json 자동 저장
+function updateVendorSplitDelivery(name, value) {
+  state.vendorSplitDelivery[name] = value === 'true';
+  const existing = state.customers.find(c => c.name === name) || { name };
+  api('POST', '/api/customers', { ...existing, splitDelivery: state.vendorSplitDelivery[name] });
+  renderVendors();
 }
 
 // 파일명 생성 (서버와 동일한 규칙)
-function getFilename(name) {
+function getFilename(name, suffix = '') {
   const safe = name.replace(/[\\/:*?"<>|]/g, '_');
   const mo   = String(state.month).padStart(2, '0');
-  return `${state.year}년${mo}월_거래명세서_${safe}.xlsx`;
+  const sfx  = suffix ? `_${suffix}` : '';
+  return `${state.year}년${mo}월_거래명세서_${safe}${sfx}.xlsx`;
 }
 
 // ── 월별 현황 칩 ─────────────────────────────────────────────
@@ -287,8 +307,13 @@ function renderVendors() {
   let sumCredit = 0, sumOther = 0, sumAll = 0;
 
   const rows = sortedVendors().map(v => {
-    const filename = getFilename(v.name);
-    const hasFile  = state.files.some(f => f.name === filename);
+    const filename      = getFilename(v.name);
+    const splitFile1    = getFilename(v.name, '스탠드');
+    const splitFile2    = getFilename(v.name, '배달');
+    const isSplit       = !!state.vendorSplitDelivery[v.name];
+    const hasFile       = isSplit
+      ? state.files.some(f => f.name === splitFile1) && state.files.some(f => f.name === splitFile2)
+      : state.files.some(f => f.name === filename);
     const credit   = v.totalCredit || 0;
     const other    = v.totalOther  || 0;
     const total    = v.total || 0;
@@ -321,13 +346,24 @@ function renderVendors() {
       : '<span class="badge" style="background:#f1f5f9;color:#94a3b8">해당없음</span>';
 
     const dlCell = (v.hasCredit && hasFile)
-      ? `<a href="/api/download/${encodeURIComponent(filename)}" class="btn-link" download>다운로드</a>`
+      ? (isSplit
+          ? `<a href="/api/download/${encodeURIComponent(splitFile1)}" class="btn-link" download>주유</a>
+             <a href="/api/download/${encodeURIComponent(splitFile2)}" class="btn-link" download style="margin-left:4px">배달</a>`
+          : `<a href="/api/download/${encodeURIComponent(filename)}" class="btn-link" download>다운로드</a>`)
       : '-';
 
     const savedMethod = state.vendorPrintMethods[v.name]
       ?? (state.customers.find(c => c.name === v.name)?.printMethod ?? '');
     const methodCell = v.hasCredit
       ? `<select class="select-method" onchange="updateVendorPrintMethod('${esc(v.name)}', this.value)">${printMethodOptions(savedMethod)}</select>`
+      : dash();
+
+    const hasDeliveryTxs = v.txs && v.txs.some(t => t.isDelivery) && v.txs.some(t => !t.isDelivery);
+    const splitCell = (v.hasCredit && hasDeliveryTxs)
+      ? `<select class="select-method" onchange="updateVendorSplitDelivery('${esc(v.name)}', this.value)">
+           <option value=""${!isSplit ? ' selected' : ''}>통합 (1부)</option>
+           <option value="true"${isSplit ? ' selected' : ''}>배달/주유 분리 (2부)</option>
+         </select>`
       : dash();
 
     const errorBadge = v.hasError
@@ -341,6 +377,7 @@ function renderVendors() {
       <td class="col-num">${otherCell}</td>
       <td class="col-num">${total.toLocaleString()}원</td>
       <td class="col-method">${methodCell}</td>
+      <td class="col-method">${splitCell}</td>
       <td class="col-status">${statCell}</td>
       <td class="col-action">${dlCell}</td>
     </tr>`;
@@ -429,7 +466,7 @@ function renderEmail() {
   }).join('');
 }
 
-// ── 세금계산서 발행구분 (세션 임시 저장) ─────────────────────
+// ── 세금계산서 발행구분 → customers.json 자동 저장 ─────────────
 function getTaxIssuance(vendorName) {
   if (state.taxIssuanceMethods[vendorName] !== undefined)
     return state.taxIssuanceMethods[vendorName];
@@ -437,6 +474,8 @@ function getTaxIssuance(vendorName) {
 }
 function updateTaxIssuance(name, value) {
   state.taxIssuanceMethods[name] = value;
+  const existing = state.customers.find(c => c.name === name) || { name };
+  api('POST', '/api/customers', { ...existing, taxIssuance: value });
   renderTaxInvoice();
 }
 
@@ -592,9 +631,13 @@ async function generateSelected() {
   const names = getChecked('vendor-check');
   if (!names.length) return toast('업체를 선택하세요.', 'warn');
 
-  const issueDate    = state.issueDate.replace(/-/g, '/');
-  const printMethods = {};
-  names.forEach(n => { if (state.vendorPrintMethods[n]) printMethods[n] = state.vendorPrintMethods[n]; });
+  const issueDate      = state.issueDate.replace(/-/g, '/');
+  const printMethods   = {};
+  const splitDelivery  = {};
+  names.forEach(n => {
+    if (state.vendorPrintMethods[n]) printMethods[n] = state.vendorPrintMethods[n];
+    splitDelivery[n] = !!state.vendorSplitDelivery[n]; // 통합이어도 false로 명시 전달
+  });
   toast(`${names.length}개 업체 거래명세서 생성 중...`, '');
 
   const res = await api('POST', '/api/generate', {
@@ -603,6 +646,7 @@ async function generateSelected() {
     year:  state.year,
     month: state.month,
     printMethods,
+    splitDelivery,
   });
 
   if (res.ok) {
@@ -727,9 +771,10 @@ async function saveCustomer() {
   const bizItem       = document.getElementById('c-bizitem').value.trim();
   const printMethod   = document.getElementById('c-print-method').value;
   const taxIssuance   = document.getElementById('c-tax-issuance').value;
+  const splitDelivery = document.getElementById('c-split-delivery').value === 'true';
   if (!name) return toast('업체명을 입력하세요.', 'warn');
 
-  const res = await api('POST', '/api/customers', { name, bizNo, contactName, email, phone, address, bizType, bizItem, printMethod, taxIssuance });
+  const res = await api('POST', '/api/customers', { name, bizNo, contactName, email, phone, address, bizType, bizItem, printMethod, taxIssuance, splitDelivery });
   if (res.ok) {
     toast(`✅ ${name} 저장 완료`, 'success');
     closeCustomerForm();
@@ -752,8 +797,9 @@ function editCustomer(name) {
   document.getElementById('c-address').value       = c.address || '';
   document.getElementById('c-biztype').value       = c.bizType || '';
   document.getElementById('c-bizitem').value       = c.bizItem || '';
-  document.getElementById('c-print-method').value  = c.printMethod || '';
-  document.getElementById('c-tax-issuance').value  = c.taxIssuance || '합산';
+  document.getElementById('c-print-method').value   = c.printMethod || '';
+  document.getElementById('c-tax-issuance').value   = c.taxIssuance || '합산';
+  document.getElementById('c-split-delivery').value = c.splitDelivery ? 'true' : '';
   document.querySelector('[data-tab="customers"]').click();
   document.getElementById('customer-form-card').style.display = '';
   document.getElementById('customer-form-title').textContent  = `수정: ${name}`;
@@ -765,8 +811,9 @@ function closeCustomerForm() {
   ['c-name','c-bizno','c-contact','c-email','c-phone','c-address','c-biztype','c-bizitem'].forEach(id =>
     document.getElementById(id).value = ''
   );
-  document.getElementById('c-print-method').value = '';
-  document.getElementById('c-tax-issuance').value = '합산';
+  document.getElementById('c-print-method').value   = '';
+  document.getElementById('c-tax-issuance').value   = '합산';
+  document.getElementById('c-split-delivery').value = '';
 }
 
 async function deleteCustomer(name) {
@@ -848,6 +895,30 @@ async function uploadExcel(file) {
     }
   } catch {
     label.textContent = '업로드 실패';
+    toast('서버 연결 오류', 'error');
+  }
+}
+
+async function uploadDeliveryExcel(file) {
+  const label = document.getElementById('delivery-file-label');
+  label.textContent = `확인 중: ${file.name}`;
+
+  const form = new FormData();
+  form.append('file', file);
+
+  try {
+    const res  = await fetch('/api/parse-delivery-excel', { method: 'POST', body: form });
+    const data = await res.json();
+    if (data.ok) {
+      const amt = data.totalAmt.toLocaleString();
+      label.textContent = `✅ 배달 ${data.delivCount}개 업체 / ${data.txCount}건 확인`;
+      toast(`✅ 배달 확인 완료 — ${data.delivCount}개 업체, ${data.txCount}건, ${amt}원 (BOS에 포함된 내역)`, 'success');
+    } else {
+      label.textContent = '확인 실패';
+      toast(`오류: ${data.error}`, 'error');
+    }
+  } catch {
+    label.textContent = '확인 실패';
     toast('서버 연결 오류', 'error');
   }
 }

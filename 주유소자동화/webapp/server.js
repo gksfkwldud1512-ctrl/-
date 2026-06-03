@@ -47,6 +47,10 @@ function vendorFile(year, month) {
   return path.join(DATA_DIR, `vendors_${year}_${mo}.json`);
 }
 
+function getVendors(year, month) {
+  return readJSON(vendorFile(year, month), []);
+}
+
 function readJSON(file, def) {
   try { if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch {}
@@ -71,11 +75,11 @@ app.post('/api/parse-excel', upload.single('file'), (req, res) => {
   }
 });
 
-// ── 업체 목록 조회 (월별) ─────────────────────────────────────
+// ── 업체 목록 조회 (월별, BOS + 배달 합산) ────────────────────
 app.get('/api/vendors', (req, res) => {
   const year  = req.query.year  || new Date().getFullYear();
   const month = req.query.month || new Date().getMonth() + 1;
-  res.json({ ok: true, vendors: readJSON(vendorFile(year, month), []) });
+  res.json({ ok: true, vendors: getVendors(year, month) });
 });
 
 // ── 월별 업로드 현황 ──────────────────────────────────────────
@@ -89,13 +93,29 @@ app.get('/api/monthly-status', (req, res) => {
   res.json({ ok: true, months });
 });
 
+// ── 배달 Excel 확인 (배달판매전표리스트 형식) ─────────────────────
+// 배달 내역은 BOS에 이미 포함된 데이터 → 합산 없이 확인용으로만 파싱
+app.post('/api/parse-delivery-excel', upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ ok: false, error: '파일이 없습니다.' });
+    const { parseDeliveryExcel } = require('./lib/excelParser');
+    const delivVendors = parseDeliveryExcel(req.file.path);
+    const txCount   = delivVendors.reduce((s, v) => s + v.txs.length, 0);
+    const totalAmt  = delivVendors.reduce((s, v) => s + v.total, 0);
+    // vendors_delivery 파일 저장 안 함 — BOS 데이터에 이미 포함
+    res.json({ ok: true, delivCount: delivVendors.length, txCount, totalAmt });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ── 거래명세서 생성 (외상 업체만) ────────────────────────────
 app.post('/api/generate', async (req, res) => {
   try {
-    const { vendorNames, issueDate, year, month, printMethods } = req.body;
+    const { vendorNames, issueDate, year, month, printMethods, splitDelivery } = req.body;
     if (!vendorNames?.length) return res.status(400).json({ ok: false, error: '업체를 선택하세요.' });
 
-    const vendors   = readJSON(vendorFile(year, month), []);
+    const vendors   = getVendors(year, month);
     const customers = readJSON(CUSTOMERS_FILE, []);
     // 외상 거래가 있는 업체만 생성
     const selected  = vendorNames
@@ -105,7 +125,7 @@ app.post('/api/generate', async (req, res) => {
     if (!selected.length) return res.status(400).json({ ok: false, error: '선택한 업체 중 외상 거래가 없습니다.' });
 
     const { generateStatements } = require('./lib/statementGenerator');
-    const files = await generateStatements(selected, customers, OUTPUT_DIR, issueDate, year, month, printMethods || {});
+    const files = await generateStatements(selected, customers, OUTPUT_DIR, issueDate, year, month, printMethods || {}, splitDelivery || {});
     res.json({ ok: true, files });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -136,23 +156,28 @@ app.get('/api/customers', (req, res) => {
 
 // ── 고객 저장 ────────────────────────────────────────────────
 app.post('/api/customers', (req, res) => {
-  const { name, bizNo, contactName, email, phone, address, bizType, bizItem, printMethod, hometaxMethod, taxIssuance } = req.body;
+  const { name, bizNo, contactName, email, phone, address, bizType, bizItem, printMethod, hometaxMethod, taxIssuance, splitDelivery } = req.body;
   if (!name) return res.status(400).json({ ok: false, error: '업체명은 필수입니다.' });
   const customers = readJSON(CUSTOMERS_FILE, []);
-  const customer  = {
-    name,
-    bizNo:         bizNo        || '',
-    contactName:   contactName  || '',
-    email:         email        || '',
-    phone:         phone        || '',
-    address:       address      || '',
-    bizType:       bizType      || '',
-    bizItem:       bizItem      || '',
-    printMethod:   printMethod  || '',
-    hometaxMethod: hometaxMethod || '통합',
-    taxIssuance:   taxIssuance  || '합산',
-  };
   const idx = customers.findIndex(c => c.name === name);
+  // 기존 데이터와 병합 — 빈 값으로 기존 데이터를 덮어쓰지 않음
+  const existing = idx >= 0 ? customers[idx] : {};
+  const customer = {
+    name,
+    bizNo:        bizNo        || existing.bizNo        || '',
+    contactName:  contactName  || existing.contactName  || '',
+    email:        email        || existing.email        || '',
+    phone:        phone        || existing.phone        || '',
+    address:      address      || existing.address      || '',
+    bizType:      bizType      || existing.bizType      || '',
+    bizItem:      bizItem      || existing.bizItem      || '',
+    printMethod:  printMethod  !== undefined ? printMethod  : (existing.printMethod  || ''),
+    hometaxMethod:hometaxMethod !== undefined ? hometaxMethod : (existing.hometaxMethod || '통합'),
+    taxIssuance:  taxIssuance  !== undefined ? taxIssuance  : (existing.taxIssuance  || '합산'),
+    splitDelivery: splitDelivery !== undefined
+      ? (splitDelivery === true || splitDelivery === 'true')
+      : (existing.splitDelivery || false),
+  };
   if (idx >= 0) customers[idx] = customer;
   else customers.push(customer);
   writeJSON(CUSTOMERS_FILE, customers);
@@ -273,7 +298,7 @@ app.post('/api/generate-tax-excel', (req, res) => {
     const { issueDate, year, month, taxMethods } = req.body;
     if (!issueDate) return res.status(400).json({ ok: false, error: '발행일자를 입력하세요.' });
 
-    const vendors   = readJSON(vendorFile(year, month), []);
+    const vendors   = getVendors(year, month);
     const customers = readJSON(CUSTOMERS_FILE, []);
 
     if (!vendors.length) return res.status(400).json({ ok: false, error: 'Excel 파일을 먼저 업로드하세요.' });
@@ -290,7 +315,7 @@ app.post('/api/generate-tax-excel', (req, res) => {
 app.post('/api/hometax', async (req, res) => {
   try {
     const { vendorName, issueDate, year, month } = req.body;
-    const vendors   = readJSON(vendorFile(year, month), []);
+    const vendors   = getVendors(year, month);
     const customers = readJSON(CUSTOMERS_FILE, []);
     const vendor    = vendors.find(v => v.name === vendorName);
     const customer  = customers.find(c => c.name === vendorName) || {};

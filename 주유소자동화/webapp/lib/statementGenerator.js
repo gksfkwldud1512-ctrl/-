@@ -108,7 +108,7 @@ function organizeTransactions(txs, printMethod) {
 }
 
 // ─── 거래명세서 생성 ─────────────────────────────────────────────
-async function createStatement(cust, customer, outputDir, issueDate, year, month, printMethod) {
+async function createStatement(cust, customer, outputDir, issueDate, year, month, printMethod, fileSuffix = '') {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('거래명세서', {
     pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
@@ -179,7 +179,7 @@ async function createStatement(cust, customer, outputDir, issueDate, year, month
     font: fntH(9), h: 'left', wrap: true, bord: { left: T, right: T, top: T, bottom: T },
   });
   cell(ws, 'O4', '성명', { font: fntH(9), bord: AB });
-  cell(ws, 'P4', customer?.manager || '', {
+  cell(ws, 'P4', customer?.contactName || '', {
     font: fntH(9), wrap: true, bord: AB,
   });
 
@@ -305,18 +305,30 @@ async function createStatement(cust, customer, outputDir, issueDate, year, month
   const safeName = cust.name.replace(/[\\/:*?"<>|]/g, '_');
   const yr = String(year || 2026);
   const mo = String(month || 5).padStart(2, '0');
-  const filename = `${yr}년${mo}월_거래명세서_${safeName}.xlsx`;
+  const suffix = fileSuffix ? `_${fileSuffix}` : '';
+  const filename = `${yr}년${mo}월_거래명세서_${safeName}${suffix}.xlsx`;
   await wb.xlsx.writeFile(path.join(outputDir, filename));
   return filename;
 }
 
-async function generateStatements(vendors, customers, outputDir, issueDate, year, month, printMethods = {}) {
+async function generateStatements(vendors, customers, outputDir, issueDate, year, month, printMethods = {}, splitDeliveryMap = {}) {
   const files = [];
   for (const v of vendors) {
-    const customer    = customers.find(c => c.name === v.name) || null;
-    const printMethod = printMethods[v.name] || customer?.printMethod || '';
-    const filename    = await createStatement(v, customer, outputDir, issueDate, year, month, printMethod);
-    files.push(filename);
+    const customer      = customers.find(c => c.name === v.name) || null;
+    const printMethod   = printMethods[v.name] || customer?.printMethod || '';
+    const splitDelivery = splitDeliveryMap[v.name] ?? customer?.splitDelivery ?? false;
+
+    if (splitDelivery && v.txs.some(t => t.isDelivery) && v.txs.some(t => !t.isDelivery)) {
+      // 배달 분리 발행: 스탠드 내역, 배달 내역 각각 1부
+      const standVendor   = { ...v, txs: v.txs.filter(t => !t.isDelivery) };
+      const delivVendor   = { ...v, txs: v.txs.filter(t =>  t.isDelivery) };
+      const standFile = await createStatement(standVendor, customer, outputDir, issueDate, year, month, printMethod || '판매일자순', '스탠드');
+      const delivFile = await createStatement(delivVendor, customer, outputDir, issueDate, year, month, printMethod || '판매일자순', '배달');
+      files.push(standFile, delivFile);
+    } else {
+      const filename = await createStatement(v, customer, outputDir, issueDate, year, month, printMethod);
+      files.push(filename);
+    }
   }
   return files;
 }

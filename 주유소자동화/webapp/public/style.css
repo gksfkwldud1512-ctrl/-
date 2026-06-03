@@ -648,6 +648,10 @@ th.sortable.sort-active .sort-icon { color: var(--primary); }
   background: #7c3aed;
 }
 .btn-purple:hover { background: #6d28d9; }
+.btn-orange {
+  background: #ea580c;
+}
+.btn-orange:hover { background: #c2410c; }
 
 .pp-add-row {
   display: flex;
