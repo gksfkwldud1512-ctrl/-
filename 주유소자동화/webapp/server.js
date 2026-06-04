@@ -34,6 +34,7 @@ const SETTINGS_FILE        = path.join(DATA_DIR, 'settings.json');
 const PURCHASE_PRICES_FILE = path.join(DATA_DIR, 'purchase_prices.json');
 const PURCHASE_LOTS_FILE    = path.join(DATA_DIR, 'purchase_lots.json');
 const FIFO_DAILY_FILE       = path.join(DATA_DIR, 'fifo_daily_prices.json');
+const EXPENSES_FILE         = path.join(DATA_DIR, 'expenses.json');
 const DAILY_DIR            = path.join(DATA_DIR, 'daily');
 const BANK_DEPOSITS_FILE   = path.join(DATA_DIR, 'bank_deposits.json');
 
@@ -647,6 +648,115 @@ app.post('/api/upload-management', upload.single('file'), (req, res) => {
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
+});
+
+// ── 지출관리 ─────────────────────────────────────────────────
+app.get('/api/expenses', (req, res) => {
+  const list = readJSON(EXPENSES_FILE, []);
+  const month = req.query.month;
+  res.json({ ok: true, expenses: month ? list.filter(e => e.month === month) : list });
+});
+
+app.post('/api/upload-expenses', upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) return res.json({ ok: false, error: '파일이 없습니다.' });
+    const { parseExpenses } = require('./lib/expenseParser');
+    const list = parseExpenses(req.file.path);
+    writeJSON(EXPENSES_FILE, list);
+    res.json({ ok: true, count: list.length });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// 수동 지출 추가/삭제
+app.post('/api/expenses', (req, res) => {
+  const { month, category, subCategory, vendor, amount } = req.body;
+  if (!month || !amount) return res.json({ ok: false, error: '월과 금액을 입력하세요.' });
+  const list = readJSON(EXPENSES_FILE, []);
+  list.push({ month, category: category||'변동비', subCategory: subCategory||'기타', vendor: vendor||'', amount: +amount });
+  writeJSON(EXPENSES_FILE, list);
+  res.json({ ok: true, expenses: list.filter(e => e.month === month) });
+});
+
+app.delete('/api/expenses/:idx', (req, res) => {
+  const list = readJSON(EXPENSES_FILE, []);
+  list.splice(+req.params.idx, 1);
+  writeJSON(EXPENSES_FILE, list);
+  res.json({ ok: true });
+});
+
+// ── 종합 보고 (월별 요약) ────────────────────────────────────
+app.get('/api/summary/:yearMonth', (req, res) => {
+  const ym = req.params.yearMonth;  // "2026-05"
+
+  // 일별 판매 데이터 합산
+  const dailyFiles = fs.existsSync(DAILY_DIR)
+    ? fs.readdirSync(DAILY_DIR).filter(f => f.startsWith(ym) && f.endsWith('.json'))
+    : [];
+
+  let totalSales = { 휘발유: 0, 경유: 0, 등유: 0, carwash: 0, others: 0 };
+  let totalQty   = { 휘발유: 0, 경유: 0, 등유: 0 };
+  let totalCardFee = 0;
+  const prices = readJSON(PURCHASE_PRICES_FILE, []);
+  const fifoDaily = readJSON(FIFO_DAILY_FILE, []);
+
+  function getFifoPrice(date, fuel) {
+    const exact = fifoDaily.find(e => e.date === date);
+    if (exact?.[fuel]?.price) return exact[fuel].price;
+    const before = [...fifoDaily].filter(e => e.date <= date && e[fuel]?.price).pop();
+    if (before?.[fuel]?.price) return before[fuel].price;
+    const list = prices.filter(p => p.fuel === fuel && p.date <= date);
+    return list.length ? list[list.length-1].price : 0;
+  }
+
+  let totalProfit = 0;
+  let hasPrices = (prices.length + fifoDaily.length) > 0;
+
+  for (const f of dailyFiles) {
+    const d = readJSON(path.join(DAILY_DIR, f), {});
+    if (!d.bos?.date) continue;
+    const date = d.bos.date;
+    for (const fuel of ['휘발유','경유','등유']) {
+      const fuelData = d.bos.fuels?.[fuel];
+      if (!fuelData) continue;
+      totalSales[fuel] += fuelData.amount || 0;
+      totalQty[fuel]   += fuelData.qty    || 0;
+      const buyPrice = getFifoPrice(date, fuel);
+      if (buyPrice) totalProfit += (fuelData.amount || 0) - (fuelData.qty || 0) * buyPrice;
+    }
+    totalSales.carwash += d.bos.carwash?.amount || 0;
+    totalSales.others  += d.bos.others?.amount  || 0;
+    const otC = d.otherCost || 0;
+    totalProfit += (d.bos.carwash?.amount || 0);
+    totalProfit += (d.bos.others?.amount  || 0) - otC;
+    totalCardFee += d.card?.totalFee || 0;
+    totalProfit -= d.card?.totalFee || 0;
+  }
+
+  // 지출 합산
+  const expenses = readJSON(EXPENSES_FILE, []).filter(e => e.month === ym);
+  const totalExpense = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+  const expByCategory = {};
+  for (const e of expenses) {
+    if (!expByCategory[e.category]) expByCategory[e.category] = 0;
+    expByCategory[e.category] += e.amount;
+  }
+
+  const totalRevenue = Object.values(totalSales).reduce((s,v)=>s+v, 0);
+
+  res.json({
+    ok: true,
+    yearMonth: ym,
+    sales: totalSales,
+    qty: totalQty,
+    revenue: totalRevenue,
+    profit: hasPrices ? Math.round(totalProfit) : null,
+    cardFee: totalCardFee,
+    expense: totalExpense,
+    expByCategory,
+    netProfit: hasPrices ? Math.round(totalProfit - totalExpense) : null,
+  });
 });
 
 // ── 카드 차이 조정 (사유 등록) ───────────────────────────────

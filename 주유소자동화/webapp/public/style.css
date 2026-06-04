@@ -879,3 +879,15 @@ th.sortable.sort-active .sort-icon { color: var(--primary); }
 #daily-table { min-width: 100%; font-size: 11px; }
 #daily-table th, #daily-table td { padding: 5px 6px; }
 .daily-table-wrap { overflow-x: auto; }
+
+/* 종합 탭 KPI 카드 */
+.summary-kpi-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  border-top: 4px solid #94a3b8;
+  padding: 14px 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+}
+.kpi-label { font-size: 12px; color: #64748b; font-weight: 600; margin-bottom: 4px; }
+.kpi-value { font-size: 18px; font-weight: 700; color: #1e293b; }

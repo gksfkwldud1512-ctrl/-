@@ -41,6 +41,7 @@ window.addEventListener('DOMContentLoaded', () => {
   });
   initYearMonth();
   initDailyYearMonth();
+  initSummaryYearMonth();
   initTabs();
   initFileUpload();
   initDailyUpload();
@@ -117,7 +118,13 @@ function switchGroup(group) {
   const subnavDaily   = document.getElementById('subnav-daily');
   const subnavMonthly = document.getElementById('subnav-monthly');
 
-  if (group === 'monthly') {
+  if (group === 'summary') {
+    subnav.classList.add('hidden');
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.group-content').forEach(s => s.classList.remove('active'));
+    document.getElementById('group-summary').classList.add('active');
+    loadSummary();
+  } else if (group === 'monthly') {
     subnav.classList.remove('hidden');
     if (subnavDaily)   subnavDaily.style.display   = 'none';
     if (subnavMonthly) subnavMonthly.style.display  = '';
@@ -1967,5 +1974,166 @@ async function api(method, url, body) {
     return await res.json();
   } catch {
     return { ok: false, error: '서버 연결 오류' };
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// 종합 탭 — 월별 판매/매입/지출/순이익 대시보드
+// ════════════════════════════════════════════════════════════
+
+const summaryState = {
+  year:  new Date().getFullYear(),
+  month: new Date().getMonth() + 1,
+};
+
+function initSummaryYearMonth() {
+  const selYear  = document.getElementById('summary-year');
+  const selMonth = document.getElementById('summary-month');
+  if (!selYear || !selMonth) return;
+  const now = new Date();
+  for (let y = now.getFullYear() - 1; y <= now.getFullYear() + 1; y++) {
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y;
+    if (y === now.getFullYear()) opt.selected = true;
+    selYear.appendChild(opt);
+  }
+  for (let m = 1; m <= 12; m++) {
+    const opt = document.createElement('option');
+    opt.value = m; opt.textContent = m + '월';
+    if (m === now.getMonth() + 1) opt.selected = true;
+    selMonth.appendChild(opt);
+  }
+  summaryState.year  = now.getFullYear();
+  summaryState.month = now.getMonth() + 1;
+  selYear.addEventListener('change',  () => { summaryState.year  = +selYear.value;  loadSummary(); });
+  selMonth.addEventListener('change', () => { summaryState.month = +selMonth.value; loadSummary(); });
+  // expense 파일 업로드
+  document.getElementById('expense-file-input')?.addEventListener('change', e => {
+    if (e.target.files[0]) uploadExpenses(e.target.files[0]);
+    e.target.value = '';
+  });
+}
+
+async function loadSummary() {
+  const ym = `${summaryState.year}-${String(summaryState.month).padStart(2,'0')}`;
+  const res = await api('GET', `/api/summary/${ym}`);
+  if (res.ok) renderSummary(res);
+}
+
+function renderSummary(data) {
+  const won  = v => v != null ? Math.round(v).toLocaleString() + '원' : '-';
+  const pct  = (a, b) => (a != null && b > 0) ? ((a/b)*100).toFixed(1)+'%' : '-';
+
+  // KPI 카드
+  document.getElementById('kpi-revenue-val').textContent = won(data.revenue);
+  const cost = data.profit != null ? data.revenue - data.profit : null;
+  document.getElementById('kpi-cost-val').textContent    = won(cost);
+  document.getElementById('kpi-profit-val').textContent  = won(data.profit);
+  document.getElementById('kpi-expense-val').textContent = won(data.expense);
+  document.getElementById('kpi-net-val').textContent     = won(data.netProfit);
+  document.getElementById('kpi-margin-val').textContent  = pct(data.netProfit, data.revenue);
+
+  // 색상
+  const profitEl = document.getElementById('kpi-profit');
+  const netEl    = document.getElementById('kpi-net');
+  if (profitEl) profitEl.style.borderTopColor = data.profit >= 0 ? '#22c55e' : '#ef4444';
+  if (netEl)    netEl.style.borderTopColor    = (data.netProfit ?? 0) >= 0 ? '#22c55e' : '#ef4444';
+
+  // 유종별 판매 테이블
+  const salesBody = document.getElementById('summary-sales-body');
+  if (salesBody) {
+    const FUELS = ['경유','휘발유','등유'];
+    const rows = FUELS.map(fuel => {
+      const amt = data.sales?.[fuel] || 0;
+      const qty = data.qty?.[fuel]   || 0;
+      const drums = Math.floor(qty / 200);
+      const avgPrice = qty > 0 ? Math.round(amt / qty) : 0;
+      return `<tr>
+        <td><strong>${fuel}</strong></td>
+        <td style="text-align:right;">${Math.floor(qty).toLocaleString()}L (${drums}드럼)</td>
+        <td style="text-align:right;">${avgPrice > 0 ? avgPrice.toLocaleString()+'원' : '-'}</td>
+        <td style="text-align:right;">${amt > 0 ? amt.toLocaleString()+'원' : '-'}</td>
+      </tr>`;
+    });
+    rows.push(`<tr style="background:#f8fafc;font-weight:700;">
+      <td>세차+유외</td>
+      <td>-</td><td>-</td>
+      <td style="text-align:right;">${((data.sales?.carwash||0)+(data.sales?.others||0)).toLocaleString()}원</td>
+    </tr>`);
+    rows.push(`<tr style="background:#f1f5f9;font-weight:700;border-top:2px solid #e2e8f0;">
+      <td>합계</td>
+      <td>-</td><td>-</td>
+      <td style="text-align:right;">${(data.revenue||0).toLocaleString()}원</td>
+    </tr>`);
+    salesBody.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+        <th style="padding:7px 10px;text-align:left;">유종</th>
+        <th style="padding:7px 10px;text-align:right;">판매량</th>
+        <th style="padding:7px 10px;text-align:right;">평균단가</th>
+        <th style="padding:7px 10px;text-align:right;">매출액</th>
+      </tr></thead>
+      <tbody>${rows.join('')}</tbody>
+    </table>`;
+  }
+
+  // 지출 현황 테이블
+  renderExpenseTable(data);
+}
+
+function renderExpenseTable(data) {
+  const body = document.getElementById('summary-expense-body');
+  if (!body) return;
+  const expByCat = data?.expByCategory || {};
+  const total    = data?.expense || 0;
+  if (total === 0) {
+    body.innerHTML = '<div style="padding:16px;text-align:center;color:#94a3b8;">지출내역을 업로드하거나 직접 입력하세요.</div>';
+    return;
+  }
+  const rows = Object.entries(expByCat).map(([cat, amt]) =>
+    `<tr><td><strong>${esc(cat)}</strong></td><td style="text-align:right;">${amt.toLocaleString()}원</td></tr>`
+  );
+  rows.push(`<tr style="background:#f1f5f9;font-weight:700;border-top:2px solid #e2e8f0;">
+    <td>합계</td><td style="text-align:right;">${total.toLocaleString()}원</td>
+  </tr>`);
+  body.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+      <th style="padding:7px 10px;text-align:left;">분류</th>
+      <th style="padding:7px 10px;text-align:right;">합계</th>
+    </tr></thead>
+    <tbody>${rows.join('')}</tbody>
+  </table>`;
+}
+
+async function uploadExpenses(file) {
+  const label = document.getElementById('expense-file-label');
+  if (label) label.textContent = '업로드 중...';
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const res  = await fetch('/api/upload-expenses', { method: 'POST', body: form });
+    const data = await res.json();
+    if (data.ok) {
+      if (label) label.textContent = `✅ ${data.count}건 지출내역 로드 완료`;
+      toast(`✅ 지출내역 ${data.count}건 임포트 완료`, 'success');
+      loadSummary();
+    } else {
+      if (label) label.textContent = '업로드 실패';
+      toast(`오류: ${data.error}`, 'error');
+    }
+  } catch { toast('서버 연결 오류', 'error'); }
+}
+
+async function addExpense() {
+  const ym  = `${summaryState.year}-${String(summaryState.month).padStart(2,'0')}`;
+  const cat = document.getElementById('exp-cat')?.value;
+  const sub = document.getElementById('exp-sub')?.value;
+  const vnd = document.getElementById('exp-vendor')?.value;
+  const amt = Number(document.getElementById('exp-amount')?.value);
+  if (!amt) return toast('금액을 입력하세요.', 'warn');
+  const res = await api('POST', '/api/expenses', { month: ym, category: cat, subCategory: sub, vendor: vnd, amount: amt });
+  if (res.ok) {
+    toast('✅ 지출 추가 완료', 'success');
+    document.getElementById('exp-amount').value = '';
+    loadSummary();
   }
 }

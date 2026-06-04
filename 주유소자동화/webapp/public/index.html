@@ -13,6 +13,7 @@
     <div class="logo">⛽ 미소주유소 자동화 <span id="app-version" class="version-badge"></span></div>
     <nav class="nav-main">
       <button class="main-tab" data-group="usage">사용방법</button>
+      <button class="main-tab" data-group="summary">종합</button>
       <button class="main-tab" data-group="daily">일마감</button>
       <button class="main-tab active" data-group="monthly">월마감</button>
     </nav>
@@ -46,6 +47,110 @@
       <p>이 앱의 사용 방법 안내가 이곳에 표시됩니다.</p>
       <p class="placeholder-sub">준비 중입니다.</p>
     </div>
+  </section>
+
+  <!-- ───── 대분류: 종합 ───── -->
+  <section id="group-summary" class="group-content">
+
+    <!-- 툴바: 조회 년월 -->
+    <div class="toolbar">
+      <div class="toolbar-group">
+        <label class="label-sm">조회 년월</label>
+        <select id="summary-year"></select>
+        <span>년</span>
+        <select id="summary-month"></select>
+        <span>월</span>
+      </div>
+      <div class="toolbar-group" style="margin-left:auto;gap:8px;">
+        <input type="file" id="expense-file-input" accept=".xlsx,.xls" hidden>
+        <button class="btn-upload btn-orange" onclick="document.getElementById('expense-file-input').click()">
+          💰 지출내역 업로드
+        </button>
+        <span id="expense-file-label" class="file-label" style="font-size:12px;color:#64748b;"></span>
+      </div>
+    </div>
+
+    <!-- 월별 종합 요약 카드 -->
+    <div id="summary-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;">
+      <div class="summary-kpi-card" id="kpi-revenue">
+        <div class="kpi-label">총 매출</div>
+        <div class="kpi-value" id="kpi-revenue-val">-</div>
+      </div>
+      <div class="summary-kpi-card" id="kpi-cost">
+        <div class="kpi-label">매입원가</div>
+        <div class="kpi-value" id="kpi-cost-val">-</div>
+      </div>
+      <div class="summary-kpi-card" id="kpi-profit">
+        <div class="kpi-label">영업이익</div>
+        <div class="kpi-value" id="kpi-profit-val">-</div>
+      </div>
+      <div class="summary-kpi-card" id="kpi-expense">
+        <div class="kpi-label">지출</div>
+        <div class="kpi-value" id="kpi-expense-val">-</div>
+      </div>
+      <div class="summary-kpi-card" id="kpi-net">
+        <div class="kpi-label">순이익</div>
+        <div class="kpi-value" id="kpi-net-val">-</div>
+      </div>
+      <div class="summary-kpi-card">
+        <div class="kpi-label">순이익률</div>
+        <div class="kpi-value" id="kpi-margin-val">-</div>
+      </div>
+    </div>
+
+    <!-- 판매/지출 상세 -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;flex-wrap:wrap;">
+
+      <!-- 유종별 판매 현황 -->
+      <div class="card" style="min-width:280px;">
+        <div class="card-header"><h2>유종별 판매 현황</h2></div>
+        <div id="summary-sales-body">
+          <div style="padding:16px;text-align:center;color:#94a3b8;">일마감 BOS 데이터 업로드 후 표시됩니다.</div>
+        </div>
+      </div>
+
+      <!-- 지출 현황 -->
+      <div class="card" style="min-width:280px;">
+        <div class="card-header">
+          <h2>지출 현황</h2>
+          <span style="font-size:12px;color:#64748b;">지출내역 Excel 업로드 또는 직접 입력</span>
+        </div>
+        <div id="summary-expense-body">
+          <div style="padding:16px;text-align:center;color:#94a3b8;">지출내역을 업로드하세요.</div>
+        </div>
+
+        <!-- 직접 입력 -->
+        <details style="padding:0 16px 12px;">
+          <summary style="cursor:pointer;font-size:12px;color:#64748b;">+ 직접 추가</summary>
+          <div class="pp-add-row" style="margin-top:8px;">
+            <div class="form-group" style="flex:0 0 110px;">
+              <label style="font-size:11px;">대분류</label>
+              <select id="exp-cat" class="form-select" style="font-size:12px;">
+                <option value="고정비">고정비</option>
+                <option value="변동비">변동비</option>
+              </select>
+            </div>
+            <div class="form-group" style="flex:0 0 110px;">
+              <label style="font-size:11px;">소분류</label>
+              <input type="text" id="exp-sub" placeholder="급여,임대료..." style="font-size:12px;">
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label style="font-size:11px;">거래처</label>
+              <input type="text" id="exp-vendor" style="font-size:12px;">
+            </div>
+            <div class="form-group" style="flex:0 0 110px;">
+              <label style="font-size:11px;">금액</label>
+              <input type="number" id="exp-amount" style="font-size:12px;">
+            </div>
+            <div class="form-group-btn" style="padding-top:18px;">
+              <button class="btn-primary" style="font-size:12px;" onclick="addExpense()">추가</button>
+            </div>
+          </div>
+        </details>
+      </div>
+
+    </div>
+
   </section>
 
   <!-- ───── 대분류: 일마감 ───── -->
