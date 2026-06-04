@@ -1200,6 +1200,7 @@ async function loadDailyPurchasePrices() {
 }
 
 function renderPurchasePriceTable() {
+  updatePpBadge();
   const tbody = document.getElementById('pp-tbody');
   if (!tbody) return;
   const list = dailyState.purchasePrices;
@@ -1225,7 +1226,19 @@ function switchPpTab(tab) {
   document.getElementById('tab-prices-btn').classList.toggle('pp-tab-active', tab === 'prices');
 }
 
+function updatePpBadge() {
+  const badge = document.getElementById('pp-summary-badge');
+  if (!badge) return;
+  const priceCount = dailyState.purchasePrices.length;
+  const lotCount   = dailyState.lots.length;
+  badge.textContent = priceCount
+    ? `단가 ${priceCount}건 등록${lotCount ? ' · 입고이력 '+lotCount+'건' : ''}`
+    : '단가 미등록';
+  badge.style.color = priceCount ? '#22c55e' : '#f59e0b';
+}
+
 function renderLotTable() {
+  updatePpBadge();
   const tbody = document.getElementById('lot-tbody');
   if (!tbody) return;
   const list = dailyState.lots;
@@ -1296,7 +1309,6 @@ async function uploadManagement(file) {
       renderDailyTable();
       label.textContent = `✅ 입고 ${data.lotCount}건 / 단가변경 ${data.priceCount}건 임포트 완료`;
       toast(`✅ 마감자료 임포트: 입고이력 ${data.lotCount}건, 적용단가 ${data.priceCount}건 반영`, 'success');
-      switchPpTab('lots');
     } else {
       label.textContent = '업로드 실패';
       toast(`오류: ${data.error}`, 'error');

@@ -558,15 +558,10 @@ app.post('/api/daily/upload-card', upload.single('file'), (req, res) => {
 app.get('/api/daily/purchase-prices', (req, res) => {
   res.json({ ok: true, prices: readJSON(PURCHASE_PRICES_FILE, []) });
 });
-// 매입단가 추가 { date, fuel, price } — 입고 이력이 없을 때만 직접 입력
+// 매입단가 추가 { date, fuel, price }
 app.post('/api/daily/purchase-prices', (req, res) => {
   const { date, fuel, price } = req.body;
   if (!date || !fuel || !price) return res.json({ ok: false, error: '날짜/유종/단가를 모두 입력하세요.' });
-  const lots = readJSON(PURCHASE_LOTS_FILE, []);
-  if (lots.length) {
-    // 입고 이력이 있으면 FIFO 계산 우선 (직접 입력 무시)
-    return res.json({ ok: false, error: '입고 이력 기반 FIFO 단가가 적용 중입니다. 입고 이력 탭에서 수정하세요.' });
-  }
   const list = readJSON(PURCHASE_PRICES_FILE, []);
   const idx = list.findIndex(e => e.date === date && e.fuel === fuel);
   if (idx >= 0) list[idx].price = +price;

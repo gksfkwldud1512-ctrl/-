@@ -820,3 +820,9 @@ th.sortable.sort-active .sort-icon { color: var(--primary); }
 }
 .pp-tab-btn:hover { color: #2563eb; }
 .pp-tab-active { color: #2563eb !important; border-bottom-color: #2563eb !important; }
+
+/* 접기/펼치기 카드 */
+.card-collapsible > summary { user-select: none; }
+.card-collapsible > summary::-webkit-details-marker { display: none; }
+.card-collapsible .collapse-arrow { font-size:11px; color:#94a3b8; transition:transform .2s; display:inline-block; }
+.card-collapsible[open] .collapse-arrow { transform: rotate(90deg); }
