@@ -1122,10 +1122,6 @@ function initDailyUpload() {
   document.getElementById('bank-file-input')?.addEventListener('change', e => {
     if (e.target.files[0]) uploadBank(e.target.files[0]);
   });
-  document.getElementById('mgmt-file-input')?.addEventListener('change', e => {
-    if (e.target.files[0]) uploadManagement(e.target.files[0]);
-    e.target.value = '';
-  });
   // 입금 검증 탭의 이지샵 업로드 (동일 API, 레이블만 별도)
   document.getElementById('deposit-card-file-input')?.addEventListener('change', e => {
     if (e.target.files[0]) uploadCard(e.target.files[0], 'deposit-card-label');
@@ -1471,37 +1467,10 @@ async function deleteLot(date, fuel, price) {
   }
 }
 
-async function uploadManagement(file) {
-  const label = document.getElementById('mgmt-file-label');
-  label.textContent = `업로드 중: ${file.name}`;
-  const form = new FormData();
-  form.append('file', file);
-  try {
-    const res  = await fetch('/api/upload-management', { method: 'POST', body: form });
-    const data = await res.json();
-    if (data.ok) {
-      dailyState.purchasePrices  = data.prices;
-      dailyState.lots            = data.lots || [];
-      if (data.fifoDaily?.length) dailyState.fifoDailyPrices = data.fifoDaily;
-      renderPurchasePriceTable();
-      renderLotTable();
-      renderDailyTable();
-      label.textContent = `✅ 입고 ${data.lotCount}건 / 단가변경 ${data.priceCount}건 / FIFO ${data.fifoDaily?.length || 0}일치 임포트 완료`;
-      toast(`✅ 마감자료 임포트: 입고이력 ${data.lotCount}건, 적용단가 ${data.priceCount}건, FIFO일별단가 ${data.fifoDaily?.length || 0}일치 반영`, 'success');
-    } else {
-      label.textContent = '업로드 실패';
-      toast(`오류: ${data.error}`, 'error');
-    }
-  } catch {
-    label.textContent = '업로드 실패';
-    toast('서버 연결 오류', 'error');
-  }
-}
-
 // 날짜 기준으로 해당 유종의 적용 단가 찾기
-// 우선순위: ① 판매관리 시트 일별 FIFO 단가 → ② 직접 입력 단가 이력
+// 우선순위: ① 입고이력(FIFO) 기반 재계산 단가 → ② 직접 입력 단가 이력
 function getPriceForDate(date, fuel) {
-  // ① 판매관리 시트 기반 일별 FIFO 단가 (가장 정확)
+  // ① 입고이력 + BOS판매량 기반 FIFO 재계산 단가 (가장 정확)
   if (dailyState.fifoDailyPrices.length) {
     const exact = dailyState.fifoDailyPrices.find(e => e.date === date);
     if (exact?.[fuel]?.price) return exact[fuel].price;

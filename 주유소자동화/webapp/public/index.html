@@ -188,13 +188,6 @@
           <h2 style="margin:0;">매입단가 · 입고 이력</h2>
           <span id="pp-summary-badge" style="font-size:12px;color:#64748b;"></span>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;" onclick="event.stopPropagation()">
-          <input type="file" id="mgmt-file-input" accept=".xlsx,.xls" hidden>
-          <button class="btn-upload btn-green" onclick="document.getElementById('mgmt-file-input').click()">
-            📥 마감자료 Excel 업로드
-          </button>
-          <span id="mgmt-file-label" class="file-label" style="font-size:12px;color:#64748b;"></span>
-        </div>
       </summary>
 
       <!-- 탭 전환 -->
@@ -281,7 +274,7 @@
           </tbody>
         </table>
         <p style="font-size:12px;color:#94a3b8;padding:8px 0 0;">
-          마감자료 Excel 업로드 시 자동 등록됩니다. BOS 일별 판매량으로 FIFO 매입단가를 계산합니다.
+          입고일/유종/수량/매입단가를 직접 입력하면 BOS 판매량 기준 선입선출(FIFO) 매입단가가 자동 계산됩니다.
         </p>
       </div>
     </details>
