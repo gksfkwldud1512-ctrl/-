@@ -22,6 +22,8 @@ function parseExcel(filePath) {
     .filter(r => r[0] != null);
 
   const custMap = {};
+  const fuelSummary = {};  // { 'YYYY/MM/DD': { '휘발유': {qty, amount}, ... } }
+  const FUEL_SET = new Set(['휘발유', '경유', '등유']);
 
   rows.forEach(r => {
     const name = r[4];
@@ -64,6 +66,16 @@ function parseExcel(filePath) {
       custMap[name].txs.push({ date, vehicle, product, qty, unitPrice, amount, taxType: r[17] || '과세', isDelivery });
     } else {
       custMap[name].totalOther += amount;
+    }
+
+    // 월별 유종별 판매 집계 (ALL 거래, 영업이익 계산용)
+    if (date && amount > 0) {
+      const prod = FUEL_SET.has(product) ? product
+                 : product === '세차' ? '세차' : '유외상품';
+      if (!fuelSummary[date]) fuelSummary[date] = {};
+      if (!fuelSummary[date][prod]) fuelSummary[date][prod] = { qty: 0, amount: 0 };
+      fuelSummary[date][prod].qty    += qty    || 0;
+      fuelSummary[date][prod].amount += amount;
     }
   });
 
@@ -116,9 +128,10 @@ function parseExcel(filePath) {
     delete vendor._allTxs;
   }
 
-  return Object.values(custMap).sort((a, b) =>
-    a.name.localeCompare(b.name, 'ko')
-  );
+  return {
+    vendors: Object.values(custMap).sort((a, b) => a.name.localeCompare(b.name, 'ko')),
+    fuelSummary,
+  };
 }
 
 // 배달판매전표리스트 Excel 파싱 (별도 배달 리포트 형식)

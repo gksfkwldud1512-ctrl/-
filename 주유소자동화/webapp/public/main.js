@@ -28,6 +28,7 @@ const state = {
   vendorSplitDelivery: {},   // { 업체명: true|false } — 배달/주유 분리 발행
   hometaxMethods:      {},   // { 업체명: '통합'|'분리' } — 세션 내 (구 자동화용)
   taxIssuanceMethods:  {},   // { 업체명: '합산'|'분리' } — 세션 내 (일괄발행용)
+  monthlyProfit:       null, // /api/monthly-profit 응답
 };
 
 // ── 초기화 ───────────────────────────────────────────────────
@@ -150,13 +151,14 @@ function initFileUpload() {
 }
 
 async function loadAll() {
-  const [vRes, cRes, fRes, mRes, sRes, compRes] = await Promise.all([
+  const [vRes, cRes, fRes, mRes, sRes, compRes, profRes] = await Promise.all([
     api('GET', `/api/vendors?year=${state.year}&month=${state.month}`),
     api('GET', '/api/customers'),
     api('GET', '/api/files'),
     api('GET', `/api/monthly-status?year=${state.year}`),
     api('GET', '/api/settings'),
     api('GET', `/api/completion?year=${state.year}&month=${state.month}`),
+    api('GET', `/api/monthly-profit?year=${state.year}&month=${state.month}`),
   ]);
   if (vRes.ok)    state.vendors       = vRes.vendors;
   if (cRes.ok) {
@@ -168,6 +170,7 @@ async function loadAll() {
   if (fRes.ok)    state.files         = fRes.files;
   if (mRes.ok)    state.monthlyStatus = mRes.months;
   if (compRes.ok) state.completion    = compRes.completion;
+  if (profRes.ok) state.monthlyProfit = profRes;
   if (sRes.ok && sRes.smtpUser) {
     document.getElementById('smtp-user').value = sRes.smtpUser;
     if (sRes.hasPass) document.getElementById('smtp-pass').placeholder = '저장됨 (변경 시 입력)';
@@ -178,22 +181,25 @@ async function loadAll() {
 }
 
 async function loadForMonth() {
-  const [vRes, mRes, fRes, compRes] = await Promise.all([
+  const [vRes, mRes, fRes, compRes, profRes] = await Promise.all([
     api('GET', `/api/vendors?year=${state.year}&month=${state.month}`),
     api('GET', `/api/monthly-status?year=${state.year}`),
     api('GET', '/api/files'),
     api('GET', `/api/completion?year=${state.year}&month=${state.month}`),
+    api('GET', `/api/monthly-profit?year=${state.year}&month=${state.month}`),
   ]);
   if (vRes.ok)    state.vendors       = vRes.vendors;
   if (mRes.ok)    state.monthlyStatus = mRes.months;
   if (fRes.ok)    state.files         = fRes.files;
   if (compRes.ok) state.completion    = compRes.completion;
+  if (profRes.ok) state.monthlyProfit = profRes;
   renderAll();
 }
 
 // ── 렌더링 ──────────────────────────────────────────────────
 function renderAll() {
   renderMonthlyChips();
+  renderMonthlyProfit();
   renderVendors();
   renderCustomers();
   renderEmail();
@@ -292,6 +298,79 @@ function updateSortIcons() {
       icon.textContent = '⇅';
     }
   });
+}
+
+// ── 월 영업이익 분석 ─────────────────────────────────────────
+function renderMonthlyProfit() {
+  const card  = document.getElementById('monthly-profit-card');
+  const body  = document.getElementById('monthly-profit-body');
+  const label = document.getElementById('monthly-profit-month');
+  if (!card || !body) return;
+
+  const p = state.monthlyProfit;
+  if (!p || !p.fuelTotals) { card.style.display = 'none'; return; }
+
+  card.style.display = '';
+  if (label) label.textContent = `${state.year}년 ${state.month}월`;
+
+  const FUEL_ORDER = ['휘발유', '경유', '등유', '세차', '유외상품'];
+  const FUEL_TYPES = new Set(['휘발유', '경유', '등유']);
+  const won  = v => v != null ? v.toLocaleString() + '원' : '-';
+  const litL = v => v > 0    ? Math.floor(v).toLocaleString() + 'L' : '-';
+  const pct  = (profit, amount) => (profit != null && amount > 0)
+    ? ((profit / amount) * 100).toFixed(1) + '%' : '-';
+
+  const keys = FUEL_ORDER.filter(k => p.fuelTotals[k]);
+  // FUEL_ORDER에 없는 유종도 추가
+  Object.keys(p.fuelTotals).forEach(k => { if (!keys.includes(k)) keys.push(k); });
+
+  let totalAmt = 0, totalCost = 0, totalProfit = 0, allHasPrice = true;
+
+  const rowsHtml = keys.map(prod => {
+    const t = p.fuelTotals[prod];
+    if (!t) return '';
+    totalAmt    += t.amount;
+    totalCost   += t.cost || 0;
+    if (t.profit != null) totalProfit += t.profit;
+    if (FUEL_TYPES.has(prod) && !t.hasPrice) allHasPrice = false;
+
+    const profitCls = t.profit == null ? '' : t.profit >= 0 ? 'profit-pos' : 'profit-neg';
+    return `<tr>
+      <td><strong>${prod}</strong></td>
+      <td style="text-align:right;">${FUEL_TYPES.has(prod) ? litL(t.qty) : '-'}</td>
+      <td style="text-align:right;">${won(t.amount)}</td>
+      <td style="text-align:right;">${FUEL_TYPES.has(prod) && t.hasPrice ? won(Math.round(t.cost)) : (FUEL_TYPES.has(prod) ? '<span style="color:#f59e0b">단가 미등록</span>' : '-')}</td>
+      <td style="text-align:right;" class="${profitCls}">${won(t.profit)}</td>
+      <td style="text-align:right;">${pct(t.profit, t.amount)}</td>
+    </tr>`;
+  }).join('');
+
+  body.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+          <th style="padding:8px 12px;text-align:left;">유종</th>
+          <th style="padding:8px 12px;text-align:right;">판매량</th>
+          <th style="padding:8px 12px;text-align:right;">판매금액</th>
+          <th style="padding:8px 12px;text-align:right;">매입원가</th>
+          <th style="padding:8px 12px;text-align:right;">매출이익</th>
+          <th style="padding:8px 12px;text-align:right;">수익률</th>
+        </tr>
+      </thead>
+      <tbody style="border-bottom:2px solid #e2e8f0;">${rowsHtml}</tbody>
+      <tfoot>
+        <tr style="background:#f1f5f9;font-weight:bold;">
+          <td style="padding:8px 12px;">합계</td>
+          <td></td>
+          <td style="padding:8px 12px;text-align:right;">${won(totalAmt)}</td>
+          <td style="padding:8px 12px;text-align:right;">${allHasPrice ? won(Math.round(totalCost)) : '-'}</td>
+          <td style="padding:8px 12px;text-align:right;" class="${totalProfit >= 0 ? 'profit-pos' : 'profit-neg'}">${won(totalProfit)}</td>
+          <td style="padding:8px 12px;text-align:right;">${pct(totalProfit, totalAmt)}</td>
+        </tr>
+      </tfoot>
+    </table>
+    ${!p.hasPrices ? '<p style="font-size:12px;color:#f59e0b;margin:8px 12px 0;">매입단가를 등록하면 연료 매출이익을 계산할 수 있습니다. (일마감 → 매입단가 관리)</p>' : ''}
+  `;
 }
 
 // ── 업체 목록 ────────────────────────────────────────────────
@@ -882,12 +961,14 @@ async function uploadExcel(file) {
         setTimeout(() => toast(`⚠ ${errorCount}개 업체에서 오류 가능성이 발견됐습니다. 업체명 옆 [오류확인] 버튼을 확인하세요.`, 'warn'), 1000);
       }
 
-      const [mRes, fRes] = await Promise.all([
+      const [mRes, fRes, profRes] = await Promise.all([
         api('GET', `/api/monthly-status?year=${state.year}`),
         api('GET', '/api/files'),
+        api('GET', `/api/monthly-profit?year=${state.year}&month=${state.month}`),
       ]);
-      if (mRes.ok) state.monthlyStatus = mRes.months;
-      if (fRes.ok) state.files         = fRes.files;
+      if (mRes.ok)   state.monthlyStatus = mRes.months;
+      if (fRes.ok)   state.files         = fRes.files;
+      if (profRes.ok) state.monthlyProfit = profRes;
       renderAll();
     } else {
       label.textContent = '업로드 실패';

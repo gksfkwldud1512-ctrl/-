@@ -47,6 +47,11 @@ function vendorFile(year, month) {
   return path.join(DATA_DIR, `vendors_${year}_${mo}.json`);
 }
 
+function fuelSummaryFile(year, month) {
+  const mo = String(month).padStart(2, '0');
+  return path.join(DATA_DIR, `monthly_fuel_${year}_${mo}.json`);
+}
+
 function getVendors(year, month) {
   return readJSON(vendorFile(year, month), []);
 }
@@ -67,8 +72,9 @@ app.post('/api/parse-excel', upload.single('file'), (req, res) => {
     const year  = req.body.year  || new Date().getFullYear();
     const month = req.body.month || new Date().getMonth() + 1;
     const { parseExcel } = require('./lib/excelParser');
-    const vendors = parseExcel(req.file.path);
+    const { vendors, fuelSummary } = parseExcel(req.file.path);
     writeJSON(vendorFile(year, month), vendors);
+    writeJSON(fuelSummaryFile(year, month), fuelSummary);
     res.json({ ok: true, vendors });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -91,6 +97,58 @@ app.get('/api/monthly-status', (req, res) => {
     months[mo] = fs.existsSync(vendorFile(year, m));
   }
   res.json({ ok: true, months });
+});
+
+// ── 월별 영업이익 분석 ────────────────────────────────────────────
+app.get('/api/monthly-profit', (req, res) => {
+  const year  = req.query.year  || new Date().getFullYear();
+  const month = req.query.month || new Date().getMonth() + 1;
+
+  const fuelSummary   = readJSON(fuelSummaryFile(year, month), null);
+  const prices        = readJSON(PURCHASE_PRICES_FILE, []);
+
+  if (!fuelSummary) return res.json({ ok: true, fuelTotals: null });
+
+  // 날짜 기준 매입단가 조회 (purchase_prices 오름차순 정렬 가정)
+  function getPriceForDate(date, fuel) {
+    // date 형식: 'YYYY/MM/DD' → 비교를 위해 'YYYY-MM-DD'로 변환
+    const d = date.replace(/\//g, '-');
+    let found = null;
+    for (const p of prices) {
+      if (p.fuel === fuel && p.date <= d) found = p.price;
+    }
+    return found;
+  }
+
+  const FUEL_TYPES = ['휘발유', '경유', '등유'];
+  const totals = {};  // { product: { qty, amount, cost, profit } }
+
+  for (const [date, fuels] of Object.entries(fuelSummary)) {
+    for (const [prod, data] of Object.entries(fuels)) {
+      if (!totals[prod]) totals[prod] = { qty: 0, amount: 0, cost: 0, hasPrice: false };
+      totals[prod].qty    += data.qty;
+      totals[prod].amount += data.amount;
+
+      if (FUEL_TYPES.includes(prod)) {
+        const p = getPriceForDate(date, prod);
+        if (p != null) {
+          totals[prod].cost     += data.qty * p;
+          totals[prod].hasPrice  = true;
+        }
+      }
+    }
+  }
+
+  // 이익 계산
+  for (const [prod, t] of Object.entries(totals)) {
+    if (FUEL_TYPES.includes(prod)) {
+      t.profit = t.hasPrice ? Math.round(t.amount - t.cost) : null;
+    } else {
+      t.profit = t.amount;  // 세차/유외상품은 전액 이익 (원가는 일마감에서 관리)
+    }
+  }
+
+  res.json({ ok: true, fuelTotals: totals, hasPrices: prices.length > 0 });
 });
 
 // ── 배달 Excel 확인 (배달판매전표리스트 형식) ─────────────────────
