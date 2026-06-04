@@ -29,13 +29,70 @@ const upload = multer({
   fileFilter: (req, file, cb) => cb(null, /\.(xlsx|xls)$/i.test(file.originalname)),
 });
 
-const CUSTOMERS_FILE      = path.join(DATA_DIR, 'customers.json');
-const SETTINGS_FILE       = path.join(DATA_DIR, 'settings.json');
+const CUSTOMERS_FILE       = path.join(DATA_DIR, 'customers.json');
+const SETTINGS_FILE        = path.join(DATA_DIR, 'settings.json');
 const PURCHASE_PRICES_FILE = path.join(DATA_DIR, 'purchase_prices.json');
+const PURCHASE_LOTS_FILE   = path.join(DATA_DIR, 'purchase_lots.json');
 const DAILY_DIR            = path.join(DATA_DIR, 'daily');
 const BANK_DEPOSITS_FILE   = path.join(DATA_DIR, 'bank_deposits.json');
 
 if (!fs.existsSync(DAILY_DIR)) fs.mkdirSync(DAILY_DIR, { recursive: true });
+
+// ── FIFO 단가 재계산 ──────────────────────────────────────────
+// 입고 이력(purchase_lots) + 일별 판매(daily/*.json) → 날짜별 적용 단가 계산
+function recomputeFifoPrices() {
+  const lots = readJSON(PURCHASE_LOTS_FILE, []);
+  if (!lots.length) return;
+
+  // 모든 일별 판매량 집계
+  const salesByFuel = {};  // { fuel: [{date, qty}] }
+  if (fs.existsSync(DAILY_DIR)) {
+    fs.readdirSync(DAILY_DIR)
+      .filter(f => f.endsWith('.json'))
+      .forEach(f => {
+        const day = readJSON(path.join(DAILY_DIR, f), {});
+        if (!day.bos?.date || !day.bos?.fuels) return;
+        const date = day.bos.date;
+        for (const [fuel, data] of Object.entries(day.bos.fuels)) {
+          if (!['휘발유','경유','등유'].includes(fuel)) continue;
+          if (!salesByFuel[fuel]) salesByFuel[fuel] = [];
+          salesByFuel[fuel].push({ date, qty: data.qty || 0 });
+        }
+      });
+  }
+  for (const fuel of Object.keys(salesByFuel)) {
+    salesByFuel[fuel].sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  const priceChanges = [];
+
+  for (const fuel of ['휘발유', '경유', '등유']) {
+    const fuelLots = lots
+      .filter(l => l.fuel === fuel && l.qty > 0)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (!fuelLots.length) continue;
+
+    const sales = salesByFuel[fuel] || [];
+    let lotIdx   = 0;
+    let remaining = fuelLots[0].qty;
+    priceChanges.push({ date: fuelLots[0].date, fuel, price: fuelLots[0].price });
+
+    for (const sale of sales) {
+      if (sale.date < fuelLots[lotIdx].date) continue;
+      remaining -= sale.qty;
+
+      while (remaining <= 0 && lotIdx < fuelLots.length - 1) {
+        lotIdx++;
+        remaining += fuelLots[lotIdx].qty;
+        // 재고 소진 당일부터 다음 단가 적용
+        priceChanges.push({ date: sale.date, fuel, price: fuelLots[lotIdx].price });
+      }
+    }
+  }
+
+  priceChanges.sort((a, b) => a.date.localeCompare(b.date) || a.fuel.localeCompare(b.fuel));
+  writeJSON(PURCHASE_PRICES_FILE, priceChanges);
+}
 
 const { parseBosDaily }    = require('./lib/dailyBosParser');
 const { parseEasyshop }    = require('./lib/easyshopParser');
@@ -501,12 +558,16 @@ app.post('/api/daily/upload-card', upload.single('file'), (req, res) => {
 app.get('/api/daily/purchase-prices', (req, res) => {
   res.json({ ok: true, prices: readJSON(PURCHASE_PRICES_FILE, []) });
 });
-// 매입단가 추가 { date, fuel, price }
+// 매입단가 추가 { date, fuel, price } — 입고 이력이 없을 때만 직접 입력
 app.post('/api/daily/purchase-prices', (req, res) => {
   const { date, fuel, price } = req.body;
   if (!date || !fuel || !price) return res.json({ ok: false, error: '날짜/유종/단가를 모두 입력하세요.' });
+  const lots = readJSON(PURCHASE_LOTS_FILE, []);
+  if (lots.length) {
+    // 입고 이력이 있으면 FIFO 계산 우선 (직접 입력 무시)
+    return res.json({ ok: false, error: '입고 이력 기반 FIFO 단가가 적용 중입니다. 입고 이력 탭에서 수정하세요.' });
+  }
   const list = readJSON(PURCHASE_PRICES_FILE, []);
-  // 같은 날짜+유종이 있으면 덮어쓰기
   const idx = list.findIndex(e => e.date === date && e.fuel === fuel);
   if (idx >= 0) list[idx].price = +price;
   else list.push({ date, fuel, price: +price });
@@ -520,6 +581,54 @@ app.delete('/api/daily/purchase-prices', (req, res) => {
   const list = readJSON(PURCHASE_PRICES_FILE, []).filter(e => !(e.date === date && e.fuel === fuel));
   writeJSON(PURCHASE_PRICES_FILE, list);
   res.json({ ok: true, prices: list });
+});
+
+// ── 입고 이력 (FIFO 재고 관리) ─────────────────────────────
+// 조회
+app.get('/api/daily/lots', (req, res) => {
+  res.json({ ok: true, lots: readJSON(PURCHASE_LOTS_FILE, []) });
+});
+// 추가 { date, fuel, qty, price }
+app.post('/api/daily/lots', (req, res) => {
+  const { date, fuel, qty, price } = req.body;
+  if (!date || !fuel || !qty || !price) return res.json({ ok: false, error: '날짜/유종/수량/단가를 모두 입력하세요.' });
+  const lots = readJSON(PURCHASE_LOTS_FILE, []);
+  lots.push({ date, fuel, qty: +qty, price: +price });
+  lots.sort((a, b) => a.date.localeCompare(b.date) || a.fuel.localeCompare(b.fuel));
+  writeJSON(PURCHASE_LOTS_FILE, lots);
+  recomputeFifoPrices();
+  res.json({ ok: true, lots, prices: readJSON(PURCHASE_PRICES_FILE, []) });
+});
+// 삭제 { date, fuel, price } (같은 날짜+유종+단가 첫 번째 삭제)
+app.delete('/api/daily/lots', (req, res) => {
+  const { date, fuel, price } = req.body;
+  const lots = readJSON(PURCHASE_LOTS_FILE, []);
+  const idx = lots.findIndex(l => l.date === date && l.fuel === fuel && l.price === +price);
+  if (idx >= 0) lots.splice(idx, 1);
+  writeJSON(PURCHASE_LOTS_FILE, lots);
+  recomputeFifoPrices();
+  res.json({ ok: true, lots, prices: readJSON(PURCHASE_PRICES_FILE, []) });
+});
+
+// ── 마감자료 Excel 업로드 (FIFO 단가 임포트) ──────────────────
+app.post('/api/upload-management', upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) return res.json({ ok: false, error: '파일이 없습니다.' });
+    const { parseSalesMgmt } = require('./lib/managementParser');
+    const changes = parseSalesMgmt(req.file.path);
+    // 입고 이력 없이 직접 단가 변경일 임포트
+    const list = readJSON(PURCHASE_PRICES_FILE, []);
+    for (const ch of changes) {
+      const idx = list.findIndex(e => e.date === ch.date && e.fuel === ch.fuel);
+      if (idx >= 0) list[idx].price = ch.price;
+      else list.push({ date: ch.date, fuel: ch.fuel, price: ch.price });
+    }
+    list.sort((a, b) => a.date.localeCompare(b.date) || a.fuel.localeCompare(b.fuel));
+    writeJSON(PURCHASE_PRICES_FILE, list);
+    res.json({ ok: true, count: changes.length, prices: list });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 // 유외상품 원가 수기 저장

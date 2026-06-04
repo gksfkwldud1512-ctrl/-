@@ -68,48 +68,106 @@
       </div>
     </div>
 
-    <!-- 매입단가 이력 -->
+    <!-- 매입단가 / 입고 이력 -->
     <div class="card">
       <div class="card-header">
-        <h2>매입단가 이력</h2>
-        <span style="font-size:12px; color:#64748b;">입력한 날짜부터 다음 변경일 전까지 자동 적용</span>
-      </div>
-      <!-- 등록 폼 -->
-      <div class="pp-add-row">
-        <div class="form-group" style="flex:0 0 140px;">
-          <label>적용 시작일</label>
-          <input type="date" id="pp-date">
-        </div>
-        <div class="form-group" style="flex:0 0 110px;">
-          <label>유종</label>
-          <select id="pp-fuel" class="form-select">
-            <option value="경유">경유</option>
-            <option value="휘발유">휘발유</option>
-            <option value="등유">등유</option>
-          </select>
-        </div>
-        <div class="form-group" style="flex:0 0 130px;">
-          <label>단가 (원/L)</label>
-          <input type="number" id="pp-price" placeholder="예) 1934">
-        </div>
-        <div class="form-group-btn" style="padding-top:20px;">
-          <button class="btn-primary" onclick="addPurchasePrice()">추가</button>
+        <h2>매입단가 · 입고 이력</h2>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="file" id="mgmt-file-input" accept=".xlsx,.xls" hidden>
+          <button class="btn-upload btn-green" onclick="document.getElementById('mgmt-file-input').click()">
+            📥 마감자료 Excel 업로드
+          </button>
+          <span id="mgmt-file-label" class="file-label" style="font-size:12px;color:#64748b;"></span>
         </div>
       </div>
-      <!-- 이력 테이블 -->
-      <table id="pp-table" style="margin-top:0;">
-        <thead>
-          <tr>
-            <th>적용 시작일</th>
-            <th>유종</th>
-            <th class="col-num">단가</th>
-            <th class="col-action">삭제</th>
-          </tr>
-        </thead>
-        <tbody id="pp-tbody">
-          <tr class="empty-row"><td colspan="4">등록된 단가 이력이 없습니다</td></tr>
-        </tbody>
-      </table>
+
+      <!-- 탭 전환 -->
+      <div style="display:flex;gap:0;border-bottom:1px solid #e2e8f0;margin:0 0 12px;">
+        <button id="tab-lots-btn" class="pp-tab-btn pp-tab-active" onclick="switchPpTab('lots')">입고 이력 (FIFO)</button>
+        <button id="tab-prices-btn" class="pp-tab-btn" onclick="switchPpTab('prices')">단가 직접 입력</button>
+      </div>
+
+      <!-- 입고 이력 탭 -->
+      <div id="pp-tab-lots">
+        <div class="pp-add-row">
+          <div class="form-group" style="flex:0 0 140px;">
+            <label>입고일</label>
+            <input type="date" id="lot-date">
+          </div>
+          <div class="form-group" style="flex:0 0 100px;">
+            <label>유종</label>
+            <select id="lot-fuel" class="form-select">
+              <option value="경유">경유</option>
+              <option value="휘발유">휘발유</option>
+              <option value="등유">등유</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:0 0 130px;">
+            <label>수량 (L)</label>
+            <input type="number" id="lot-qty" placeholder="예) 28000">
+          </div>
+          <div class="form-group" style="flex:0 0 130px;">
+            <label>매입단가 (원/L)</label>
+            <input type="number" id="lot-price" placeholder="예) 1934">
+          </div>
+          <div class="form-group-btn" style="padding-top:20px;">
+            <button class="btn-primary" onclick="addLot()">추가</button>
+          </div>
+        </div>
+        <table style="margin-top:0;font-size:13px;">
+          <thead>
+            <tr>
+              <th>입고일</th><th>유종</th>
+              <th class="col-num">수량(L)</th>
+              <th class="col-num">매입단가</th>
+              <th class="col-action">삭제</th>
+            </tr>
+          </thead>
+          <tbody id="lot-tbody">
+            <tr class="empty-row"><td colspan="5">등록된 입고 이력이 없습니다</td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:12px;color:#94a3b8;padding:8px 0 0;">
+          입고 이력 등록 시 BOS 일별 판매량을 자동으로 추적하여 FIFO 매입단가를 계산합니다.
+        </p>
+      </div>
+
+      <!-- 직접 입력 탭 -->
+      <div id="pp-tab-prices" style="display:none;">
+        <div class="pp-add-row">
+          <div class="form-group" style="flex:0 0 140px;">
+            <label>적용 시작일</label>
+            <input type="date" id="pp-date">
+          </div>
+          <div class="form-group" style="flex:0 0 110px;">
+            <label>유종</label>
+            <select id="pp-fuel" class="form-select">
+              <option value="경유">경유</option>
+              <option value="휘발유">휘발유</option>
+              <option value="등유">등유</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:0 0 130px;">
+            <label>단가 (원/L)</label>
+            <input type="number" id="pp-price" placeholder="예) 1934">
+          </div>
+          <div class="form-group-btn" style="padding-top:20px;">
+            <button class="btn-primary" onclick="addPurchasePrice()">추가</button>
+          </div>
+        </div>
+        <table id="pp-table" style="margin-top:0;">
+          <thead>
+            <tr>
+              <th>적용 시작일</th><th>유종</th>
+              <th class="col-num">단가</th>
+              <th class="col-action">삭제</th>
+            </tr>
+          </thead>
+          <tbody id="pp-tbody">
+            <tr class="empty-row"><td colspan="4">등록된 단가 이력이 없습니다</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- 일별 현황 테이블 -->
@@ -138,9 +196,9 @@
           <thead>
             <tr>
               <th rowspan="2" class="daily-col-date">날짜</th>
-              <th colspan="3" class="group-gasoline">휘발유</th>
-              <th colspan="3" class="group-diesel">경유</th>
-              <th colspan="3" class="group-kerosene">등유</th>
+              <th colspan="5" class="group-gasoline">휘발유</th>
+              <th colspan="5" class="group-diesel">경유</th>
+              <th colspan="5" class="group-kerosene">등유</th>
               <th colspan="2" class="group-other">유외상품</th>
               <th colspan="1" class="group-carwash">세차</th>
               <th colspan="2" class="group-card">카드(이지샵)</th>
@@ -148,9 +206,9 @@
               <th rowspan="2" class="group-match">카드대사</th>
             </tr>
             <tr>
-              <th class="group-gasoline">L</th><th class="group-gasoline">드럼</th><th class="group-gasoline">매출</th>
-              <th class="group-diesel">L</th><th class="group-diesel">드럼</th><th class="group-diesel">매출</th>
-              <th class="group-kerosene">L</th><th class="group-kerosene">드럼</th><th class="group-kerosene">매출</th>
+              <th class="group-gasoline">L</th><th class="group-gasoline">드럼</th><th class="group-gasoline">매출</th><th class="group-gasoline">판매가</th><th class="group-gasoline">매입가</th>
+              <th class="group-diesel">L</th><th class="group-diesel">드럼</th><th class="group-diesel">매출</th><th class="group-diesel">판매가</th><th class="group-diesel">매입가</th>
+              <th class="group-kerosene">L</th><th class="group-kerosene">드럼</th><th class="group-kerosene">매출</th><th class="group-kerosene">판매가</th><th class="group-kerosene">매입가</th>
               <th class="group-other">매출</th><th class="group-other">원가(수기)</th>
               <th class="group-carwash">매출</th>
               <th class="group-card">수수료</th><th class="group-card">입금예정일</th>
@@ -158,7 +216,7 @@
           </thead>
           <tbody id="daily-tbody">
             <tr class="empty-row">
-              <td colspan="17">BOS 데이터를 업로드하면 현황이 표시됩니다</td>
+              <td colspan="23">BOS 데이터를 업로드하면 현황이 표시됩니다</td>
             </tr>
           </tbody>
         </table>

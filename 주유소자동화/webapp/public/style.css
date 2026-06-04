@@ -805,3 +805,18 @@ th.sortable.sort-active .sort-icon { color: var(--primary); }
 .price-diff  { color: #dc2626; font-weight: 700; }
 .dup-count   { color: #dc2626; font-weight: 700; }
 
+
+
+/* 매입단가/입고 탭 버튼 */
+.pp-tab-btn {
+  padding: 6px 16px;
+  font-size: 13px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  cursor: pointer;
+  color: #64748b;
+  font-weight: 600;
+}
+.pp-tab-btn:hover { color: #2563eb; }
+.pp-tab-active { color: #2563eb !important; border-bottom-color: #2563eb !important; }

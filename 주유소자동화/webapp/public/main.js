@@ -5,7 +5,8 @@ const dailyState = {
   year:           new Date().getFullYear(),
   month:          new Date().getMonth() + 1,
   days:           [],   // 해당 월 일별 데이터
-  purchasePrices: {},   // { "2026-05": { 휘발유, 경유, 등유 } }
+  purchasePrices: [],   // [{ date, fuel, price }]
+  lots:           [],   // [{ date, fuel, qty, price }]
   bankDeposits:   {},   // { "2026-05-08": { "신한카드": 9637628, ... } }
 };
 
@@ -1082,6 +1083,10 @@ function initDailyUpload() {
   document.getElementById('bank-file-input')?.addEventListener('change', e => {
     if (e.target.files[0]) uploadBank(e.target.files[0]);
   });
+  document.getElementById('mgmt-file-input')?.addEventListener('change', e => {
+    if (e.target.files[0]) uploadManagement(e.target.files[0]);
+    e.target.value = '';
+  });
 }
 
 function switchToUploadedMonth(dateStr) {
@@ -1184,9 +1189,14 @@ function calcBankMatch(day) {
 }
 
 async function loadDailyPurchasePrices() {
-  const res = await api('GET', '/api/daily/purchase-prices');
-  if (res.ok) dailyState.purchasePrices = Array.isArray(res.prices) ? res.prices : [];
+  const [pRes, lRes] = await Promise.all([
+    api('GET', '/api/daily/purchase-prices'),
+    api('GET', '/api/daily/lots'),
+  ]);
+  if (pRes.ok) dailyState.purchasePrices = Array.isArray(pRes.prices) ? pRes.prices : [];
+  if (lRes.ok) dailyState.lots           = Array.isArray(lRes.lots)   ? lRes.lots   : [];
   renderPurchasePriceTable();
+  renderLotTable();
 }
 
 function renderPurchasePriceTable() {
@@ -1205,6 +1215,95 @@ function renderPurchasePriceTable() {
       <button class="btn-sm btn-danger" onclick="deletePurchasePrice('${e.date}','${esc(e.fuel)}')">삭제</button>
     </td>
   </tr>`).join('');
+}
+
+// ── 입고 이력 (FIFO) ──────────────────────────────────────────
+function switchPpTab(tab) {
+  document.getElementById('pp-tab-lots').style.display   = tab === 'lots'   ? '' : 'none';
+  document.getElementById('pp-tab-prices').style.display = tab === 'prices' ? '' : 'none';
+  document.getElementById('tab-lots-btn').classList.toggle('pp-tab-active',   tab === 'lots');
+  document.getElementById('tab-prices-btn').classList.toggle('pp-tab-active', tab === 'prices');
+}
+
+function renderLotTable() {
+  const tbody = document.getElementById('lot-tbody');
+  if (!tbody) return;
+  const list = dailyState.lots;
+  if (!list.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">등록된 입고 이력이 없습니다</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(l => `<tr>
+    <td>${l.date}</td>
+    <td>${esc(l.fuel)}</td>
+    <td class="col-num">${Math.floor(l.qty).toLocaleString()}L</td>
+    <td class="col-num"><strong>${Number(l.price).toLocaleString()}원</strong></td>
+    <td class="col-action">
+      <button class="btn-sm btn-danger" onclick="deleteLot('${l.date}','${esc(l.fuel)}',${l.price})">삭제</button>
+    </td>
+  </tr>`).join('');
+}
+
+async function addLot() {
+  const date  = document.getElementById('lot-date').value;
+  const fuel  = document.getElementById('lot-fuel').value;
+  const qty   = Number(document.getElementById('lot-qty').value);
+  const price = Number(document.getElementById('lot-price').value);
+  if (!date) return toast('입고일을 선택하세요.', 'warn');
+  if (!qty)  return toast('수량을 입력하세요.', 'warn');
+  if (!price) return toast('단가를 입력하세요.', 'warn');
+  const res = await api('POST', '/api/daily/lots', { date, fuel, qty, price });
+  if (res.ok) {
+    dailyState.lots           = res.lots;
+    dailyState.purchasePrices = res.prices;
+    renderLotTable();
+    renderPurchasePriceTable();
+    renderDailyTable();
+    document.getElementById('lot-qty').value   = '';
+    document.getElementById('lot-price').value = '';
+    toast(`✅ ${date} ${fuel} ${qty.toLocaleString()}L 입고 등록 완료`, 'success');
+  } else {
+    toast(`오류: ${res.error}`, 'error');
+  }
+}
+
+async function deleteLot(date, fuel, price) {
+  if (!confirm(`${date} ${fuel} ${price.toLocaleString()}원 입고 이력을 삭제하시겠습니까?`)) return;
+  const res = await api('DELETE', '/api/daily/lots', { date, fuel, price });
+  if (res.ok) {
+    dailyState.lots           = res.lots;
+    dailyState.purchasePrices = res.prices;
+    renderLotTable();
+    renderPurchasePriceTable();
+    renderDailyTable();
+    toast('삭제 완료', 'success');
+  }
+}
+
+async function uploadManagement(file) {
+  const label = document.getElementById('mgmt-file-label');
+  label.textContent = `업로드 중: ${file.name}`;
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const res  = await fetch('/api/upload-management', { method: 'POST', body: form });
+    const data = await res.json();
+    if (data.ok) {
+      dailyState.purchasePrices = data.prices;
+      renderPurchasePriceTable();
+      renderDailyTable();
+      label.textContent = `✅ ${data.count}건 단가 변경일 임포트 완료`;
+      toast(`✅ 마감자료 임포트: ${data.count}건 단가 변경일 반영`, 'success');
+      // 직접 입력 탭으로 전환하여 결과 확인
+      switchPpTab('prices');
+    } else {
+      label.textContent = '업로드 실패';
+      toast(`오류: ${data.error}`, 'error');
+    }
+  } catch {
+    label.textContent = '업로드 실패';
+    toast('서버 연결 오류', 'error');
+  }
 }
 
 // 날짜 기준으로 해당 유종의 적용 단가 찾기 (입력일 이하 최신값)
@@ -1277,7 +1376,7 @@ function renderDailyTable() {
   if (!tbody) return;
 
   if (!dailyState.days.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="15">BOS 데이터를 업로드하면 현황이 표시됩니다</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="23">BOS 데이터를 업로드하면 현황이 표시됩니다</td></tr>';
     updateDailySummary(null);
     return;
   }
@@ -1309,9 +1408,12 @@ function renderDailyTable() {
     totals.profit  += profit ?? 0;
     totals.cardFee += cardFee;
 
-    const drum = v => v > 0 ? (v / 200).toFixed(2) : '-';
-    const won  = v => v > 0 ? v.toLocaleString() : '-';
-    const pf   = profit != null ? `<span class="${profit >= 0 ? 'profit-pos' : 'profit-neg'}">${profit.toLocaleString()}원</span>` : '-';
+    const drum  = v  => v > 0 ? Math.floor(v / 200).toLocaleString() : '-';
+    const litL  = v  => v > 0 ? Math.floor(v).toLocaleString() : '-';
+    const won   = v  => v > 0 ? v.toLocaleString() : '-';
+    const price = (a, q) => q > 0 ? Math.round(a / q).toLocaleString() + '원' : '-';
+    const buyPr = (d, f) => { const p = getPriceForDate(d, f); return p ? p.toLocaleString() + '원' : '-'; };
+    const pf    = profit != null ? `<span class="${profit >= 0 ? 'profit-pos' : 'profit-neg'}">${profit.toLocaleString()}원</span>` : '-';
 
     const m      = day.matching;
     const bm     = calcBankMatch(day);
@@ -1331,9 +1433,9 @@ function renderDailyTable() {
 
     return `<tr>
       <td class="daily-col-date">${md}</td>
-      <td>${won(gL)}</td><td>${drum(gL)}</td><td>${won(gA)}</td>
-      <td>${won(dL)}</td><td>${drum(dL)}</td><td>${won(dA)}</td>
-      <td>${won(kL)}</td><td>${drum(kL)}</td><td>${won(kA)}</td>
+      <td>${litL(gL)}</td><td>${drum(gL)}</td><td>${won(gA)}</td><td>${price(gA,gL)}</td><td>${buyPr(date,'휘발유')}</td>
+      <td>${litL(dL)}</td><td>${drum(dL)}</td><td>${won(dA)}</td><td>${price(dA,dL)}</td><td>${buyPr(date,'경유')}</td>
+      <td>${litL(kL)}</td><td>${drum(kL)}</td><td>${won(kA)}</td><td>${price(kA,kL)}</td><td>${buyPr(date,'등유')}</td>
       <td>${won(otA)}</td>
       <td><input class="input-other-cost" type="number" value="${otC || ''}" placeholder="0"
            onchange="saveOtherCost('${date}', this.value)"></td>
@@ -1351,9 +1453,9 @@ function renderDailyTable() {
 
   const totalRow = `<tr class="total-row">
     <td class="daily-col-date">합계</td>
-    <td>${totals.휘발유L.toLocaleString()}</td><td>${(totals.휘발유L/200).toFixed(2)}</td><td>${totals.휘발유A.toLocaleString()}</td>
-    <td>${totals.경유L.toLocaleString()}</td><td>${(totals.경유L/200).toFixed(2)}</td><td>${totals.경유A.toLocaleString()}</td>
-    <td>${totals.등유L.toLocaleString()}</td><td>${(totals.등유L/200).toFixed(2)}</td><td>${totals.등유A.toLocaleString()}</td>
+    <td>${Math.floor(totals.휘발유L).toLocaleString()}</td><td>${Math.floor(totals.휘발유L/200).toLocaleString()}</td><td>${totals.휘발유A.toLocaleString()}</td><td>-</td><td>-</td>
+    <td>${Math.floor(totals.경유L).toLocaleString()}</td><td>${Math.floor(totals.경유L/200).toLocaleString()}</td><td>${totals.경유A.toLocaleString()}</td><td>-</td><td>-</td>
+    <td>${Math.floor(totals.등유L).toLocaleString()}</td><td>${Math.floor(totals.등유L/200).toLocaleString()}</td><td>${totals.등유A.toLocaleString()}</td><td>-</td><td>-</td>
     <td>${totals.otherA.toLocaleString()}</td><td>-</td>
     <td>${totals.carwashA.toLocaleString()}</td>
     <td>${totals.cardFee.toLocaleString()}</td><td>-</td>
