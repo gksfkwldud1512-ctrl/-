@@ -43,6 +43,15 @@
   <!-- ───── 대분류: 일마감 ───── -->
   <section id="group-daily" class="group-content">
 
+    <!-- 일마감 내부 서브탭 -->
+    <div class="daily-subnav">
+      <button id="daily-sub-main-btn" class="daily-sub-btn active" onclick="switchDailyTab('main')">일마감</button>
+      <button id="daily-sub-deposit-btn" class="daily-sub-btn" onclick="switchDailyTab('deposit')">입금내역 검증</button>
+    </div>
+
+    <!-- ── 일마감 탭 ── -->
+    <div id="daily-tab-main">
+
     <!-- 툴바 -->
     <div class="toolbar">
       <div class="toolbar-group">
@@ -60,10 +69,6 @@
         <input type="file" id="card-file-input" accept=".xlsx,.xls" hidden>
         <button class="btn-upload btn-teal" onclick="document.getElementById('card-file-input').click()">
           💳 이지샵 카드내역 업로드
-        </button>
-        <input type="file" id="bank-file-input" accept=".xlsx,.xls,.xls" hidden>
-        <button class="btn-upload btn-purple" onclick="document.getElementById('bank-file-input').click()">
-          🏦 계좌 입금내역 업로드
         </button>
       </div>
     </div>
@@ -225,7 +230,42 @@
           </tbody>
         </table>
       </div>
-    </div>
+    </div><!-- /daily-tab-main -->
+
+    <!-- ── 입금내역 검증 탭 ── -->
+    <div id="daily-tab-deposit" style="display:none;">
+
+      <!-- 계좌 업로드 카드 -->
+      <div class="card">
+        <div class="card-header">
+          <h2>계좌 입금내역 업로드</h2>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="file" id="bank-file-input" accept=".xlsx,.xls" hidden>
+            <button class="btn-upload btn-purple" onclick="document.getElementById('bank-file-input').click()">
+              🏦 계좌 입금내역 업로드
+            </button>
+            <span id="bank-file-label" class="file-label" style="font-size:12px;color:#64748b;"></span>
+          </div>
+        </div>
+        <p style="font-size:12px;color:#94a3b8;padding:0 0 4px;">
+          수시입출예금 입출금내역 Excel을 업로드하면 이지샵 입금예정금액과 자동 대사합니다.
+        </p>
+      </div>
+
+      <!-- 입금 현황 대사 카드 -->
+      <div class="card">
+        <div class="card-header">
+          <h2>카드사별 입금 현황</h2>
+          <span id="deposit-summary-badge" style="font-size:13px;color:#64748b;"></span>
+        </div>
+        <div id="deposit-verify-body">
+          <div class="empty-row" style="padding:24px;text-align:center;color:#94a3b8;">
+            이지샵 카드내역 업로드 후 조회 가능합니다.
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /daily-tab-deposit -->
 
   </section>
 

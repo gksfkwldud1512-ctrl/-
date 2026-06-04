@@ -1149,9 +1149,12 @@ async function uploadBank(file) {
     const res  = await fetch('/api/daily/upload-bank', { method: 'POST', body: form });
     const data = await res.json();
     if (data.ok) {
+      const label = document.getElementById('bank-file-label');
+      if (label) label.textContent = `✅ ${data.dateCount}일치 입금내역 로드 완료`;
       toast(`✅ 은행 입금내역 ${data.dateCount}일치 업로드 완료`, 'success');
       await loadBankDeposits();
       renderDailyTable();
+      renderDepositVerification();
     } else {
       toast(`오류: ${data.error}`, 'error');
     }
@@ -1186,6 +1189,141 @@ function calcBankMatch(day) {
     }
   }
   return { errors, hasError: errors.length > 0 };
+}
+
+// ── 일마감 내부 서브탭 ───────────────────────────────────────
+function switchDailyTab(tab) {
+  document.getElementById('daily-tab-main').style.display    = tab === 'main'    ? '' : 'none';
+  document.getElementById('daily-tab-deposit').style.display = tab === 'deposit' ? '' : 'none';
+  document.getElementById('daily-sub-main-btn').classList.toggle('active',    tab === 'main');
+  document.getElementById('daily-sub-deposit-btn').classList.toggle('active', tab === 'deposit');
+  if (tab === 'deposit') renderDepositVerification();
+}
+
+// ── 입금내역 검증 렌더링 ─────────────────────────────────────
+function renderDepositVerification() {
+  const body   = document.getElementById('deposit-verify-body');
+  const badge  = document.getElementById('deposit-summary-badge');
+  if (!body) return;
+
+  const hasBankData = Object.keys(dailyState.bankDeposits).length > 0;
+
+  // 이지샵 depositExpected 집계 (판매일별로 어떤 카드사가 어느 날 입금예정인지)
+  const depositMap = {};  // { depositDate: { cardCo: { expected, salesDays[] } } }
+  for (const day of dailyState.days) {
+    if (!day.card?.depositExpected) continue;
+    for (const [depDate, cardAmounts] of Object.entries(day.card.depositExpected)) {
+      if (!depositMap[depDate]) depositMap[depDate] = {};
+      for (const [cardCo, amt] of Object.entries(cardAmounts)) {
+        if (!depositMap[depDate][cardCo]) depositMap[depDate][cardCo] = { expected: 0, salesDays: [] };
+        depositMap[depDate][cardCo].expected += amt;
+        const md = day.date.slice(5).replace('-', '/');
+        if (!depositMap[depDate][cardCo].salesDays.includes(md))
+          depositMap[depDate][cardCo].salesDays.push(md);
+      }
+    }
+  }
+
+  if (!Object.keys(depositMap).length) {
+    body.innerHTML = '<div class="empty-row" style="padding:24px;text-align:center;color:#94a3b8;">이지샵 카드내역 업로드 후 조회 가능합니다.</div>';
+    if (badge) badge.textContent = '';
+    return;
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  let totalExpected = 0, totalActual = 0, totalRows = 0, matchedRows = 0;
+
+  // 날짜 오름차순 정렬
+  const sortedDates = Object.keys(depositMap).sort();
+  const rows = [];
+
+  for (const depDate of sortedDates) {
+    const cardMap  = depositMap[depDate];
+    const actualDay = (dailyState.bankDeposits || {})[depDate] || {};
+    const isFuture  = depDate > today;
+
+    // 해당 입금일의 모든 카드사 (예정 + 실제 모두 포함)
+    const allCos = new Set([...Object.keys(cardMap), ...Object.keys(actualDay)]);
+    let isFirstOfDate = true;
+
+    for (const cardCo of [...allCos].sort()) {
+      const exp = cardMap[cardCo]?.expected || 0;
+      const act = actualDay[cardCo] || 0;
+      const diff = act - exp;
+      const salesDays = cardMap[cardCo]?.salesDays?.join(', ') || '-';
+
+      totalExpected += exp;
+      totalActual   += act;
+      totalRows++;
+
+      let statusHtml;
+      if (isFuture && act === 0) {
+        statusHtml = '<span style="color:#64748b;">예정</span>';
+      } else if (act === 0 && exp > 0) {
+        statusHtml = '<span style="color:#dc2626;font-weight:700;">미입금</span>';
+      } else if (exp === 0 && act > 0) {
+        statusHtml = '<span style="color:#f59e0b;">예정 외 입금</span>';
+      } else if (diff === 0) {
+        statusHtml = '<span style="color:#16a34a;font-weight:700;">✅ 일치</span>';
+        matchedRows++;
+      } else {
+        statusHtml = `<span style="color:#dc2626;font-weight:700;">⚠ ${diff > 0 ? '+' : ''}${diff.toLocaleString()}원</span>`;
+      }
+
+      rows.push(`<tr>
+        <td style="white-space:nowrap;">${isFirstOfDate ? depDate : ''}</td>
+        <td><strong>${esc(cardCo)}</strong></td>
+        <td style="color:#64748b;font-size:12px;">${salesDays}</td>
+        <td style="text-align:right;">${exp > 0 ? exp.toLocaleString() + '원' : '-'}</td>
+        <td style="text-align:right;">${act > 0 ? act.toLocaleString() + '원' : (isFuture ? '-' : '<span style="color:#dc2626">미입금</span>')}</td>
+        <td style="text-align:right;">${statusHtml}</td>
+      </tr>`);
+      isFirstOfDate = false;
+    }
+    // 날짜 구분선
+    rows.push('<tr class="deposit-date-sep"><td colspan="6"></td></tr>');
+  }
+
+  const diffTotal = totalActual - totalExpected;
+  const summaryColor = Math.abs(diffTotal) < 1 ? '#16a34a' : '#dc2626';
+
+  if (badge) {
+    if (!hasBankData) {
+      badge.textContent = '계좌 입금내역 미업로드';
+      badge.style.color = '#f59e0b';
+    } else {
+      badge.textContent = `예정 ${totalExpected.toLocaleString()}원 / 실제 ${totalActual.toLocaleString()}원`;
+      badge.style.color = summaryColor;
+    }
+  }
+
+  body.innerHTML = `
+    ${!hasBankData ? '<div class="notice notice-warn" style="margin:0 0 12px;">계좌 입금내역을 업로드하면 실제 입금액과 비교할 수 있습니다.</div>' : ''}
+    <div class="daily-table-wrap">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+          <th style="padding:8px 10px;text-align:left;white-space:nowrap;">입금예정일</th>
+          <th style="padding:8px 10px;text-align:left;">카드사</th>
+          <th style="padding:8px 10px;text-align:left;color:#94a3b8;">판매일</th>
+          <th style="padding:8px 10px;text-align:right;">예정금액</th>
+          <th style="padding:8px 10px;text-align:right;">실제입금</th>
+          <th style="padding:8px 10px;text-align:right;">상태</th>
+        </tr>
+      </thead>
+      <tbody>${rows.join('')}</tbody>
+      <tfoot>
+        <tr style="background:#f1f5f9;font-weight:bold;border-top:2px solid #e2e8f0;">
+          <td colspan="3" style="padding:8px 10px;">합계</td>
+          <td style="padding:8px 10px;text-align:right;">${totalExpected.toLocaleString()}원</td>
+          <td style="padding:8px 10px;text-align:right;">${hasBankData ? totalActual.toLocaleString() + '원' : '-'}</td>
+          <td style="padding:8px 10px;text-align:right;color:${summaryColor};">
+            ${hasBankData ? (Math.abs(diffTotal) < 1 ? '✅ 전체 일치' : (diffTotal > 0 ? '+' : '') + diffTotal.toLocaleString() + '원') : '-'}
+          </td>
+        </tr>
+      </tfoot>
+    </table>
+    </div>`;
 }
 
 async function loadDailyPurchasePrices() {
@@ -1361,6 +1499,7 @@ async function loadDailyMonth() {
   if (res.ok) {
     dailyState.days = res.days;
     renderDailyTable();
+    renderDepositVerification();
   }
 }
 

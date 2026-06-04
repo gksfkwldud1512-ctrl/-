@@ -826,3 +826,34 @@ th.sortable.sort-active .sort-icon { color: var(--primary); }
 .card-collapsible > summary::-webkit-details-marker { display: none; }
 .card-collapsible .collapse-arrow { font-size:11px; color:#94a3b8; transition:transform .2s; display:inline-block; }
 .card-collapsible[open] .collapse-arrow { transform: rotate(90deg); }
+
+/* 일마감 내부 서브탭 */
+.daily-subnav {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid #e2e8f0;
+  margin-bottom: 16px;
+  background: #fff;
+  padding: 0 16px;
+}
+.daily-sub-btn {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: #64748b;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  transition: color .15s, border-color .15s;
+}
+.daily-sub-btn:hover { color: #2563eb; }
+.daily-sub-btn.active { color: #2563eb; border-bottom-color: #2563eb; }
+
+/* 입금내역 검증 */
+.deposit-date-sep td {
+  padding: 2px 0;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
