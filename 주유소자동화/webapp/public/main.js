@@ -1480,13 +1480,14 @@ async function uploadManagement(file) {
     const res  = await fetch('/api/upload-management', { method: 'POST', body: form });
     const data = await res.json();
     if (data.ok) {
-      dailyState.purchasePrices = data.prices;
-      dailyState.lots           = data.lots || [];
+      dailyState.purchasePrices  = data.prices;
+      dailyState.lots            = data.lots || [];
+      if (data.fifoDaily?.length) dailyState.fifoDailyPrices = data.fifoDaily;
       renderPurchasePriceTable();
       renderLotTable();
       renderDailyTable();
-      label.textContent = `✅ 입고 ${data.lotCount}건 / 단가변경 ${data.priceCount}건 임포트 완료`;
-      toast(`✅ 마감자료 임포트: 입고이력 ${data.lotCount}건, 적용단가 ${data.priceCount}건 반영`, 'success');
+      label.textContent = `✅ 입고 ${data.lotCount}건 / 단가변경 ${data.priceCount}건 / FIFO ${data.fifoDaily?.length || 0}일치 임포트 완료`;
+      toast(`✅ 마감자료 임포트: 입고이력 ${data.lotCount}건, 적용단가 ${data.priceCount}건, FIFO일별단가 ${data.fifoDaily?.length || 0}일치 반영`, 'success');
     } else {
       label.textContent = '업로드 실패';
       toast(`오류: ${data.error}`, 'error');
@@ -1562,7 +1563,7 @@ function calcDailyProfit(day) {
   if (!bos || !bos.date) return null;
 
   // 단가가 하나도 없으면 null
-  const hasPrices = dailyState.purchasePrices.length > 0;
+  const hasPrices = dailyState.purchasePrices.length > 0 || dailyState.fifoDailyPrices.length > 0;
   if (!hasPrices) return null;
 
   let profit = 0;
@@ -1672,7 +1673,8 @@ function renderDailyTable() {
     </tr>`;
   });
 
-  const totalPf    = dailyState.purchasePrices.length
+  const hasPriceData = dailyState.purchasePrices.length > 0 || dailyState.fifoDailyPrices.length > 0;
+  const totalPf    = hasPriceData
     ? `<span class="${totals.profit >= 0 ? 'profit-pos' : 'profit-neg'}">${totals.profit.toLocaleString()}원</span>`
     : '단가 미입력';
 

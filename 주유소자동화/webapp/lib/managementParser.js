@@ -9,9 +9,9 @@ const XLSX = require('xlsx');
 //   col 31 : 등유 매입단가     col 32: 등유 실재고     col 34: 등유 매입량     col 36: 등유 전월재고
 
 const FUELS = [
-  { name: '휘발유', buyPriceCol: 9,  remainingCol: 10, buyQtyCol: 12, prevStockCol: 14 },
-  { name: '경유',   buyPriceCol: 20, remainingCol: 21, buyQtyCol: 23, prevStockCol: 25 },
-  { name: '등유',   buyPriceCol: 31, remainingCol: 32, buyQtyCol: 34, prevStockCol: 36 },
+  { name: '휘발유', buyPriceCol: 9,  remainingCol: 10, buyQtyCol: 12, prevStockCol: 14, sellQtyCol: 4  },
+  { name: '경유',   buyPriceCol: 20, remainingCol: 21, buyQtyCol: 23, prevStockCol: 25, sellQtyCol: 15 },
+  { name: '등유',   buyPriceCol: 31, remainingCol: 32, buyQtyCol: 34, prevStockCol: 36, sellQtyCol: 26 },
 ];
 
 function parseDate(n) {
@@ -77,11 +77,14 @@ function extractLots(filePath) {
   const firstDate = parseDate(firstRow[0]);
 
   // 전월재고를 첫 lot으로 등록 (초기 재고)
+  // prevStockCol은 당일 판매 후 남은 잔량 → 첫날 판매량(sellQtyCol)을 더해야 실제 개시재고
   for (const fuel of FUELS) {
-    const prevStock = Number(firstRow[fuel.prevStockCol]) || 0;
-    const initPrice = Number(firstRow[fuel.buyPriceCol])  || 0;
-    if (prevStock > 0 && initPrice > 0) {
-      lots.push({ date: firstDate, fuel: fuel.name, qty: Math.round(prevStock), price: initPrice });
+    const endOfDayRemaining = Number(firstRow[fuel.prevStockCol]) || 0;
+    const firstDaySold      = Number(firstRow[fuel.sellQtyCol])   || 0;
+    const openingStock      = endOfDayRemaining + firstDaySold;
+    const initPrice         = Number(firstRow[fuel.buyPriceCol])  || 0;
+    if (openingStock > 0 && initPrice > 0) {
+      lots.push({ date: firstDate, fuel: fuel.name, qty: Math.round(openingStock), price: initPrice });
     }
   }
 
@@ -140,18 +143,11 @@ function extractFifoDaily(filePath) {
     for (const fuel of FUELS) {
       const price     = Number(row[fuel.buyPriceCol]) || 0;
       const remaining = Number(row[fuel.remainingCol]) || 0;
-      const soldQty   = Number(row[fuel.buyQtyCol - 11]) || 0;  // 판매량 컬럼 (매입량보다 11 앞)
       if (price > 0) {
-        entry[fuel.name] = { price, remaining: Math.round(remaining) };
+        const soldQty = Math.round((Number(row[fuel.sellQtyCol]) || 0) * 100) / 100;
+        entry[fuel.name] = { price, remaining: Math.round(remaining), soldQty };
         hasAny = true;
       }
-    }
-
-    // 판매량 컬럼 추가 (경유: col15, 휘발유: col4, 등유: col26)
-    const SELL_COLS = { 휘발유: 4, 경유: 15, 등유: 26 };
-    for (const [fuel, col] of Object.entries(SELL_COLS)) {
-      const qty = Number(row[col]) || 0;
-      if (entry[fuel]) entry[fuel].soldQty = Math.round(qty * 100) / 100;
     }
 
     if (hasAny) result.push(entry);

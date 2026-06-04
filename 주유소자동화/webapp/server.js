@@ -644,7 +644,7 @@ app.post('/api/upload-management', upload.single('file'), (req, res) => {
     }
 
     const finalPrices = readJSON(PURCHASE_PRICES_FILE, []);
-    res.json({ ok: true, lotCount: newLots.length, priceCount: finalPrices.length, lots: newLots, prices: finalPrices });
+    res.json({ ok: true, lotCount: newLots.length, priceCount: finalPrices.length, lots: newLots, prices: finalPrices, fifoDaily });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
