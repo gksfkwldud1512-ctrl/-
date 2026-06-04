@@ -207,7 +207,7 @@
           <thead>
             <tr>
               <th rowspan="2" class="daily-col-date">날짜</th>
-              <th colspan="3" class="group-summary">요약</th>
+              <th rowspan="2" class="group-summary">합계<br>드럼</th>
               <th colspan="5" class="group-gasoline">휘발유</th>
               <th colspan="5" class="group-diesel">경유</th>
               <th colspan="5" class="group-kerosene">등유</th>
@@ -218,7 +218,6 @@
               <th rowspan="2" class="group-match">카드대사</th>
             </tr>
             <tr>
-              <th class="group-summary">경유(드럼)</th><th class="group-summary">휘발유(드럼)</th><th class="group-summary">등유(드럼)</th>
               <th class="group-gasoline">L</th><th class="group-gasoline">드럼</th><th class="group-gasoline">매출</th><th class="group-gasoline">판매가</th><th class="group-gasoline">매입가</th>
               <th class="group-diesel">L</th><th class="group-diesel">드럼</th><th class="group-diesel">매출</th><th class="group-diesel">판매가</th><th class="group-diesel">매입가</th>
               <th class="group-kerosene">L</th><th class="group-kerosene">드럼</th><th class="group-kerosene">매출</th><th class="group-kerosene">판매가</th><th class="group-kerosene">매입가</th>
@@ -229,7 +228,7 @@
           </thead>
           <tbody id="daily-tbody">
             <tr class="empty-row">
-              <td colspan="26">BOS 데이터를 업로드하면 현황이 표시됩니다</td>
+              <td colspan="24">BOS 데이터를 업로드하면 현황이 표시됩니다</td>
             </tr>
           </tbody>
         </table>
@@ -239,21 +238,40 @@
     <!-- ── 입금 검증 탭 ── -->
     <div id="tab-daily-deposit" class="tab-content">
 
-      <!-- 계좌 업로드 카드 -->
+      <!-- 파일 업로드 2개 -->
       <div class="card">
         <div class="card-header">
-          <h2>계좌 입금내역 업로드</h2>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <input type="file" id="bank-file-input" accept=".xlsx,.xls" hidden>
-            <button class="btn-upload btn-purple" onclick="document.getElementById('bank-file-input').click()">
-              🏦 계좌 입금내역 업로드
-            </button>
-            <span id="bank-file-label" class="file-label" style="font-size:12px;color:#64748b;"></span>
-          </div>
+          <h2>파일 업로드</h2>
         </div>
-        <p style="font-size:12px;color:#94a3b8;padding:0 0 4px;">
-          수시입출예금 입출금내역 Excel을 업로드하면 이지샵 입금예정금액과 자동 대사합니다.
-        </p>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;padding:4px 0 8px;">
+
+          <!-- 이지샵 -->
+          <div style="flex:1;min-width:240px;border:1px solid #e2e8f0;border-radius:8px;padding:16px;">
+            <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:#0369a1;">💳 이지샵 카드내역</div>
+            <p style="font-size:12px;color:#64748b;margin:0 0 10px;">이지샵에서 다운로드한 카드거래/입금예정 Excel</p>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <input type="file" id="deposit-card-file-input" accept=".xlsx,.xls" hidden>
+              <button class="btn-upload btn-teal" onclick="document.getElementById('deposit-card-file-input').click()">
+                📂 이지샵 업로드
+              </button>
+              <span id="deposit-card-label" class="file-label" style="font-size:12px;color:#64748b;"></span>
+            </div>
+          </div>
+
+          <!-- 계좌 -->
+          <div style="flex:1;min-width:240px;border:1px solid #e2e8f0;border-radius:8px;padding:16px;">
+            <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:#7c3aed;">🏦 실 계좌 입금내역</div>
+            <p style="font-size:12px;color:#64748b;margin:0 0 10px;">은행 수시입출예금 입출금내역 Excel</p>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <input type="file" id="bank-file-input" accept=".xlsx,.xls" hidden>
+              <button class="btn-upload btn-purple" onclick="document.getElementById('bank-file-input').click()">
+                📂 계좌내역 업로드
+              </button>
+              <span id="bank-file-label" class="file-label" style="font-size:12px;color:#64748b;"></span>
+            </div>
+          </div>
+
+        </div>
       </div>
 
       <!-- 입금 현황 대사 카드 -->

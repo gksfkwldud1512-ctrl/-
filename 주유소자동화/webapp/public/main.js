@@ -130,6 +130,8 @@ function switchGroup(group) {
     subnav.classList.remove('hidden');
     if (subnavMonthly) subnavMonthly.style.display = 'none';
     if (subnavDaily)   subnavDaily.style.display   = '';
+    // 월마감 tab-content 모두 숨김 (거래명세서 등이 보이는 버그 수정)
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.group-content').forEach(s => s.classList.remove('active'));
     document.getElementById('group-daily').classList.add('active');
     // 활성 탭 또는 기본값
@@ -1116,6 +1118,11 @@ function initDailyUpload() {
     if (e.target.files[0]) uploadManagement(e.target.files[0]);
     e.target.value = '';
   });
+  // 입금 검증 탭의 이지샵 업로드 (동일 API, 레이블만 별도)
+  document.getElementById('deposit-card-file-input')?.addEventListener('change', e => {
+    if (e.target.files[0]) uploadCard(e.target.files[0], 'deposit-card-label');
+    e.target.value = '';
+  });
 }
 
 function switchToUploadedMonth(dateStr) {
@@ -1151,7 +1158,7 @@ async function uploadBos(file) {
   document.getElementById('bos-file-input').value = '';
 }
 
-async function uploadCard(file) {
+async function uploadCard(file, labelId) {
   toast('이지샵 카드내역 업로드 중...', '');
   const form = new FormData();
   form.append('file', file);
@@ -1159,15 +1166,17 @@ async function uploadCard(file) {
     const res  = await fetch('/api/daily/upload-card', { method: 'POST', body: form });
     const data = await res.json();
     if (data.ok) {
-      const label = data.count > 1 ? `${data.count}일치` : data.date;
-      toast(`✅ 카드내역 업로드 완료 (${label})`, 'success');
+      const labelText = `✅ ${data.count > 1 ? data.count+'일치' : data.date} 업로드 완료`;
+      const lbl = document.getElementById(labelId || 'deposit-card-label');
+      if (lbl) lbl.textContent = labelText;
+      toast(`✅ 카드내역 업로드 완료`, 'success');
       switchToUploadedMonth(data.date);
       await loadDailyMonth();
+      renderDepositVerification();
     } else {
       toast(`오류: ${data.error}`, 'error');
     }
   } catch (e) { toast(`업로드 오류: ${e.message}`, 'error'); console.error(e); }
-  document.getElementById('card-file-input').value = '';
 }
 
 async function uploadBank(file) {
@@ -1549,7 +1558,7 @@ function renderDailyTable() {
   if (!tbody) return;
 
   if (!dailyState.days.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="26">BOS 데이터를 업로드하면 현황이 표시됩니다</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="24">BOS 데이터를 업로드하면 현황이 표시됩니다</td></tr>';
     updateDailySummary(null);
     return;
   }
@@ -1617,16 +1626,13 @@ function renderDailyTable() {
 
     const matchBadge = `${cardBadge}${bankBadge ? '<br>' + bankBadge : ''}`;
 
-    // 요약 컬럼: 경유드럼 / 휘발유드럼 / 등유드럼
-    const dDrum = dL > 0 ? Math.floor(dL/200).toLocaleString() : '-';
-    const gDrum = gL > 0 ? Math.floor(gL/200).toLocaleString() : '-';
-    const kDrum = kL > 0 ? Math.floor(kL/200).toLocaleString() : '-';
+    // 합계드럼 = 휘발유+경유+등유 총합
+    const totalL    = gL + dL + kL;
+    const totalDrum = totalL > 0 ? Math.floor(totalL / 200).toLocaleString() : '-';
 
     return `<tr>
       <td class="daily-col-date">${md}</td>
-      <td class="group-summary-cell">${dDrum}</td>
-      <td class="group-summary-cell">${gDrum}</td>
-      <td class="group-summary-cell">${kDrum}</td>
+      <td class="group-summary-cell">${totalDrum}</td>
       <td>${litL(gL)}</td><td>${drum(gL)}</td><td>${won(gA)}</td><td>${price(gA,gL)}</td><td>${buyPr(date,'휘발유')}</td>
       <td>${litL(dL)}</td><td>${drum(dL)}</td><td>${won(dA)}</td><td>${price(dA,dL)}</td><td>${buyPr(date,'경유')}</td>
       <td>${litL(kL)}</td><td>${drum(kL)}</td><td>${won(kA)}</td><td>${price(kA,kL)}</td><td>${buyPr(date,'등유')}</td>
@@ -1645,11 +1651,12 @@ function renderDailyTable() {
     ? `<span class="${totals.profit >= 0 ? 'profit-pos' : 'profit-neg'}">${totals.profit.toLocaleString()}원</span>`
     : '단가 미입력';
 
+  const totalAllL    = totals.휘발유L + totals.경유L + totals.등유L;
+  const totalAllDrum = Math.floor(totalAllL / 200).toLocaleString();
+
   const totalRow = `<tr class="total-row">
     <td class="daily-col-date">합계</td>
-    <td class="group-summary-cell">${Math.floor(totals.경유L/200).toLocaleString()}</td>
-    <td class="group-summary-cell">${Math.floor(totals.휘발유L/200).toLocaleString()}</td>
-    <td class="group-summary-cell">${Math.floor(totals.등유L/200).toLocaleString()}</td>
+    <td class="group-summary-cell">${totalAllDrum}</td>
     <td>${Math.floor(totals.휘발유L).toLocaleString()}</td><td>${Math.floor(totals.휘발유L/200).toLocaleString()}</td><td>${totals.휘발유A.toLocaleString()}</td><td>-</td><td>-</td>
     <td>${Math.floor(totals.경유L).toLocaleString()}</td><td>${Math.floor(totals.경유L/200).toLocaleString()}</td><td>${totals.경유A.toLocaleString()}</td><td>-</td><td>-</td>
     <td>${Math.floor(totals.등유L).toLocaleString()}</td><td>${Math.floor(totals.등유L/200).toLocaleString()}</td><td>${totals.등유A.toLocaleString()}</td><td>-</td><td>-</td>
