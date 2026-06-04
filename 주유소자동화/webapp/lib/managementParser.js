@@ -124,4 +124,40 @@ function extractLots(filePath) {
   return lots;
 }
 
-module.exports = { parseSalesMgmt, extractLots };
+// 판매관리 시트 → 일별 FIFO 단가 + 실재고 추출
+// 이 데이터가 영업이익 계산의 기준 (선입선출이 이미 계산된 결과)
+function extractFifoDaily(filePath) {
+  const dataRows = readSheet(filePath);
+
+  const result = [];
+  for (const row of dataRows) {
+    const date = parseDate(row[0]);
+    if (!date) continue;
+
+    const entry = { date };
+    let hasAny = false;
+
+    for (const fuel of FUELS) {
+      const price     = Number(row[fuel.buyPriceCol]) || 0;
+      const remaining = Number(row[fuel.remainingCol]) || 0;
+      const soldQty   = Number(row[fuel.buyQtyCol - 11]) || 0;  // 판매량 컬럼 (매입량보다 11 앞)
+      if (price > 0) {
+        entry[fuel.name] = { price, remaining: Math.round(remaining) };
+        hasAny = true;
+      }
+    }
+
+    // 판매량 컬럼 추가 (경유: col15, 휘발유: col4, 등유: col26)
+    const SELL_COLS = { 휘발유: 4, 경유: 15, 등유: 26 };
+    for (const [fuel, col] of Object.entries(SELL_COLS)) {
+      const qty = Number(row[col]) || 0;
+      if (entry[fuel]) entry[fuel].soldQty = Math.round(qty * 100) / 100;
+    }
+
+    if (hasAny) result.push(entry);
+  }
+
+  return result;
+}
+
+module.exports = { parseSalesMgmt, extractLots, extractFifoDaily };

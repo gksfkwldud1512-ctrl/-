@@ -32,7 +32,8 @@ const upload = multer({
 const CUSTOMERS_FILE       = path.join(DATA_DIR, 'customers.json');
 const SETTINGS_FILE        = path.join(DATA_DIR, 'settings.json');
 const PURCHASE_PRICES_FILE = path.join(DATA_DIR, 'purchase_prices.json');
-const PURCHASE_LOTS_FILE   = path.join(DATA_DIR, 'purchase_lots.json');
+const PURCHASE_LOTS_FILE    = path.join(DATA_DIR, 'purchase_lots.json');
+const FIFO_DAILY_FILE       = path.join(DATA_DIR, 'fifo_daily_prices.json');
 const DAILY_DIR            = path.join(DATA_DIR, 'daily');
 const BANK_DEPOSITS_FILE   = path.join(DATA_DIR, 'bank_deposits.json');
 
@@ -578,6 +579,11 @@ app.delete('/api/daily/purchase-prices', (req, res) => {
   res.json({ ok: true, prices: list });
 });
 
+// ── 일별 FIFO 단가 조회 ───────────────────────────────────────
+app.get('/api/daily/fifo-prices', (req, res) => {
+  res.json({ ok: true, prices: readJSON(FIFO_DAILY_FILE, []) });
+});
+
 // ── 입고 이력 (FIFO 재고 관리) ─────────────────────────────
 // 조회
 app.get('/api/daily/lots', (req, res) => {
@@ -609,13 +615,17 @@ app.delete('/api/daily/lots', (req, res) => {
 app.post('/api/upload-management', upload.single('file'), (req, res) => {
   try {
     if (!req.file) return res.json({ ok: false, error: '파일이 없습니다.' });
-    const { parseSalesMgmt, extractLots } = require('./lib/managementParser');
+    const { parseSalesMgmt, extractLots, extractFifoDaily } = require('./lib/managementParser');
 
     // 1) 입고 이력(lots) 추출 → purchase_lots.json 저장
     const newLots = extractLots(req.file.path);
     writeJSON(PURCHASE_LOTS_FILE, newLots);
 
-    // 2) FIFO 재계산 → purchase_prices.json 갱신
+    // 2) 일별 FIFO 단가 추출 → fifo_daily_prices.json 저장 (영업이익 정확 계산의 기준)
+    const fifoDaily = extractFifoDaily(req.file.path);
+    writeJSON(FIFO_DAILY_FILE, fifoDaily);
+
+    // 3) FIFO 재계산 → purchase_prices.json 갱신
     recomputeFifoPrices();
 
     // 3) lots가 없으면 단가 변경일만 직접 임포트 (fallback)

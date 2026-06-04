@@ -2,12 +2,13 @@
 
 // ── 일마감 상태 ──────────────────────────────────────────────
 const dailyState = {
-  year:           new Date().getFullYear(),
-  month:          new Date().getMonth() + 1,
-  days:           [],   // 해당 월 일별 데이터
-  purchasePrices: [],   // [{ date, fuel, price }]
-  lots:           [],   // [{ date, fuel, qty, price }]
-  bankDeposits:   {},   // { "2026-05-08": { "신한카드": 9637628, ... } }
+  year:            new Date().getFullYear(),
+  month:           new Date().getMonth() + 1,
+  days:            [],   // 해당 월 일별 데이터
+  purchasePrices:  [],   // [{ date, fuel, price }] — 직접 입력
+  lots:            [],   // [{ date, fuel, qty, price }] — 입고 이력
+  fifoDailyPrices: [],   // [{ date, 경유: {price,remaining}, 휘발유: ..., 등유: ... }] — 판매관리 시트 기준
+  bankDeposits:    {},   // { "2026-05-08": { "신한카드": 9637628, ... } }
 };
 
 // ── 상태 ─────────────────────────────────────────────────────
@@ -1357,12 +1358,14 @@ function renderDepositVerification() {
 }
 
 async function loadDailyPurchasePrices() {
-  const [pRes, lRes] = await Promise.all([
+  const [pRes, lRes, fRes] = await Promise.all([
     api('GET', '/api/daily/purchase-prices'),
     api('GET', '/api/daily/lots'),
+    api('GET', '/api/daily/fifo-prices'),
   ]);
-  if (pRes.ok) dailyState.purchasePrices = Array.isArray(pRes.prices) ? pRes.prices : [];
-  if (lRes.ok) dailyState.lots           = Array.isArray(lRes.lots)   ? lRes.lots   : [];
+  if (pRes.ok) dailyState.purchasePrices  = Array.isArray(pRes.prices)  ? pRes.prices  : [];
+  if (lRes.ok) dailyState.lots            = Array.isArray(lRes.lots)     ? lRes.lots    : [];
+  if (fRes.ok) dailyState.fifoDailyPrices = Array.isArray(fRes.prices)   ? fRes.prices  : [];
   renderPurchasePriceTable();
   renderLotTable();
 }
@@ -1487,11 +1490,25 @@ async function uploadManagement(file) {
   }
 }
 
-// 날짜 기준으로 해당 유종의 적용 단가 찾기 (입력일 이하 최신값)
+// 날짜 기준으로 해당 유종의 적용 단가 찾기
+// 우선순위: ① 판매관리 시트 일별 FIFO 단가 → ② 직접 입력 단가 이력
 function getPriceForDate(date, fuel) {
+  // ① 판매관리 시트 기반 일별 FIFO 단가 (가장 정확)
+  if (dailyState.fifoDailyPrices.length) {
+    const exact = dailyState.fifoDailyPrices.find(e => e.date === date);
+    if (exact?.[fuel]?.price) return exact[fuel].price;
+
+    // 정확한 날짜 없으면 그 이전 가장 최근 항목에서 단가 가져오기
+    const before = [...dailyState.fifoDailyPrices]
+      .filter(e => e.date <= date && e[fuel]?.price)
+      .pop();
+    if (before?.[fuel]?.price) return before[fuel].price;
+  }
+
+  // ② 직접 입력 단가 이력 (fallback)
   const list = dailyState.purchasePrices.filter(e => e.fuel === fuel && e.date <= date);
   if (!list.length) return 0;
-  return list[list.length - 1].price; // 정렬되어 있으므로 마지막이 최신
+  return list[list.length - 1].price;
 }
 
 async function addPurchasePrice() {
@@ -1558,7 +1575,7 @@ function renderDailyTable() {
   if (!tbody) return;
 
   if (!dailyState.days.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="24">BOS 데이터를 업로드하면 현황이 표시됩니다</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="25">BOS 데이터를 업로드하면 현황이 표시됩니다</td></tr>';
     updateDailySummary(null);
     return;
   }
@@ -1633,6 +1650,7 @@ function renderDailyTable() {
     return `<tr>
       <td class="daily-col-date">${md}</td>
       <td class="group-summary-cell">${totalDrum}</td>
+      <td class="group-summary-cell daily-col-profit">${pf}</td>
       <td>${litL(gL)}</td><td>${drum(gL)}</td><td>${won(gA)}</td><td>${price(gA,gL)}</td><td>${buyPr(date,'휘발유')}</td>
       <td>${litL(dL)}</td><td>${drum(dL)}</td><td>${won(dA)}</td><td>${price(dA,dL)}</td><td>${buyPr(date,'경유')}</td>
       <td>${litL(kL)}</td><td>${drum(kL)}</td><td>${won(kA)}</td><td>${price(kA,kL)}</td><td>${buyPr(date,'등유')}</td>
@@ -1657,6 +1675,7 @@ function renderDailyTable() {
   const totalRow = `<tr class="total-row">
     <td class="daily-col-date">합계</td>
     <td class="group-summary-cell">${totalAllDrum}</td>
+    <td class="group-summary-cell daily-col-profit">${totalPf}</td>
     <td>${Math.floor(totals.휘발유L).toLocaleString()}</td><td>${Math.floor(totals.휘발유L/200).toLocaleString()}</td><td>${totals.휘발유A.toLocaleString()}</td><td>-</td><td>-</td>
     <td>${Math.floor(totals.경유L).toLocaleString()}</td><td>${Math.floor(totals.경유L/200).toLocaleString()}</td><td>${totals.경유A.toLocaleString()}</td><td>-</td><td>-</td>
     <td>${Math.floor(totals.등유L).toLocaleString()}</td><td>${Math.floor(totals.등유L/200).toLocaleString()}</td><td>${totals.등유A.toLocaleString()}</td><td>-</td><td>-</td>
