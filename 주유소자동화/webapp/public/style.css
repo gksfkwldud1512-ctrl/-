@@ -891,3 +891,12 @@ th.sortable.sort-active .sort-icon { color: var(--primary); }
 }
 .kpi-label { font-size: 12px; color: #64748b; font-weight: 600; margin-bottom: 4px; }
 .kpi-value { font-size: 18px; font-weight: 700; color: #1e293b; }
+
+/* 지출관리 탭 분류 뱃지 */
+.badge-cat   { display: inline-block; padding: 1px 6px; border-radius: 9px; font-size: 11px; }
+.badge-fixed { background: #dbeafe; color: #1e40af; }
+.badge-var   { background: #dcfce7; color: #15803d; }
+
+/* btn-green */
+.btn-green { background: #16a34a; color: #fff; border: none; }
+.btn-green:hover { background: #15803d; }

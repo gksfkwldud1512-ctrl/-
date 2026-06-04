@@ -11,6 +11,9 @@ const dailyState = {
   bankDeposits:    {},   // { "2026-05-08": { "신한카드": 9637628, ... } }
 };
 
+// ── 지출관리 상태 ─────────────────────────────────────────────
+const expenseState = { year: new Date().getFullYear(), month: new Date().getMonth() + 1, list: [] };
+
 // ── 상태 ─────────────────────────────────────────────────────
 const PRINT_METHODS = ['유종별', '판매일자순', '차량별-판매일자순', '차량별-유종별'];
 
@@ -1127,6 +1130,28 @@ function initDailyUpload() {
     if (e.target.files[0]) uploadCard(e.target.files[0], 'deposit-card-label');
     e.target.value = '';
   });
+
+  // ── 지출관리 탭 연도/월 초기화 ───────────────────────────────
+  const eYr = document.getElementById('expense-yr');
+  const eMo = document.getElementById('expense-mo');
+  if (eYr && !eYr.options.length) {
+    [2025, 2026].forEach(y => {
+      const o = document.createElement('option');
+      o.value = y; o.text = y + '년'; eYr.appendChild(o);
+    });
+    eYr.value = new Date().getFullYear();
+  }
+  if (eMo && !eMo.options.length) {
+    for (let m = 1; m <= 12; m++) {
+      const o = document.createElement('option');
+      o.value = m; o.text = m + '월'; eMo.appendChild(o);
+    }
+    eMo.value = new Date().getMonth() + 1;
+  }
+  document.getElementById('bank-expense-input')?.addEventListener('change', e => {
+    if (e.target.files[0]) uploadBankExpenses(e.target.files[0]);
+    e.target.value = '';
+  });
 }
 
 function switchToUploadedMonth(dateStr) {
@@ -2106,5 +2131,145 @@ async function addExpense() {
     toast('✅ 지출 추가 완료', 'success');
     document.getElementById('exp-amount').value = '';
     loadSummary();
+  }
+}
+
+// ── 지출관리 탭 ──────────────────────────────────────────────
+
+async function loadExpenseTab() {
+  expenseState.year  = parseInt(document.getElementById('expense-yr').value);
+  expenseState.month = parseInt(document.getElementById('expense-mo').value);
+  const ym = `${expenseState.year}-${String(expenseState.month).padStart(2, '0')}`;
+  const res = await api('GET', `/api/expenses?month=${ym}`);
+  if (res.ok) {
+    expenseState.list = res.expenses || [];
+    renderExpenseTab();
+  }
+}
+
+function renderExpenseTab() {
+  const list = expenseState.list;
+  document.getElementById('expense-tab-month-label').textContent = `${expenseState.year}년 ${expenseState.month}월`;
+  document.getElementById('expense-detail-count').textContent    = `${list.length}건`;
+
+  const summaryBody = document.getElementById('expense-summary-body');
+  if (!list.length) {
+    summaryBody.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;">해당 월 지출 내역이 없습니다.</div>';
+    document.getElementById('expense-detail-tbody').innerHTML =
+      '<tr class="empty-row"><td colspan="6">지출 내역이 없습니다</td></tr>';
+    return;
+  }
+
+  // 소분류별 합산
+  const bySubCat = {};
+  let grandTotal = 0;
+  for (const e of list) {
+    const key = `${e.category}||${e.subCategory}`;
+    bySubCat[key] = (bySubCat[key] || 0) + (e.amount || 0);
+    grandTotal += e.amount || 0;
+  }
+
+  // 대분류 그룹으로 정렬 (고정비 먼저)
+  const sorted = Object.entries(bySubCat).sort((a, b) => {
+    const [ca] = a[0].split('||');
+    const [cb] = b[0].split('||');
+    if (ca !== cb) return ca === '고정비' ? -1 : 1;
+    return b[1] - a[1];
+  });
+
+  let curCat = '';
+  let rows = '';
+  let catTotal = 0;
+
+  for (const [key, amt] of sorted) {
+    const [cat, sub] = key.split('||');
+    if (cat !== curCat) {
+      if (curCat) {
+        rows += `<tr style="font-weight:600;background:#f1f5f9;">
+          <td colspan="2">${curCat} 소계</td>
+          <td style="text-align:right;font-weight:600;">${catTotal.toLocaleString()}원</td>
+        </tr>`;
+      }
+      curCat = cat; catTotal = 0;
+    }
+    catTotal += amt;
+    rows += `<tr>
+      <td style="padding-left:20px;color:#64748b;">${cat}</td>
+      <td>${sub}</td>
+      <td style="text-align:right;">${amt.toLocaleString()}원</td>
+    </tr>`;
+  }
+  if (curCat) {
+    rows += `<tr style="font-weight:600;background:#f1f5f9;">
+      <td colspan="2">${curCat} 소계</td>
+      <td style="text-align:right;font-weight:600;">${catTotal.toLocaleString()}원</td>
+    </tr>`;
+  }
+
+  summaryBody.innerHTML = `
+    <table style="font-size:13px;">
+      <thead><tr><th>대분류</th><th>소분류</th><th class="col-num">금액</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr style="font-weight:700;border-top:2px solid #e2e8f0;">
+        <td colspan="2">합계</td>
+        <td style="text-align:right;">${grandTotal.toLocaleString()}원</td>
+      </tr></tfoot>
+    </table>`;
+
+  // 상세 내역 테이블
+  const detailRows = [...list]
+    .sort((a, b) => (a.date || a.month || '').localeCompare(b.date || b.month || ''))
+    .map((e, i) => `<tr>
+      <td>${e.date || e.month}</td>
+      <td><span class="badge-cat ${e.category === '고정비' ? 'badge-fixed' : 'badge-var'}">${e.category}</span></td>
+      <td>${e.subCategory}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.vendor}">${e.vendor}</td>
+      <td style="text-align:right;">${(e.amount || 0).toLocaleString()}원</td>
+      <td><button class="btn-sm btn-danger" onclick="deleteExpenseItem(${i})">삭제</button></td>
+    </tr>`).join('');
+
+  document.getElementById('expense-detail-tbody').innerHTML = detailRows ||
+    '<tr class="empty-row"><td colspan="6">내역 없음</td></tr>';
+}
+
+async function deleteExpenseItem(idx) {
+  const e = expenseState.list[idx];
+  if (!e) return;
+  if (!confirm(`${e.vendor} ${(e.amount || 0).toLocaleString()}원을 삭제하시겠습니까?`)) return;
+  const ym  = `${expenseState.year}-${String(expenseState.month).padStart(2, '0')}`;
+  const res = await api('DELETE', '/api/expenses/delete', {
+    month:  ym,
+    date:   e.date  || '',
+    vendor: e.vendor,
+    amount: e.amount,
+  });
+  if (res.ok) {
+    expenseState.list.splice(idx, 1);
+    renderExpenseTab();
+    toast('삭제 완료', 'success');
+  } else {
+    toast('삭제 실패: ' + (res.error || ''), 'error');
+  }
+}
+
+async function uploadBankExpenses(file) {
+  const label = document.getElementById('bank-expense-label');
+  label.textContent = `업로드 중: ${file.name}`;
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const res  = await fetch('/api/upload-bank-expenses', { method: 'POST', body: form });
+    const data = await res.json();
+    if (data.ok) {
+      label.textContent = `✅ ${data.count}건 (${(data.months || []).join(', ')})`;
+      toast(`✅ 수시입출예금 ${data.count}건 지출 임포트 완료`, 'success');
+      loadExpenseTab();
+    } else {
+      label.textContent = '업로드 실패';
+      toast(`오류: ${data.error}`, 'error');
+    }
+  } catch {
+    label.textContent = '서버 연결 오류';
+    toast('서버 연결 오류', 'error');
   }
 }

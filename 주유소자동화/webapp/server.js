@@ -669,6 +669,43 @@ app.post('/api/upload-expenses', upload.single('file'), (req, res) => {
   }
 });
 
+// ── 수시입출예금 업로드 → 지출 자동 분류 ────────────────────────
+app.post('/api/upload-bank-expenses', upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) return res.json({ ok: false, error: '파일이 없습니다.' });
+    const { parseBankExpenses } = require('./lib/bankExpenseParser');
+    const newItems = parseBankExpenses(req.file.path);
+
+    // 영향을 받는 월 목록
+    const affectedMonths = [...new Set(newItems.map(e => e.month))];
+
+    // expenses.json 에서 source==='bank' 이고 해당 월인 것 제거 후 새 항목 추가
+    let list = readJSON(EXPENSES_FILE, []);
+    list = list.filter(e => !(e.source === 'bank' && affectedMonths.includes(e.month)));
+    list = list.concat(newItems);
+    writeJSON(EXPENSES_FILE, list);
+
+    res.json({ ok: true, count: newItems.length, months: affectedMonths });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── 지출 항목 삭제 (month+date+vendor+amount 기준) ───────────────
+app.delete('/api/expenses/delete', (req, res) => {
+  const { month, date, vendor, amount } = req.body;
+  const list = readJSON(EXPENSES_FILE, []);
+  const idx  = list.findIndex(e =>
+    e.month === month &&
+    (e.date || '') === (date || '') &&
+    e.vendor === vendor &&
+    e.amount == amount  // 숫자/문자열 모두 허용
+  );
+  if (idx >= 0) list.splice(idx, 1);
+  writeJSON(EXPENSES_FILE, list);
+  res.json({ ok: true });
+});
+
 // 수동 지출 추가/삭제
 app.post('/api/expenses', (req, res) => {
   const { month, category, subCategory, vendor, amount } = req.body;
