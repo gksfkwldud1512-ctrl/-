@@ -857,3 +857,25 @@ th.sortable.sort-active .sort-icon { color: var(--primary); }
   background: #f8fafc;
   border-top: 1px solid #e2e8f0;
 }
+
+/* 카드대사 조정 배지 */
+.btn-match-adj {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn-match-adj:hover { background: #bbf7d0; }
+
+/* 일별 요약 컬럼 */
+.group-summary   { background: #e0f2fe !important; color: #0369a1 !important; }
+.group-summary-cell { background: #f0f9ff; text-align: right; font-weight: 700; color: #0369a1; white-space: nowrap; }
+
+/* 일마감 테이블 전체 폭 */
+#daily-table { min-width: 100%; font-size: 11px; }
+#daily-table th, #daily-table td { padding: 5px 6px; }
+.daily-table-wrap { overflow-x: auto; }

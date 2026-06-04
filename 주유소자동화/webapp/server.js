@@ -639,6 +639,34 @@ app.post('/api/upload-management', upload.single('file'), (req, res) => {
   }
 });
 
+// ── 카드 차이 조정 (사유 등록) ───────────────────────────────
+app.post('/api/daily/:date/card-adjustments', (req, res) => {
+  const { date } = req.params;
+  const { reason, amount, cardCompany, note } = req.body;
+  if (!reason || !amount) return res.json({ ok: false, error: '사유와 금액을 입력하세요.' });
+  const existing = readJSON(dailyFile(date), null);
+  if (!existing) return res.json({ ok: false, error: '데이터 없음' });
+  if (!existing.cardAdjustments) existing.cardAdjustments = [];
+  existing.cardAdjustments.push({
+    reason,
+    amount:      +amount,
+    cardCompany: cardCompany || '',
+    note:        note || '',
+    createdAt:   new Date().toISOString().slice(0, 10),
+  });
+  writeJSON(dailyFile(date), existing);
+  res.json({ ok: true, adjustments: existing.cardAdjustments });
+});
+
+app.delete('/api/daily/:date/card-adjustments/:idx', (req, res) => {
+  const { date, idx } = req.params;
+  const existing = readJSON(dailyFile(date), null);
+  if (!existing?.cardAdjustments) return res.json({ ok: false, error: '데이터 없음' });
+  existing.cardAdjustments.splice(+idx, 1);
+  writeJSON(dailyFile(date), existing);
+  res.json({ ok: true, adjustments: existing.cardAdjustments });
+});
+
 // 유외상품 원가 수기 저장
 app.post('/api/daily/:date/other-cost', (req, res) => {
   const { date }   = req.params;

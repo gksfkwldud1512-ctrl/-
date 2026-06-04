@@ -17,8 +17,16 @@
       <button class="main-tab active" data-group="monthly">월마감</button>
     </nav>
   </div>
+  <!-- subnav: 일마감 and 월마감 groups both use this -->
   <div class="subnav" id="subnav">
-    <div class="subnav-inner">
+    <!-- 일마감 subnav -->
+    <div class="subnav-inner" id="subnav-daily" style="display:none;">
+      <button class="tab-btn active" data-tab="daily-main">일마감</button>
+      <button class="tab-btn" data-tab="daily-deposit">입금 검증</button>
+      <button class="tab-btn" data-tab="daily-expense">지출관리</button>
+    </div>
+    <!-- 월마감 subnav -->
+    <div class="subnav-inner" id="subnav-monthly">
       <button class="tab-btn active" data-tab="statements">거래명세서 발행</button>
       <button class="tab-btn" data-tab="customers">고객 관리</button>
       <button class="tab-btn" data-tab="email">메일 발송</button>
@@ -43,14 +51,8 @@
   <!-- ───── 대분류: 일마감 ───── -->
   <section id="group-daily" class="group-content">
 
-    <!-- 일마감 내부 서브탭 -->
-    <div class="daily-subnav">
-      <button id="daily-sub-main-btn" class="daily-sub-btn active" onclick="switchDailyTab('main')">일마감</button>
-      <button id="daily-sub-deposit-btn" class="daily-sub-btn" onclick="switchDailyTab('deposit')">입금내역 검증</button>
-    </div>
-
     <!-- ── 일마감 탭 ── -->
-    <div id="daily-tab-main">
+    <div id="tab-daily-main" class="tab-content active">
 
     <!-- 툴바 -->
     <div class="toolbar">
@@ -205,6 +207,7 @@
           <thead>
             <tr>
               <th rowspan="2" class="daily-col-date">날짜</th>
+              <th colspan="3" class="group-summary">요약</th>
               <th colspan="5" class="group-gasoline">휘발유</th>
               <th colspan="5" class="group-diesel">경유</th>
               <th colspan="5" class="group-kerosene">등유</th>
@@ -215,6 +218,7 @@
               <th rowspan="2" class="group-match">카드대사</th>
             </tr>
             <tr>
+              <th class="group-summary">경유(드럼)</th><th class="group-summary">휘발유(드럼)</th><th class="group-summary">등유(드럼)</th>
               <th class="group-gasoline">L</th><th class="group-gasoline">드럼</th><th class="group-gasoline">매출</th><th class="group-gasoline">판매가</th><th class="group-gasoline">매입가</th>
               <th class="group-diesel">L</th><th class="group-diesel">드럼</th><th class="group-diesel">매출</th><th class="group-diesel">판매가</th><th class="group-diesel">매입가</th>
               <th class="group-kerosene">L</th><th class="group-kerosene">드럼</th><th class="group-kerosene">매출</th><th class="group-kerosene">판매가</th><th class="group-kerosene">매입가</th>
@@ -225,15 +229,15 @@
           </thead>
           <tbody id="daily-tbody">
             <tr class="empty-row">
-              <td colspan="23">BOS 데이터를 업로드하면 현황이 표시됩니다</td>
+              <td colspan="26">BOS 데이터를 업로드하면 현황이 표시됩니다</td>
             </tr>
           </tbody>
         </table>
       </div>
-    </div><!-- /daily-tab-main -->
+    </div><!-- /tab-daily-main -->
 
-    <!-- ── 입금내역 검증 탭 ── -->
-    <div id="daily-tab-deposit" style="display:none;">
+    <!-- ── 입금 검증 탭 ── -->
+    <div id="tab-daily-deposit" class="tab-content">
 
       <!-- 계좌 업로드 카드 -->
       <div class="card">
@@ -265,7 +269,17 @@
         </div>
       </div>
 
-    </div><!-- /daily-tab-deposit -->
+    </div><!-- /tab-daily-deposit -->
+
+    <!-- ── 지출관리 탭 ── -->
+    <div id="tab-daily-expense" class="tab-content">
+      <div class="card placeholder-card">
+        <div class="placeholder-icon">💰</div>
+        <h2>지출관리</h2>
+        <p>일별 지출 내역 관리 기능이 이곳에 표시됩니다.</p>
+        <p class="placeholder-sub">준비 중입니다.</p>
+      </div>
+    </div>
 
   </section>
 

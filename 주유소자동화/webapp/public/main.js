@@ -112,21 +112,50 @@ function switchGroup(group) {
   document.querySelectorAll('.main-tab').forEach(b => b.classList.remove('active'));
   document.querySelector(`.main-tab[data-group="${group}"]`).classList.add('active');
 
-  const subnav = document.getElementById('subnav');
+  const subnav        = document.getElementById('subnav');
+  const subnavDaily   = document.getElementById('subnav-daily');
+  const subnavMonthly = document.getElementById('subnav-monthly');
 
   if (group === 'monthly') {
     subnav.classList.remove('hidden');
+    if (subnavDaily)   subnavDaily.style.display   = 'none';
+    if (subnavMonthly) subnavMonthly.style.display  = '';
     document.querySelectorAll('.group-content').forEach(s => s.classList.remove('active'));
-    const activeBtn = document.querySelector('.tab-btn.active');
+    // 일마감 tab-content도 비활성화
+    document.querySelectorAll('#group-daily .tab-content').forEach(t => t.classList.remove('active'));
+    const activeBtn = document.querySelector('#subnav-monthly .tab-btn.active');
     const activeTab = activeBtn ? activeBtn.dataset.tab : 'statements';
     switchSubTab(activeTab);
+  } else if (group === 'daily') {
+    subnav.classList.remove('hidden');
+    if (subnavMonthly) subnavMonthly.style.display = 'none';
+    if (subnavDaily)   subnavDaily.style.display   = '';
+    document.querySelectorAll('.group-content').forEach(s => s.classList.remove('active'));
+    document.getElementById('group-daily').classList.add('active');
+    // 활성 탭 또는 기본값
+    const activeBtn = document.querySelector('#subnav-daily .tab-btn.active');
+    const activeTab = activeBtn ? activeBtn.dataset.tab : 'daily-main';
+    switchDailySubTab(activeTab);
+    loadDailyMonth();
   } else {
     subnav.classList.add('hidden');
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.group-content').forEach(s => s.classList.remove('active'));
     document.getElementById(`group-${group}`).classList.add('active');
-    if (group === 'daily') loadDailyMonth();
   }
+}
+
+function switchDailySubTab(tab) {
+  // subnav-daily 버튼 활성화
+  document.querySelectorAll('#subnav-daily .tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+  // 탭 콘텐츠 표시/숨김
+  ['daily-main', 'daily-deposit', 'daily-expense'].forEach(t => {
+    const el = document.getElementById(`tab-${t}`);
+    if (el) el.classList.toggle('active', t === tab);
+  });
+  if (tab === 'daily-deposit') renderDepositVerification();
 }
 
 function switchSubTab(tab) {
@@ -1191,14 +1220,6 @@ function calcBankMatch(day) {
   return { errors, hasError: errors.length > 0 };
 }
 
-// ── 일마감 내부 서브탭 ───────────────────────────────────────
-function switchDailyTab(tab) {
-  document.getElementById('daily-tab-main').style.display    = tab === 'main'    ? '' : 'none';
-  document.getElementById('daily-tab-deposit').style.display = tab === 'deposit' ? '' : 'none';
-  document.getElementById('daily-sub-main-btn').classList.toggle('active',    tab === 'main');
-  document.getElementById('daily-sub-deposit-btn').classList.toggle('active', tab === 'deposit');
-  if (tab === 'deposit') renderDepositVerification();
-}
 
 // ── 입금내역 검증 렌더링 ─────────────────────────────────────
 function renderDepositVerification() {
@@ -1528,7 +1549,7 @@ function renderDailyTable() {
   if (!tbody) return;
 
   if (!dailyState.days.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="23">BOS 데이터를 업로드하면 현황이 표시됩니다</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="26">BOS 데이터를 업로드하면 현황이 표시됩니다</td></tr>';
     updateDailySummary(null);
     return;
   }
@@ -1571,10 +1592,23 @@ function renderDailyTable() {
     const bm     = calcBankMatch(day);
     const hasBankData = Object.keys(dailyState.bankDeposits).length > 0 && day.card?.depositExpected;
 
-    const cardBadge = !m ? '' :
-      m.totalMatch
-        ? `<span class="badge-match-ok">✅</span>`
-        : `<button class="btn-match-err" onclick="showMatchingModal('${date}')">⚠ ${m.errors.length}건</button>`;
+    // 카드대사 배지 — 조정 후 남은 차이 계산
+    let cardBadge = '';
+    if (m) {
+      if (m.totalMatch) {
+        cardBadge = `<span class="badge-match-ok">✅</span>`;
+      } else {
+        const adjs = day.cardAdjustments || [];
+        const adjTotal = adjs.reduce((s, a) => s + (a.amount || 0), 0);
+        const remaining = Math.abs(m.totalDiff) - adjTotal;
+        if (remaining <= 0 && adjs.length > 0) {
+          cardBadge = `<button class="btn-match-adj" onclick="showMatchingModal('${date}')">✅ 조정</button>`;
+        } else {
+          const diffStr = m.totalDiff ? ` ${Math.abs(m.totalDiff).toLocaleString()}원` : '';
+          cardBadge = `<button class="btn-match-err" onclick="showMatchingModal('${date}')">⚠${diffStr}</button>`;
+        }
+      }
+    }
 
     const bankBadge = !hasBankData ? '' :
       (!bm || !bm.hasError)
@@ -1583,8 +1617,16 @@ function renderDailyTable() {
 
     const matchBadge = `${cardBadge}${bankBadge ? '<br>' + bankBadge : ''}`;
 
+    // 요약 컬럼: 경유드럼 / 휘발유드럼 / 등유드럼
+    const dDrum = dL > 0 ? Math.floor(dL/200).toLocaleString() : '-';
+    const gDrum = gL > 0 ? Math.floor(gL/200).toLocaleString() : '-';
+    const kDrum = kL > 0 ? Math.floor(kL/200).toLocaleString() : '-';
+
     return `<tr>
       <td class="daily-col-date">${md}</td>
+      <td class="group-summary-cell">${dDrum}</td>
+      <td class="group-summary-cell">${gDrum}</td>
+      <td class="group-summary-cell">${kDrum}</td>
       <td>${litL(gL)}</td><td>${drum(gL)}</td><td>${won(gA)}</td><td>${price(gA,gL)}</td><td>${buyPr(date,'휘발유')}</td>
       <td>${litL(dL)}</td><td>${drum(dL)}</td><td>${won(dA)}</td><td>${price(dA,dL)}</td><td>${buyPr(date,'경유')}</td>
       <td>${litL(kL)}</td><td>${drum(kL)}</td><td>${won(kA)}</td><td>${price(kA,kL)}</td><td>${buyPr(date,'등유')}</td>
@@ -1605,6 +1647,9 @@ function renderDailyTable() {
 
   const totalRow = `<tr class="total-row">
     <td class="daily-col-date">합계</td>
+    <td class="group-summary-cell">${Math.floor(totals.경유L/200).toLocaleString()}</td>
+    <td class="group-summary-cell">${Math.floor(totals.휘발유L/200).toLocaleString()}</td>
+    <td class="group-summary-cell">${Math.floor(totals.등유L/200).toLocaleString()}</td>
     <td>${Math.floor(totals.휘발유L).toLocaleString()}</td><td>${Math.floor(totals.휘발유L/200).toLocaleString()}</td><td>${totals.휘발유A.toLocaleString()}</td><td>-</td><td>-</td>
     <td>${Math.floor(totals.경유L).toLocaleString()}</td><td>${Math.floor(totals.경유L/200).toLocaleString()}</td><td>${totals.경유A.toLocaleString()}</td><td>-</td><td>-</td>
     <td>${Math.floor(totals.등유L).toLocaleString()}</td><td>${Math.floor(totals.등유L/200).toLocaleString()}</td><td>${totals.등유A.toLocaleString()}</td><td>-</td><td>-</td>
@@ -1636,10 +1681,14 @@ async function saveOtherCost(date, value) {
 }
 
 // ── 카드 대사 모달 ───────────────────────────────────────────
-function showMatchingModal(date) {
+function buildMatchingModal(date) {
   const day = dailyState.days.find(d => d.date === date);
-  if (!day) return;
-  const m = day.matching;
+  if (!day) return '';
+  const m    = day.matching;
+  const adjs = day.cardAdjustments || [];
+  const adjTotal   = adjs.reduce((s, a) => s + (a.amount || 0), 0);
+  const remaining  = m ? Math.abs(m.totalDiff) - adjTotal : 0;
+  const isResolved = m && !m.totalMatch && remaining <= 0 && adjs.length > 0;
 
   // ── 카드 대사 섹션 (BOS ↔ 이지샵) ───────────────────────────
   let cardMatchSection = '';
@@ -1681,73 +1730,148 @@ function showMatchingModal(date) {
       </table>`;
     });
 
+    // ── 카드사별 차이 요약 테이블 ──────────────────────────────
+    const byCo = {};
+    for (const e of m.errors) {
+      const co = e.cardCompany || '기타';
+      if (!byCo[co]) byCo[co] = { easyOnly: 0, bosOnly: 0, mismatch: 0 };
+      if (e.type === 'easy_only')       byCo[co].easyOnly  += e.easyAmount || 0;
+      else if (e.type === 'bos_only')   byCo[co].bosOnly   += e.bosAmount  || 0;
+      else if (e.type === 'amount_mismatch') {
+        const d = (e.easyAmount || 0) - (e.bosAmount || 0);
+        byCo[co].mismatch += d;
+      }
+    }
+    let coRows = '';
+    for (const [co, v] of Object.entries(byCo)) {
+      const diff = v.easyOnly - v.bosOnly + v.mismatch;
+      coRows += `<tr>
+        <td><strong>${esc(co)}</strong></td>
+        <td style="text-align:right;">${v.easyOnly > 0 ? v.easyOnly.toLocaleString()+'원' : '-'}</td>
+        <td style="text-align:right;">${v.bosOnly > 0  ? v.bosOnly.toLocaleString()+'원'  : '-'}</td>
+        <td style="text-align:right;" class="price-diff">${diff > 0 ? '+' : ''}${diff.toLocaleString()}원</td>
+      </tr>`;
+    }
+
+    const coTable = Object.keys(byCo).length ? `
+      <p class="error-section-title" style="margin-top:12px;">카드사별 차이 요약</p>
+      <table class="error-table" style="margin-bottom:4px;">
+        <thead><tr><th>카드사</th><th>이지샵만</th><th>BOS만</th><th>차액</th></tr></thead>
+        <tbody>${coRows}</tbody>
+      </table>` : '';
+
     if (!errSections) {
       errSections = '<p style="color:#15803d; font-weight:600; margin-top:12px;">✅ 모든 카드 거래가 정상 매칭됩니다.</p>';
     }
 
+    // ── 차이 조정 섹션 ──────────────────────────────────────
+    const adjList = adjs.map((a, i) => `<tr>
+      <td>${esc(a.cardCompany || '-')}</td>
+      <td>${esc(a.reason)}</td>
+      <td style="text-align:right;">${a.amount.toLocaleString()}원</td>
+      <td style="color:#64748b;font-size:11px;">${a.createdAt}</td>
+      <td><button class="btn-sm btn-danger" onclick="deleteCardAdj('${date}',${i})">삭제</button></td>
+    </tr>`).join('');
+
+    const remainingColor = remaining <= 0 ? '#16a34a' : '#dc2626';
+    const adjSection = !m.totalMatch ? `
+      <div style="margin-top:18px;padding:12px;background:#fefce8;border:1px solid #fde047;border-radius:6px;">
+        <p style="font-weight:700;margin:0 0 8px;color:#854d0e;">📝 차이 사유 등록</p>
+        <p style="font-size:12px;margin:0 0 10px;color:#92400e;">
+          총 차이: <strong>${Math.abs(m.totalDiff).toLocaleString()}원</strong>
+          | 조정된 금액: <strong>${adjTotal.toLocaleString()}원</strong>
+          | 남은 차이: <strong style="color:${remainingColor};">${remaining.toLocaleString()}원</strong>
+          ${remaining <= 0 && adjs.length > 0 ? '<span style="color:#16a34a;margin-left:8px;">✅ 처리 완료</span>' : ''}
+        </p>
+        ${adjs.length ? `<table class="error-table" style="margin-bottom:10px;">
+          <thead><tr><th>카드사</th><th>사유</th><th style="text-align:right;">금액</th><th>등록일</th><th></th></tr></thead>
+          <tbody>${adjList}</tbody>
+        </table>` : ''}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <label style="font-size:11px;color:#64748b;">카드사</label>
+            <select id="adj-card-co" style="padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;">
+              <option value="">선택</option>
+              ${[...new Set(m.errors.map(e=>e.cardCompany).filter(Boolean))].map(co=>`<option>${esc(co)}</option>`).join('')}
+              <option value="기타">기타</option>
+            </select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px;">
+            <label style="font-size:11px;color:#64748b;">사유 <span style="color:#dc2626;">*</span></label>
+            <input id="adj-reason" type="text" placeholder="예) 카드단말기 결제 (연료 무관)" style="padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <label style="font-size:11px;color:#64748b;">금액 <span style="color:#dc2626;">*</span></label>
+            <input id="adj-amount" type="number" placeholder="금액" style="width:110px;padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;">
+          </div>
+          <button class="btn-primary" style="height:28px;font-size:12px;" onclick="addCardAdj('${date}')">등록</button>
+        </div>
+      </div>` : '';
+
     cardMatchSection = `
       <div class="${summaryClass}">
-        ${summaryIcon} BOS 합계 <strong>${m.bosTotal.toLocaleString()}원</strong>
-        &nbsp;/&nbsp; 이지샵 합계 <strong>${m.easyTotal.toLocaleString()}원</strong>
+        ${summaryIcon} BOS <strong>${m.bosTotal.toLocaleString()}원</strong>
+        &nbsp;/&nbsp; 이지샵 <strong>${m.easyTotal.toLocaleString()}원</strong>
         ${totalDiffStr}
+        ${isResolved ? '&nbsp;<span style="color:#16a34a;font-size:12px;">✅ 사유 처리됨</span>' : ''}
       </div>
-      ${errSections}`;
+      ${coTable}
+      <details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12px;color:#64748b;">상세 거래 오류 보기</summary>${errSections}</details>
+      ${adjSection}`;
   }
 
-  // ── 은행 입금 대사 섹션 ──────────────────────────────────────
-  const bm = calcBankMatch(day);
-  let bankSection = '';
-  if (!day.card?.depositExpected) {
-    bankSection = '<p class="error-section-title" style="margin-top:18px;">🏦 입금 대사</p><p style="color:#94a3b8; font-size:12px;">이지샵 데이터를 먼저 업로드하세요.</p>';
-  } else if (!Object.keys(dailyState.bankDeposits).length) {
-    bankSection = '<p class="error-section-title" style="margin-top:18px;">🏦 입금 대사</p><p style="color:#94a3b8; font-size:12px;">계좌 입금내역을 업로드하면 대사 결과를 확인할 수 있습니다.</p>';
-  } else {
-    const rows = [];
-    const expected = day.card.depositExpected;
-    for (const [depDate, cards] of Object.entries(expected)) {
-      const actual = (dailyState.bankDeposits || {})[depDate] || {};
-      const allCards = new Set([...Object.keys(cards), ...Object.keys(actual)]);
-      for (const cardCo of allCards) {
-        const exp = cards[cardCo] || 0;
-        const act = actual[cardCo] || 0;
-        const diff = act - exp;
-        const ok = exp === act;
-        rows.push(`<tr>
-          <td>${depDate}</td>
-          <td>${esc(cardCo)}</td>
-          <td>${exp.toLocaleString()}원</td>
-          <td>${act > 0 ? act.toLocaleString() + '원' : '<span style="color:#dc2626">미입금</span>'}</td>
-          <td class="${ok ? '' : 'price-diff'}">${ok ? '✅' : (diff > 0 ? '+' : '') + diff.toLocaleString() + '원'}</td>
-        </tr>`);
-      }
-    }
-    const bmIcon = (!bm || !bm.hasError) ? '✅ 전체 일치' : `⚠ ${bm.errors.length}건 불일치`;
-    bankSection = `<p class="error-section-title" style="margin-top:18px;">🏦 입금 대사 — ${bmIcon}</p>
-    <table class="error-table">
-      <thead><tr><th>입금예정일</th><th>카드사</th><th>예정금액</th><th>실제입금</th><th>차액</th></tr></thead>
-      <tbody>${rows.join('')}</tbody>
-    </table>`;
-  }
-
-  const html = `
+  return `
     <div class="modal-overlay" id="matching-modal" onclick="if(event.target===this)closeMatchingModal()">
-      <div class="modal-box" style="width:700px;">
+      <div class="modal-box" style="width:720px;">
         <div class="modal-head">📋 대사 현황 — <span>${date}</span></div>
         <div class="modal-body">
           <p class="error-section-title">💳 카드 대사 (BOS ↔ 이지샵)</p>
           ${cardMatchSection}
-          ${bankSection}
         </div>
         <div class="modal-foot">
           <button class="btn-primary" onclick="closeMatchingModal()">닫기</button>
         </div>
       </div>
     </div>`;
-  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function showMatchingModal(date) {
+  const html = buildMatchingModal(date);
+  if (html) document.body.insertAdjacentHTML('beforeend', html);
 }
 
 function closeMatchingModal() {
   document.getElementById('matching-modal')?.remove();
+}
+
+async function addCardAdj(date) {
+  const reason    = document.getElementById('adj-reason')?.value?.trim();
+  const amount    = Number(document.getElementById('adj-amount')?.value);
+  const cardCo    = document.getElementById('adj-card-co')?.value;
+  if (!reason) return toast('사유를 입력하세요.', 'warn');
+  if (!amount) return toast('금액을 입력하세요.', 'warn');
+  const res = await api('POST', `/api/daily/${date}/card-adjustments`, { reason, amount, cardCompany: cardCo });
+  if (res.ok) {
+    const idx = dailyState.days.findIndex(d => d.date === date);
+    if (idx >= 0) dailyState.days[idx].cardAdjustments = res.adjustments;
+    closeMatchingModal();
+    showMatchingModal(date);
+    renderDailyTable();
+    toast('✅ 조정 내역 등록 완료', 'success');
+  } else {
+    toast(`오류: ${res.error}`, 'error');
+  }
+}
+
+async function deleteCardAdj(date, idx) {
+  const res = await api('DELETE', `/api/daily/${date}/card-adjustments/${idx}`);
+  if (res.ok) {
+    const di = dailyState.days.findIndex(d => d.date === date);
+    if (di >= 0) dailyState.days[di].cardAdjustments = res.adjustments;
+    closeMatchingModal();
+    showMatchingModal(date);
+    renderDailyTable();
+  }
 }
 
 // ── 오류 상세 모달 ───────────────────────────────────────────
