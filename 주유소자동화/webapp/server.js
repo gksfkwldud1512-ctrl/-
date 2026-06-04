@@ -610,22 +610,35 @@ app.delete('/api/daily/lots', (req, res) => {
   res.json({ ok: true, lots, prices: readJSON(PURCHASE_PRICES_FILE, []) });
 });
 
-// ── 마감자료 Excel 업로드 (FIFO 단가 임포트) ──────────────────
+// ── 마감자료 Excel 업로드 (FIFO 단가 + 입고 이력 임포트) ─────
 app.post('/api/upload-management', upload.single('file'), (req, res) => {
   try {
     if (!req.file) return res.json({ ok: false, error: '파일이 없습니다.' });
-    const { parseSalesMgmt } = require('./lib/managementParser');
-    const changes = parseSalesMgmt(req.file.path);
-    // 입고 이력 없이 직접 단가 변경일 임포트
-    const list = readJSON(PURCHASE_PRICES_FILE, []);
-    for (const ch of changes) {
-      const idx = list.findIndex(e => e.date === ch.date && e.fuel === ch.fuel);
-      if (idx >= 0) list[idx].price = ch.price;
-      else list.push({ date: ch.date, fuel: ch.fuel, price: ch.price });
+    const { parseSalesMgmt, extractLots } = require('./lib/managementParser');
+
+    // 1) 입고 이력(lots) 추출 → purchase_lots.json 저장
+    const newLots = extractLots(req.file.path);
+    writeJSON(PURCHASE_LOTS_FILE, newLots);
+
+    // 2) FIFO 재계산 → purchase_prices.json 갱신
+    recomputeFifoPrices();
+
+    // 3) lots가 없으면 단가 변경일만 직접 임포트 (fallback)
+    const currentLots = readJSON(PURCHASE_LOTS_FILE, []);
+    if (!currentLots.length) {
+      const changes = parseSalesMgmt(req.file.path);
+      const list = readJSON(PURCHASE_PRICES_FILE, []);
+      for (const ch of changes) {
+        const idx = list.findIndex(e => e.date === ch.date && e.fuel === ch.fuel);
+        if (idx >= 0) list[idx].price = ch.price;
+        else list.push({ date: ch.date, fuel: ch.fuel, price: ch.price });
+      }
+      list.sort((a, b) => a.date.localeCompare(b.date) || a.fuel.localeCompare(b.fuel));
+      writeJSON(PURCHASE_PRICES_FILE, list);
     }
-    list.sort((a, b) => a.date.localeCompare(b.date) || a.fuel.localeCompare(b.fuel));
-    writeJSON(PURCHASE_PRICES_FILE, list);
-    res.json({ ok: true, count: changes.length, prices: list });
+
+    const finalPrices = readJSON(PURCHASE_PRICES_FILE, []);
+    res.json({ ok: true, lotCount: newLots.length, priceCount: finalPrices.length, lots: newLots, prices: finalPrices });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }

@@ -1290,12 +1290,13 @@ async function uploadManagement(file) {
     const data = await res.json();
     if (data.ok) {
       dailyState.purchasePrices = data.prices;
+      dailyState.lots           = data.lots || [];
       renderPurchasePriceTable();
+      renderLotTable();
       renderDailyTable();
-      label.textContent = `✅ ${data.count}건 단가 변경일 임포트 완료`;
-      toast(`✅ 마감자료 임포트: ${data.count}건 단가 변경일 반영`, 'success');
-      // 직접 입력 탭으로 전환하여 결과 확인
-      switchPpTab('prices');
+      label.textContent = `✅ 입고 ${data.lotCount}건 / 단가변경 ${data.priceCount}건 임포트 완료`;
+      toast(`✅ 마감자료 임포트: 입고이력 ${data.lotCount}건, 적용단가 ${data.priceCount}건 반영`, 'success');
+      switchPpTab('lots');
     } else {
       label.textContent = '업로드 실패';
       toast(`오류: ${data.error}`, 'error');
