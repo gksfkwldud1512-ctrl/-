@@ -169,6 +169,7 @@ function switchDailySubTab(tab) {
     if (el) el.classList.toggle('active', t === tab);
   });
   if (tab === 'daily-deposit') renderDepositVerification();
+  if (tab === 'daily-expense') loadExpenseTab();
 }
 
 function switchSubTab(tab) {
