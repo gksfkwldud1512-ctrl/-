@@ -2008,6 +2008,17 @@ function initSummaryYearMonth() {
     if (e.target.files[0]) uploadExpenses(e.target.files[0]);
     e.target.value = '';
   });
+
+  // 연간 보고서 연도 selector 초기화
+  const rptYr = document.getElementById('report-year');
+  if (rptYr && !rptYr.options.length) {
+    for (let y = now.getFullYear() - 1; y <= now.getFullYear(); y++) {
+      const o = document.createElement('option');
+      o.value = y; o.textContent = y + '년';
+      if (y === now.getFullYear()) o.selected = true;
+      rptYr.appendChild(o);
+    }
+  }
 }
 
 async function loadSummary() {
@@ -2272,4 +2283,130 @@ async function uploadBankExpenses(file) {
     label.textContent = '서버 연결 오류';
     toast('서버 연결 오류', 'error');
   }
+}
+
+// ── 연간 결과보고서 ──────────────────────────────────────────
+async function loadAnnualReport() {
+  const year = document.getElementById('report-year')?.value || new Date().getFullYear();
+  const body = document.getElementById('annual-report-body');
+  body.innerHTML = '<div style="padding:24px;text-align:center;color:#64748b;">불러오는 중...</div>';
+  const res = await api('GET', `/api/annual-summary?year=${year}`);
+  if (!res.ok) { body.innerHTML = `<div style="padding:16px;color:#ef4444;">${res.error}</div>`; return; }
+  renderAnnualReport(res);
+}
+
+function renderAnnualReport({ year, months, hasPrices }) {
+  const body = document.getElementById('annual-report-body');
+
+  // 데이터 있는 월만 컬럼으로 표시
+  const validMonths = months.filter(m => m !== null);
+  if (!validMonths.length) {
+    body.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;">해당 연도 데이터가 없습니다.</div>';
+    return;
+  }
+
+  const W = v => v != null ? Math.round(v).toLocaleString() : '-';
+  const L = v => v > 0 ? Math.floor(v).toLocaleString() : '-';
+  const P = v => v != null ? `<span class="${v>=0?'profit-pos':'profit-neg'}">${Math.round(v).toLocaleString()}</span>` : '-';
+
+  // 연간 합계 계산
+  function sumField(arr, fn) { return arr.reduce((s,m) => m ? s + (fn(m)||0) : s, 0); }
+
+  const fuels = ['휘발유','경유','등유'];
+  const totQty   = {}; fuels.forEach(f => totQty[f]   = sumField(validMonths, m=>m.qty[f]));
+  const totSales = {}; fuels.forEach(f => totSales[f]  = sumField(validMonths, m=>m.sales[f]));
+  const totFuelP = {}; fuels.forEach(f => totFuelP[f]  = hasPrices ? sumField(validMonths, m=>m.fuelProfit[f]) : null);
+  const totCarwash = sumField(validMonths, m=>m.sales.carwash);
+  const totOthers  = sumField(validMonths, m=>m.sales.others);
+  const totProfit  = hasPrices ? sumField(validMonths, m=>m.profit||0)    : null;
+  const totExpense = sumField(validMonths, m=>m.expense||0);
+  const totNet     = hasPrices ? sumField(validMonths, m=>m.netProfit||0) : null;
+
+  // 컬럼 헤더 (월 + 합계)
+  const colHeaders = validMonths.map(m=>`<th class="rpt-num">${m.month}월</th>`).join('') + '<th class="rpt-num rpt-total">합계</th>';
+
+  // 행 생성 헬퍼
+  function dataRow(label, vals, totVal, formatFn, cls='') {
+    const cells = validMonths.map(m=>`<td class="rpt-num ${cls}">${formatFn(vals(m))}</td>`).join('');
+    return `<tr><td class="rpt-label ${cls}">${label}</td>${cells}<td class="rpt-num rpt-total ${cls}">${formatFn(totVal)}</td></tr>`;
+  }
+  function profitRow(label, vals, totVal) {
+    const cells = validMonths.map(m=>`<td class="rpt-num">${P(vals(m))}</td>`).join('');
+    return `<tr><td class="rpt-label">${label}</td>${cells}<td class="rpt-num rpt-total">${P(totVal)}</td></tr>`;
+  }
+  function sepRow(colspan) { return `<tr class="rpt-sep"><td colspan="${colspan}"></td></tr>`; }
+
+  const colspan = validMonths.length + 2; // 구분 + 월들 + 합계
+
+  let html = `
+  <table id="annual-report-table" style="font-size:12px;border-collapse:collapse;min-width:600px;width:100%;">
+    <colgroup>
+      <col style="width:110px;">
+      ${validMonths.map(()=>'<col style="min-width:80px;">').join('')}
+      <col style="min-width:90px;">
+    </colgroup>
+    <thead>
+      <tr>
+        <th class="rpt-head" colspan="${colspan}" style="text-align:center;font-size:14px;padding:10px 6px;background:#1e293b;color:#fff;letter-spacing:1px;">
+          ${year}년 영업 결과보고서 &nbsp;·&nbsp; (주)미소주유소
+        </th>
+      </tr>
+      <tr class="rpt-sub-head">
+        <th class="rpt-label">구분</th>${colHeaders}
+      </tr>
+    </thead>
+    <tbody>`;
+
+  // 유종별 블록
+  for (const fuel of fuels) {
+    html += `<tr class="rpt-group-head"><td colspan="${colspan}">${fuel}</td></tr>`;
+    html += dataRow(`  판매량(L)`, m=>m.qty[fuel],       totQty[fuel],    L);
+    html += dataRow(`  매출금액`,  m=>m.sales[fuel],     totSales[fuel],  W);
+    html += profitRow(`  영업이익`, m=>hasPrices?m.fuelProfit[fuel]:null, totFuelP[fuel]);
+  }
+
+  html += sepRow(colspan);
+
+  // 유외·세차
+  html += dataRow('유외상품 매출', m=>m.sales.others,  totOthers,  W);
+  html += dataRow('세차 매출',     m=>m.sales.carwash, totCarwash, W);
+
+  html += sepRow(colspan);
+
+  // 합계·순이익
+  html += profitRow('총 영업이익', m=>m.profit,    totProfit);
+  html += dataRow(  '지출 합계',   m=>m.expense,   totExpense, W, 'rpt-expense');
+  html += profitRow('순이익',      m=>m.netProfit, totNet);
+
+  html += `</tbody></table>`;
+  if (!hasPrices) html += `<p style="font-size:11px;color:#f59e0b;margin:6px 0 0;">* 입고이력(FIFO) 미등록 — 영업이익/순이익 계산 불가</p>`;
+
+  body.innerHTML = html;
+}
+
+function printAnnualReport() {
+  const el = document.getElementById('annual-report-table');
+  if (!el) { toast('먼저 연간보고서를 조회하세요.', 'warn'); return; }
+  const year = document.getElementById('report-year')?.value || '';
+  const w = window.open('', '_blank', 'width=1000,height=700');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>${year}년 영업 결과보고서</title>
+  <style>
+    body { font-family: 'Malgun Gothic', sans-serif; margin: 20px; font-size:11px; }
+    table { border-collapse: collapse; width:100%; }
+    th, td { border:1px solid #ccc; padding:4px 6px; white-space:nowrap; }
+    .rpt-head { background:#1e293b!important; color:#fff!important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .rpt-sub-head th { background:#f1f5f9; font-weight:600; }
+    .rpt-group-head td { background:#e2e8f0; font-weight:700; padding:3px 6px; }
+    .rpt-label { text-align:left; }
+    .rpt-num { text-align:right; }
+    .rpt-total { background:#fef9c3; font-weight:700; }
+    .rpt-sep td { height:4px; background:#f8fafc; border:none; }
+    .rpt-expense { color:#ef4444; }
+    .profit-pos { color:#16a34a; }
+    .profit-neg { color:#dc2626; }
+    @page { size: A4 landscape; margin:15mm; }
+  </style></head><body>${el.outerHTML}</body></html>`);
+  w.document.close();
+  setTimeout(()=>{ w.print(); }, 300);
 }

@@ -796,6 +796,80 @@ app.get('/api/summary/:yearMonth', (req, res) => {
   });
 });
 
+// ── 연간 결과보고서 (12개월 집계) ────────────────────────────
+app.get('/api/annual-summary', (req, res) => {
+  const year = parseInt(req.query.year) || new Date().getFullYear();
+
+  const prices   = readJSON(PURCHASE_PRICES_FILE, []);
+  const fifoDaily = readJSON(FIFO_DAILY_FILE, []);
+  const allExpenses = readJSON(EXPENSES_FILE, []);
+
+  function getFifoPrice(date, fuel) {
+    const exact = fifoDaily.find(e => e.date === date);
+    if (exact?.[fuel]?.price) return exact[fuel].price;
+    const before = [...fifoDaily].filter(e => e.date <= date && e[fuel]?.price).pop();
+    if (before?.[fuel]?.price) return before[fuel].price;
+    const list = prices.filter(p => p.fuel === fuel && p.date <= date);
+    return list.length ? list[list.length-1].price : 0;
+  }
+
+  const hasPrices = (prices.length + fifoDaily.length) > 0;
+  const months = [];
+
+  for (let m = 1; m <= 12; m++) {
+    const ym = `${year}-${String(m).padStart(2,'0')}`;
+    const dailyFiles = fs.existsSync(DAILY_DIR)
+      ? fs.readdirSync(DAILY_DIR).filter(f => f.startsWith(ym) && f.endsWith('.json'))
+      : [];
+
+    if (!dailyFiles.length) { months.push(null); continue; }
+
+    let sales = { 휘발유:0, 경유:0, 등유:0, carwash:0, others:0 };
+    let qty   = { 휘발유:0, 경유:0, 등유:0 };
+    let profit = 0, cardFee = 0;
+    let fuelProfit = { 휘발유:0, 경유:0, 등유:0 };
+
+    for (const f of dailyFiles) {
+      const d = readJSON(path.join(DAILY_DIR, f), {});
+      if (!d.bos?.date) continue;
+      const date = d.bos.date;
+      for (const fuel of ['휘발유','경유','등유']) {
+        const fd = d.bos.fuels?.[fuel];
+        if (!fd) continue;
+        sales[fuel] += fd.amount || 0;
+        qty[fuel]   += fd.qty    || 0;
+        const bp = getFifoPrice(date, fuel);
+        const fp = bp ? (fd.amount||0) - (fd.qty||0)*bp : 0;
+        fuelProfit[fuel] += fp;
+        profit += fp;
+      }
+      sales.carwash += d.bos.carwash?.amount || 0;
+      sales.others  += d.bos.others?.amount  || 0;
+      profit += (d.bos.carwash?.amount || 0);
+      profit += (d.bos.others?.amount  || 0) - (d.otherCost || 0);
+      cardFee += d.card?.totalFee || 0;
+      profit  -= d.card?.totalFee || 0;
+    }
+
+    const expense = allExpenses
+      .filter(e => e.month === ym)
+      .reduce((s, e) => s + (e.amount||0), 0);
+    const revenue = Object.values(sales).reduce((s,v)=>s+v, 0);
+
+    months.push({
+      month: m, ym,
+      sales, qty, fuelProfit,
+      revenue,
+      profit:    hasPrices ? Math.round(profit)            : null,
+      cardFee,
+      expense,
+      netProfit: hasPrices ? Math.round(profit - expense)  : null,
+    });
+  }
+
+  res.json({ ok: true, year, months, hasPrices });
+});
+
 // ── 카드 차이 조정 (사유 등록) ───────────────────────────────
 app.post('/api/daily/:date/card-adjustments', (req, res) => {
   const { date } = req.params;

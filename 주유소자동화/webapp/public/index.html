@@ -151,6 +151,22 @@
 
     </div>
 
+    <!-- ── 연간 결과보고서 ── -->
+    <div class="card" style="margin-top:16px;">
+      <div class="card-header" style="flex-wrap:wrap;gap:8px;">
+        <h2>연간 결과보고서</h2>
+        <div style="display:flex;align-items:center;gap:8px;margin-left:auto;">
+          <select id="report-year" style="border:1px solid #e2e8f0;border-radius:6px;padding:4px 8px;font-size:13px;"></select>
+          <span style="font-size:13px;">년</span>
+          <button class="btn-primary" style="padding:5px 14px;font-size:13px;" onclick="loadAnnualReport()">조회</button>
+          <button class="btn-upload" style="padding:5px 14px;font-size:13px;" onclick="printAnnualReport()">🖨️ 인쇄</button>
+        </div>
+      </div>
+      <div id="annual-report-body" style="overflow-x:auto;padding:4px 0;">
+        <div style="padding:24px;text-align:center;color:#94a3b8;">연도를 선택하고 조회하세요</div>
+      </div>
+    </div>
+
   </section>
 
   <!-- ───── 대분류: 일마감 ───── -->

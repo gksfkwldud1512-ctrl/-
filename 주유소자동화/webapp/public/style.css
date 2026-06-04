@@ -900,3 +900,15 @@ th.sortable.sort-active .sort-icon { color: var(--primary); }
 /* btn-green */
 .btn-green { background: #16a34a; color: #fff; border: none; }
 .btn-green:hover { background: #15803d; }
+
+/* 연간 결과보고서 테이블 */
+#annual-report-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+#annual-report-table th, #annual-report-table td { border: 1px solid #e2e8f0; padding: 4px 8px; white-space: nowrap; }
+.rpt-head   { background: #1e293b; color: #fff; text-align: center; }
+.rpt-sub-head th { background: #f1f5f9; font-weight: 600; }
+.rpt-group-head td { background: #e2e8f0; font-weight: 700; font-size: 12px; }
+.rpt-label  { text-align: left; }
+.rpt-num    { text-align: right; }
+.rpt-total  { background: #fef9c3; font-weight: 700; }
+.rpt-sep td { height: 5px; background: #f8fafc; border-left: none; border-right: none; }
+.rpt-expense { color: #ef4444; }
