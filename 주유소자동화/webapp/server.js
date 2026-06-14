@@ -210,6 +210,35 @@ app.get('/api/monthly-profit', (req, res) => {
   res.json({ ok: true, fuelTotals: totals, hasPrices: prices.length > 0 });
 });
 
+// ── 연간 고객별 판매 현황 (외상 거래 기준) ───────────────────────
+app.get('/api/customer-sales', (req, res) => {
+  const year = parseInt(req.query.year) || new Date().getFullYear();
+  const customerMap = {};
+
+  for (let m = 1; m <= 12; m++) {
+    const vendors = readJSON(vendorFile(year, m), []);
+    const mo = String(m).padStart(2, '0');
+    for (const vendor of vendors) {
+      if (!vendor.txs || !vendor.txs.length) continue;
+      if (!customerMap[vendor.name]) {
+        customerMap[vendor.name] = { name: vendor.name, months: {} };
+      }
+      let qty = 0, amount = 0;
+      for (const tx of vendor.txs) {
+        qty += tx.qty || 0;
+        amount += tx.amount || 0;
+      }
+      if (amount > 0 || qty > 0) {
+        customerMap[vendor.name].months[mo] = { qty, amount };
+      }
+    }
+  }
+
+  const customers = Object.values(customerMap)
+    .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  res.json({ ok: true, year, customers });
+});
+
 // ── 배달 Excel 확인 (배달판매전표리스트 형식) ─────────────────────
 // 배달 내역은 BOS에 이미 포함된 데이터 → 합산 없이 확인용으로만 파싱
 app.post('/api/parse-delivery-excel', upload.single('file'), (req, res) => {

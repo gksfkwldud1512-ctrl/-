@@ -25,6 +25,7 @@
       <button class="tab-btn active" data-tab="daily-main">일마감</button>
       <button class="tab-btn" data-tab="daily-deposit">입금 검증</button>
       <button class="tab-btn" data-tab="daily-expense">지출관리</button>
+      <button class="tab-btn" data-tab="daily-customer">고객관리</button>
     </div>
     <!-- 월마감 subnav -->
     <div class="subnav-inner" id="subnav-monthly">
@@ -252,6 +253,28 @@
           </tbody>
         </table>
       </div>
+      <!-- 고객별 판매 현황 (하단) -->
+      <div class="card" id="daily-customer-card" style="display:none;">
+        <div class="card-header">
+          <h2>고객별 판매 현황</h2>
+          <span id="daily-customer-label" style="font-size:13px;color:#64748b;"></span>
+        </div>
+        <div style="overflow-x:auto;">
+          <table id="daily-customer-table">
+            <thead>
+              <tr>
+                <th style="min-width:130px;">고객명</th>
+                <th class="col-num" style="min-width:110px;">판매수량 (L)</th>
+                <th class="col-num" style="min-width:120px;">매출액</th>
+                <th class="col-num" style="min-width:100px;">평균단가</th>
+              </tr>
+            </thead>
+            <tbody id="daily-customer-tbody">
+              <tr class="empty-row"><td colspan="4">데이터 없음</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div><!-- /tab-daily-main -->
 
     <!-- ── 입금 검증 탭 ── -->
@@ -367,6 +390,35 @@
             </thead>
             <tbody id="expense-detail-tbody">
               <tr class="empty-row"><td colspan="7">조회할 월을 선택하세요</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 고객관리 탭 (고객별 월별 판매현황 피벗) ── -->
+    <div id="tab-daily-customer" class="tab-content">
+      <!-- 툴바 -->
+      <div class="toolbar">
+        <div class="toolbar-group">
+          <label class="label-sm">조회 연도</label>
+          <select id="customer-sales-year"></select><span>년</span>
+          <button class="btn-primary" onclick="loadCustomerSalesTab()">조회</button>
+        </div>
+      </div>
+      <!-- 고객별 월별 판매 현황 -->
+      <div class="card">
+        <div class="card-header">
+          <h2>고객별 월별 판매 현황</h2>
+          <span id="customer-sales-label" style="font-size:13px;color:#64748b;">월마감 BOS 데이터 기준 (외상 거래)</span>
+        </div>
+        <div style="overflow-x:auto;">
+          <table id="customer-sales-table">
+            <thead id="customer-sales-thead">
+              <tr><th colspan="4">연도를 선택하고 조회하세요</th></tr>
+            </thead>
+            <tbody id="customer-sales-tbody">
+              <tr class="empty-row"><td colspan="4"></td></tr>
             </tbody>
           </table>
         </div>

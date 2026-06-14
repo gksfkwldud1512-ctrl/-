@@ -162,12 +162,13 @@ function switchDailySubTab(tab) {
     b.classList.toggle('active', b.dataset.tab === tab);
   });
   // 탭 콘텐츠 표시/숨김
-  ['daily-main', 'daily-deposit', 'daily-expense'].forEach(t => {
+  ['daily-main', 'daily-deposit', 'daily-expense', 'daily-customer'].forEach(t => {
     const el = document.getElementById(`tab-${t}`);
     if (el) el.classList.toggle('active', t === tab);
   });
   if (tab === 'daily-deposit') renderDepositVerification();
   if (tab === 'daily-expense') loadExpenseTab();
+  if (tab === 'daily-customer') loadCustomerSalesTab();
 }
 
 function switchSubTab(tab) {
@@ -1112,6 +1113,17 @@ function initDailyYearMonth() {
 
   selYear.addEventListener('change', () => { dailyState.year  = Number(selYear.value);  loadDailyMonth(); });
   selMonth.addEventListener('change', () => { dailyState.month = Number(selMonth.value); loadDailyMonth(); });
+
+  // 고객관리 탭 연도 선택기 초기화
+  const cSelYear = document.getElementById('customer-sales-year');
+  if (cSelYear) {
+    for (let y = now.getFullYear() - 1; y <= now.getFullYear() + 1; y++) {
+      const opt = document.createElement('option');
+      opt.value = y; opt.textContent = y;
+      if (y === now.getFullYear()) opt.selected = true;
+      cSelYear.appendChild(opt);
+    }
+  }
 }
 
 function initDailyUpload() {
@@ -1461,6 +1473,7 @@ async function loadDailyMonth() {
     renderDailyTable();
     renderDepositVerification();
   }
+  loadDailyCustomerSummary();
 }
 
 function calcDailyProfit(day) {
@@ -2406,6 +2419,153 @@ function renderAnnualReport({ year, months, hasPrices }) {
   if (!hasPrices) html += `<p style="font-size:11px;color:#f59e0b;margin:6px 0 0;">* 매입단가 미등록 — 영업이익/순이익 계산 불가</p>`;
 
   body.innerHTML = html;
+}
+
+// ── 고객관리 탭: 일마감 하단 월별 고객 현황 ─────────────────────
+async function loadDailyCustomerSummary() {
+  const card  = document.getElementById('daily-customer-card');
+  const tbody = document.getElementById('daily-customer-tbody');
+  const label = document.getElementById('daily-customer-label');
+  if (!card) return;
+
+  const res = await api('GET', `/api/vendors?year=${dailyState.year}&month=${dailyState.month}`);
+  if (!res.ok || !res.vendors) { card.style.display = 'none'; return; }
+
+  const vendors = res.vendors.filter(v => v.txs && v.txs.length > 0);
+  if (!vendors.length) { card.style.display = 'none'; return; }
+
+  if (label) label.textContent = `${dailyState.year}년 ${dailyState.month}월`;
+  card.style.display = '';
+
+  const rows = vendors.map(v => {
+    const qty    = v.txs.reduce((s, t) => s + (t.qty    || 0), 0);
+    const amount = v.txs.reduce((s, t) => s + (t.amount || 0), 0);
+    return { name: v.name, qty, amount, avgPrice: qty > 0 ? Math.round(amount / qty) : 0 };
+  }).sort((a, b) => b.amount - a.amount);
+
+  const totalQty = rows.reduce((s, r) => s + r.qty, 0);
+  const totalAmt = rows.reduce((s, r) => s + r.amount, 0);
+
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td>${esc(r.name)}</td>
+      <td class="col-num">${r.qty.toLocaleString()}</td>
+      <td class="col-num">${r.amount.toLocaleString()}</td>
+      <td class="col-num">${r.avgPrice.toLocaleString()}</td>
+    </tr>`).join('') + `
+    <tr style="font-weight:700;background:#f1f5f9;">
+      <td>합계</td>
+      <td class="col-num">${totalQty.toLocaleString()}</td>
+      <td class="col-num">${totalAmt.toLocaleString()}</td>
+      <td class="col-num"></td>
+    </tr>`;
+}
+
+// ── 고객관리 탭: 연간 고객별 월별 판매 피벗 ─────────────────────
+const customerSalesState = { year: new Date().getFullYear(), data: null };
+
+async function loadCustomerSalesTab() {
+  const selYear = document.getElementById('customer-sales-year');
+  if (!selYear) return;
+  customerSalesState.year = parseInt(selYear.value) || new Date().getFullYear();
+
+  const res = await api('GET', `/api/customer-sales?year=${customerSalesState.year}`);
+  if (!res.ok) { toast('고객 판매 현황 조회 실패', 'error'); return; }
+  customerSalesState.data = res;
+  renderCustomerSalesPivot(res);
+}
+
+function renderCustomerSalesPivot({ year, customers }) {
+  const thead = document.getElementById('customer-sales-thead');
+  const tbody = document.getElementById('customer-sales-tbody');
+  const label = document.getElementById('customer-sales-label');
+  if (!thead || !tbody) return;
+
+  if (label) label.textContent = `${year}년 · 월마감 BOS 기준 (외상 거래)`;
+
+  const allMos = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+  const moLabels = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  const activeMos = allMos.filter(mo => customers.some(c => c.months[mo]));
+
+  if (!customers.length || !activeMos.length) {
+    thead.innerHTML = '<tr><th colspan="4">데이터 없음</th></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">월마감 탭에서 BOS 거래내역서를 업로드하면 표시됩니다</td></tr>';
+    return;
+  }
+
+  const stickyLeft = 'position:sticky;left:0;background:inherit;z-index:1;';
+  const colSpan = activeMos.length * 3 + 3 + 1;
+
+  // 헤더 행 1: 고객명 + 월 그룹 + 합계
+  let h1 = `<tr>
+    <th rowspan="2" style="${stickyLeft}min-width:130px;">고객명</th>`;
+  for (const mo of activeMos) {
+    h1 += `<th colspan="3" style="text-align:center;">${moLabels[parseInt(mo)-1]}</th>`;
+  }
+  h1 += `<th colspan="3" style="text-align:center;background:#e2e8f0;">합계</th></tr>`;
+
+  // 헤더 행 2: 서브 컬럼
+  let h2 = `<tr>`;
+  for (let i = 0; i < activeMos.length; i++) {
+    h2 += `<th class="col-num" style="min-width:68px;font-size:11px;">판매단가</th>
+      <th class="col-num" style="min-width:78px;font-size:11px;">수량(L)</th>
+      <th class="col-num" style="min-width:88px;font-size:11px;">매출액</th>`;
+  }
+  h2 += `<th class="col-num" style="min-width:78px;font-size:11px;background:#e2e8f0;">수량(L)</th>
+    <th class="col-num" style="min-width:88px;font-size:11px;background:#e2e8f0;">매출액</th>
+    <th class="col-num" style="min-width:68px;font-size:11px;background:#e2e8f0;">평균단가</th>
+    </tr>`;
+
+  thead.innerHTML = h1 + h2;
+
+  const totals = { months: {}, qty: 0, amount: 0 };
+  for (const mo of activeMos) totals.months[mo] = { qty: 0, amount: 0 };
+
+  let rowsHtml = '';
+  for (const c of customers) {
+    let tQty = 0, tAmt = 0;
+    let row = `<tr><td style="${stickyLeft}font-weight:500;">${esc(c.name)}</td>`;
+    for (const mo of activeMos) {
+      const d = c.months[mo];
+      if (d && d.amount > 0) {
+        const avg = d.qty > 0 ? Math.round(d.amount / d.qty) : 0;
+        row += `<td class="col-num" style="font-size:12px;">${avg.toLocaleString()}</td>
+          <td class="col-num" style="font-size:12px;">${d.qty.toLocaleString()}</td>
+          <td class="col-num" style="font-size:12px;">${d.amount.toLocaleString()}</td>`;
+        tQty += d.qty; tAmt += d.amount;
+        totals.months[mo].qty += d.qty; totals.months[mo].amount += d.amount;
+      } else {
+        row += `<td class="col-num" style="color:#cbd5e1;">−</td>
+          <td class="col-num" style="color:#cbd5e1;">−</td>
+          <td class="col-num" style="color:#cbd5e1;">−</td>`;
+      }
+    }
+    const avg = tQty > 0 ? Math.round(tAmt / tQty) : 0;
+    row += `<td class="col-num" style="background:#f8fafc;font-weight:600;">${tQty.toLocaleString()}</td>
+      <td class="col-num" style="background:#f8fafc;font-weight:600;">${tAmt.toLocaleString()}</td>
+      <td class="col-num" style="background:#f8fafc;font-weight:600;">${avg.toLocaleString()}</td>
+      </tr>`;
+    rowsHtml += row;
+    totals.qty += tQty; totals.amount += tAmt;
+  }
+
+  // 합계 행
+  let totalRow = `<tr style="font-weight:700;background:#e2e8f0;">
+    <td style="${stickyLeft}background:#e2e8f0;">합계</td>`;
+  for (const mo of activeMos) {
+    const d = totals.months[mo];
+    const avg = d.qty > 0 ? Math.round(d.amount / d.qty) : 0;
+    totalRow += `<td class="col-num">${avg.toLocaleString()}</td>
+      <td class="col-num">${d.qty.toLocaleString()}</td>
+      <td class="col-num">${d.amount.toLocaleString()}</td>`;
+  }
+  const overallAvg = totals.qty > 0 ? Math.round(totals.amount / totals.qty) : 0;
+  totalRow += `<td class="col-num" style="background:#cbd5e1;">${totals.qty.toLocaleString()}</td>
+    <td class="col-num" style="background:#cbd5e1;">${totals.amount.toLocaleString()}</td>
+    <td class="col-num" style="background:#cbd5e1;">${overallAvg.toLocaleString()}</td>
+    </tr>`;
+
+  tbody.innerHTML = rowsHtml + totalRow;
 }
 
 function printAnnualReport() {
