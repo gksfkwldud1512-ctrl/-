@@ -6,8 +6,6 @@ const dailyState = {
   month:           new Date().getMonth() + 1,
   days:            [],   // 해당 월 일별 데이터
   purchasePrices:  [],   // [{ date, fuel, price }] — 직접 입력
-  lots:            [],   // [{ date, fuel, qty, price }] — 입고 이력
-  fifoDailyPrices: [],   // [{ date, 경유: {price,remaining}, 휘발유: ..., 등유: ... }] — 판매관리 시트 기준
   bankDeposits:    {},   // { "2026-05-08": { "신한카드": 9637628, ... } }
 };
 
@@ -1387,16 +1385,9 @@ function renderDepositVerification() {
 }
 
 async function loadDailyPurchasePrices() {
-  const [pRes, lRes, fRes] = await Promise.all([
-    api('GET', '/api/daily/purchase-prices'),
-    api('GET', '/api/daily/lots'),
-    api('GET', '/api/daily/fifo-prices'),
-  ]);
-  if (pRes.ok) dailyState.purchasePrices  = Array.isArray(pRes.prices)  ? pRes.prices  : [];
-  if (lRes.ok) dailyState.lots            = Array.isArray(lRes.lots)     ? lRes.lots    : [];
-  if (fRes.ok) dailyState.fifoDailyPrices = Array.isArray(fRes.prices)   ? fRes.prices  : [];
+  const pRes = await api('GET', '/api/daily/purchase-prices');
+  if (pRes.ok) dailyState.purchasePrices = Array.isArray(pRes.prices) ? pRes.prices : [];
   renderPurchasePriceTable();
-  renderLotTable();
 }
 
 function renderPurchasePriceTable() {
@@ -1418,97 +1409,16 @@ function renderPurchasePriceTable() {
   </tr>`).join('');
 }
 
-// ── 입고 이력 (FIFO) ──────────────────────────────────────────
-function switchPpTab(tab) {
-  document.getElementById('pp-tab-lots').style.display   = tab === 'lots'   ? '' : 'none';
-  document.getElementById('pp-tab-prices').style.display = tab === 'prices' ? '' : 'none';
-  document.getElementById('tab-lots-btn').classList.toggle('pp-tab-active',   tab === 'lots');
-  document.getElementById('tab-prices-btn').classList.toggle('pp-tab-active', tab === 'prices');
-}
-
 function updatePpBadge() {
   const badge = document.getElementById('pp-summary-badge');
   if (!badge) return;
   const priceCount = dailyState.purchasePrices.length;
-  const lotCount   = dailyState.lots.length;
-  badge.textContent = priceCount
-    ? `단가 ${priceCount}건 등록${lotCount ? ' · 입고이력 '+lotCount+'건' : ''}`
-    : '단가 미등록';
+  badge.textContent = priceCount ? `단가 ${priceCount}건 등록` : '단가 미등록';
   badge.style.color = priceCount ? '#22c55e' : '#f59e0b';
 }
 
-function renderLotTable() {
-  updatePpBadge();
-  const tbody = document.getElementById('lot-tbody');
-  if (!tbody) return;
-  const list = dailyState.lots;
-  if (!list.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">등록된 입고 이력이 없습니다</td></tr>';
-    return;
-  }
-  tbody.innerHTML = list.map(l => `<tr>
-    <td>${l.date}</td>
-    <td>${esc(l.fuel)}</td>
-    <td class="col-num">${Math.floor(l.qty).toLocaleString()}L</td>
-    <td class="col-num"><strong>${Number(l.price).toLocaleString()}원</strong></td>
-    <td class="col-action">
-      <button class="btn-sm btn-danger" onclick="deleteLot('${l.date}','${esc(l.fuel)}',${l.price})">삭제</button>
-    </td>
-  </tr>`).join('');
-}
-
-async function addLot() {
-  const date  = document.getElementById('lot-date').value;
-  const fuel  = document.getElementById('lot-fuel').value;
-  const qty   = Number(document.getElementById('lot-qty').value);
-  const price = Number(document.getElementById('lot-price').value);
-  if (!date) return toast('입고일을 선택하세요.', 'warn');
-  if (!qty)  return toast('수량을 입력하세요.', 'warn');
-  if (!price) return toast('단가를 입력하세요.', 'warn');
-  const res = await api('POST', '/api/daily/lots', { date, fuel, qty, price });
-  if (res.ok) {
-    dailyState.lots           = res.lots;
-    dailyState.purchasePrices = res.prices;
-    renderLotTable();
-    renderPurchasePriceTable();
-    renderDailyTable();
-    document.getElementById('lot-qty').value   = '';
-    document.getElementById('lot-price').value = '';
-    toast(`✅ ${date} ${fuel} ${qty.toLocaleString()}L 입고 등록 완료`, 'success');
-  } else {
-    toast(`오류: ${res.error}`, 'error');
-  }
-}
-
-async function deleteLot(date, fuel, price) {
-  if (!confirm(`${date} ${fuel} ${price.toLocaleString()}원 입고 이력을 삭제하시겠습니까?`)) return;
-  const res = await api('DELETE', '/api/daily/lots', { date, fuel, price });
-  if (res.ok) {
-    dailyState.lots           = res.lots;
-    dailyState.purchasePrices = res.prices;
-    renderLotTable();
-    renderPurchasePriceTable();
-    renderDailyTable();
-    toast('삭제 완료', 'success');
-  }
-}
-
-// 날짜 기준으로 해당 유종의 적용 단가 찾기
-// 우선순위: ① 입고이력(FIFO) 기반 재계산 단가 → ② 직접 입력 단가 이력
+// 날짜 기준으로 해당 유종의 적용 단가 찾기 (수동 입력 단가만 사용)
 function getPriceForDate(date, fuel) {
-  // ① 입고이력 + BOS판매량 기반 FIFO 재계산 단가 (가장 정확)
-  if (dailyState.fifoDailyPrices.length) {
-    const exact = dailyState.fifoDailyPrices.find(e => e.date === date);
-    if (exact?.[fuel]?.price) return exact[fuel].price;
-
-    // 정확한 날짜 없으면 그 이전 가장 최근 항목에서 단가 가져오기
-    const before = [...dailyState.fifoDailyPrices]
-      .filter(e => e.date <= date && e[fuel]?.price)
-      .pop();
-    if (before?.[fuel]?.price) return before[fuel].price;
-  }
-
-  // ② 직접 입력 단가 이력 (fallback)
   const list = dailyState.purchasePrices.filter(e => e.fuel === fuel && e.date <= date);
   if (!list.length) return 0;
   return list[list.length - 1].price;
@@ -1558,8 +1468,7 @@ function calcDailyProfit(day) {
   if (!bos || !bos.date) return null;
 
   // 단가가 하나도 없으면 null
-  const hasPrices = dailyState.purchasePrices.length > 0 || dailyState.fifoDailyPrices.length > 0;
-  if (!hasPrices) return null;
+  if (!dailyState.purchasePrices.length) return null;
 
   let profit = 0;
   ['휘발유', '경유', '등유'].forEach(fuel => {
@@ -1668,7 +1577,7 @@ function renderDailyTable() {
     </tr>`;
   });
 
-  const hasPriceData = dailyState.purchasePrices.length > 0 || dailyState.fifoDailyPrices.length > 0;
+  const hasPriceData = dailyState.purchasePrices.length > 0;
   const totalPf    = hasPriceData
     ? `<span class="${totals.profit >= 0 ? 'profit-pos' : 'profit-neg'}">${totals.profit.toLocaleString()}원</span>`
     : '단가 미입력';
@@ -2084,32 +1993,6 @@ function renderSummary(data) {
     </table>`;
   }
 
-  // 지출 현황 테이블
-  renderExpenseTable(data);
-}
-
-function renderExpenseTable(data) {
-  const body = document.getElementById('summary-expense-body');
-  if (!body) return;
-  const expByCat = data?.expByCategory || {};
-  const total    = data?.expense || 0;
-  if (total === 0) {
-    body.innerHTML = '<div style="padding:16px;text-align:center;color:#94a3b8;">지출내역을 업로드하거나 직접 입력하세요.</div>';
-    return;
-  }
-  const rows = Object.entries(expByCat).map(([cat, amt]) =>
-    `<tr><td><strong>${esc(cat)}</strong></td><td style="text-align:right;">${amt.toLocaleString()}원</td></tr>`
-  );
-  rows.push(`<tr style="background:#f1f5f9;font-weight:700;border-top:2px solid #e2e8f0;">
-    <td>합계</td><td style="text-align:right;">${total.toLocaleString()}원</td>
-  </tr>`);
-  body.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;">
-    <thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
-      <th style="padding:7px 10px;text-align:left;">분류</th>
-      <th style="padding:7px 10px;text-align:right;">합계</th>
-    </tr></thead>
-    <tbody>${rows.join('')}</tbody>
-  </table>`;
 }
 
 async function uploadExpenses(file) {
@@ -2121,9 +2004,9 @@ async function uploadExpenses(file) {
     const res  = await fetch('/api/upload-expenses', { method: 'POST', body: form });
     const data = await res.json();
     if (data.ok) {
-      if (label) label.textContent = `✅ ${data.count}건 지출내역 로드 완료`;
+      if (label) label.textContent = `✅ ${data.count}건 임포트 완료`;
       toast(`✅ 지출내역 ${data.count}건 임포트 완료`, 'success');
-      loadSummary();
+      loadExpenseTab();
     } else {
       if (label) label.textContent = '업로드 실패';
       toast(`오류: ${data.error}`, 'error');
@@ -2177,28 +2060,29 @@ function renderExpenseTab() {
   let grandTotal = 0;
   for (const e of list) {
     const key = `${e.category}||${e.subCategory}`;
-    bySubCat[key] = (bySubCat[key] || 0) + (e.amount || 0);
+    if (!bySubCat[key]) bySubCat[key] = { amt: 0, account: e.account || e.subCategory };
+    bySubCat[key].amt += (e.amount || 0);
     grandTotal += e.amount || 0;
   }
 
-  // 대분류 그룹으로 정렬 (고정비 먼저)
+  // 대분류 그룹으로 정렬 (고정비 먼저, 같은 대분류 내 금액 내림차순)
   const sorted = Object.entries(bySubCat).sort((a, b) => {
     const [ca] = a[0].split('||');
     const [cb] = b[0].split('||');
     if (ca !== cb) return ca === '고정비' ? -1 : 1;
-    return b[1] - a[1];
+    return b[1].amt - a[1].amt;
   });
 
   let curCat = '';
   let rows = '';
   let catTotal = 0;
 
-  for (const [key, amt] of sorted) {
+  for (const [key, { amt, account }] of sorted) {
     const [cat, sub] = key.split('||');
     if (cat !== curCat) {
       if (curCat) {
         rows += `<tr style="font-weight:600;background:#f1f5f9;">
-          <td colspan="2">${curCat} 소계</td>
+          <td colspan="3">${curCat} 소계</td>
           <td style="text-align:right;font-weight:600;">${catTotal.toLocaleString()}원</td>
         </tr>`;
       }
@@ -2208,22 +2092,23 @@ function renderExpenseTab() {
     rows += `<tr>
       <td style="padding-left:20px;color:#64748b;">${cat}</td>
       <td>${sub}</td>
+      <td style="color:#6366f1;font-size:12px;">${account}</td>
       <td style="text-align:right;">${amt.toLocaleString()}원</td>
     </tr>`;
   }
   if (curCat) {
     rows += `<tr style="font-weight:600;background:#f1f5f9;">
-      <td colspan="2">${curCat} 소계</td>
+      <td colspan="3">${curCat} 소계</td>
       <td style="text-align:right;font-weight:600;">${catTotal.toLocaleString()}원</td>
     </tr>`;
   }
 
   summaryBody.innerHTML = `
     <table style="font-size:13px;">
-      <thead><tr><th>대분류</th><th>소분류</th><th class="col-num">금액</th></tr></thead>
+      <thead><tr><th>대분류</th><th>소분류</th><th>계정과목</th><th class="col-num">금액</th></tr></thead>
       <tbody>${rows}</tbody>
       <tfoot><tr style="font-weight:700;border-top:2px solid #e2e8f0;">
-        <td colspan="2">합계</td>
+        <td colspan="3">합계</td>
         <td style="text-align:right;">${grandTotal.toLocaleString()}원</td>
       </tr></tfoot>
     </table>`;
@@ -2235,13 +2120,14 @@ function renderExpenseTab() {
       <td>${e.date || e.month}</td>
       <td><span class="badge-cat ${e.category === '고정비' ? 'badge-fixed' : 'badge-var'}">${e.category}</span></td>
       <td>${e.subCategory}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.vendor}">${e.vendor}</td>
+      <td style="color:#6366f1;font-size:12px;">${e.account || e.subCategory}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.vendor}">${e.vendor}</td>
       <td style="text-align:right;">${(e.amount || 0).toLocaleString()}원</td>
       <td><button class="btn-sm btn-danger" onclick="deleteExpenseItem(${i})">삭제</button></td>
     </tr>`).join('');
 
   document.getElementById('expense-detail-tbody').innerHTML = detailRows ||
-    '<tr class="empty-row"><td colspan="6">내역 없음</td></tr>';
+    '<tr class="empty-row"><td colspan="7">내역 없음</td></tr>';
 }
 
 async function deleteExpenseItem(idx) {
@@ -2380,7 +2266,7 @@ function renderAnnualReport({ year, months, hasPrices }) {
   html += profitRow('순이익',      m=>m.netProfit, totNet);
 
   html += `</tbody></table>`;
-  if (!hasPrices) html += `<p style="font-size:11px;color:#f59e0b;margin:6px 0 0;">* 입고이력(FIFO) 미등록 — 영업이익/순이익 계산 불가</p>`;
+  if (!hasPrices) html += `<p style="font-size:11px;color:#f59e0b;margin:6px 0 0;">* 매입단가 미등록 — 영업이익/순이익 계산 불가</p>`;
 
   body.innerHTML = html;
 }

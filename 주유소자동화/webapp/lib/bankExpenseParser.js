@@ -26,30 +26,30 @@ const RENT_PATTERNS = [
   /충북소매.*에이치디/,
 ];
 
-// ── 자동 분류 맵 ─────────────────────────────────────────────────
+// ── 자동 분류 맵 (cat=대분류, sub=소분류, account=계정과목) ──────
 const CATEGORY_MAP = [
-  { re: /충청동부지에이치디현|충북소매.*에이치디/,        cat: '고정비', sub: '임대료' },
-  { re: /KB카드출금|하나카드기업|하나카드|국민카드|롯데카드|신한카드|삼성카드|현대카드|비씨카드|우리카드|농협카드|카드출금|카드대금/, cat: '고정비', sub: '카드비' },
-  { re: /이자[-_\s]\d+|대출이자|이자관련/,               cat: '고정비', sub: '이자' },
-  { re: /한국전력|한전/,                                  cat: '고정비', sub: '전력비' },
-  { re: /혁신세무|세무회계|세무사/,                       cat: '고정비', sub: '기장비' },
-  { re: /신용보증기금/,                                   cat: '고정비', sub: '신용보증' },
-  { re: /국세[-_]|국고[-_].*미소|공과금/,                cat: '고정비', sub: '세금' },
-  { re: /바른유통|롯데칠성음료|우림상사/,                 cat: '고정비', sub: '유외상품' },
-  { re: /에스케이쉴더스|웹케시|아이엠컴|케이티\/|KT\//,  cat: '고정비', sub: '운영비' },
-  { re: /대소가스/,                                       cat: '고정비', sub: '수도비' },
-  { re: /커피팜스/,                                       cat: '고정비', sub: '커피' },
-  { re: /보험/,                                           cat: '고정비', sub: '보험비' },
-  { re: /경찰청.*미소|자동차세/,                          cat: '고정비', sub: '자동차세' },
-  { re: /퇴직금|퇴직적립/,                               cat: '변동비', sub: '퇴직금' },
-  { re: /협회|조합비/,                                   cat: '변동비', sub: '협회비' },
+  { re: /충청동부지에이치디현|충북소매.*에이치디/,        cat: '고정비', sub: '임대료',   account: '임차료' },
+  { re: /KB카드출금|하나카드기업|하나카드|국민카드|롯데카드|신한카드|삼성카드|현대카드|비씨카드|우리카드|농협카드|카드출금|카드대금/, cat: '고정비', sub: '카드비',   account: '지급수수료' },
+  { re: /이자[-_\s]\d+|대출이자|이자관련/,               cat: '고정비', sub: '이자',     account: '이자비용' },
+  { re: /한국전력|한전/,                                  cat: '고정비', sub: '전력비',   account: '전력비' },
+  { re: /혁신세무|세무회계|세무사/,                       cat: '고정비', sub: '기장비',   account: '지급수수료' },
+  { re: /신용보증기금/,                                   cat: '고정비', sub: '신용보증', account: '지급보증료' },
+  { re: /국세[-_]|국고[-_].*미소|공과금/,                cat: '고정비', sub: '세금',     account: '세금과공과' },
+  { re: /경찰청.*미소|자동차세/,                          cat: '고정비', sub: '자동차세', account: '세금과공과' },
+  { re: /바른유통|롯데칠성음료|우림상사/,                 cat: '변동비', sub: '유외상품', account: '상품매입' },
+  { re: /에스케이쉴더스|웹케시|아이엠컴|케이티\/|KT\//,  cat: '고정비', sub: '운영비',   account: '통신비' },
+  { re: /대소가스/,                                       cat: '고정비', sub: '수도비',   account: '수도광열비' },
+  { re: /커피팜스/,                                       cat: '고정비', sub: '커피',     account: '복리후생비' },
+  { re: /보험/,                                           cat: '고정비', sub: '보험비',   account: '보험료' },
+  { re: /퇴직금|퇴직적립/,                               cat: '변동비', sub: '퇴직금',   account: '퇴직급여' },
+  { re: /협회|조합비/,                                   cat: '변동비', sub: '협회비',   account: '조합비' },
 ];
 
 function classifyVendor(vendor) {
-  for (const { re, cat, sub } of CATEGORY_MAP) {
-    if (re.test(vendor)) return { category: cat, subCategory: sub };
+  for (const { re, cat, sub, account } of CATEGORY_MAP) {
+    if (re.test(vendor)) return { category: cat, subCategory: sub, account };
   }
-  return { category: '변동비', subCategory: '기타' };
+  return { category: '변동비', subCategory: '기타', account: '잡비' };
 }
 
 function isRent(vendor) {
@@ -141,13 +141,14 @@ function parseBankExpenses(filePath) {
     const month = dateStr.slice(0, 7);  // 'YYYY-MM'
     if (!month || month.length < 7) continue;
 
-    const { category, subCategory } = classifyVendor(vendor);
+    const { category, subCategory, account } = classifyVendor(vendor);
 
     result.push({
       date:        dateStr,
       month,
       category,
       subCategory,
+      account,
       vendor,
       amount:      Math.round(outAmt),
       source:      'bank',

@@ -736,19 +736,14 @@ app.get('/api/summary/:yearMonth', (req, res) => {
   let totalQty   = { 휘발유: 0, 경유: 0, 등유: 0 };
   let totalCardFee = 0;
   const prices = readJSON(PURCHASE_PRICES_FILE, []);
-  const fifoDaily = readJSON(FIFO_DAILY_FILE, []);
 
   function getFifoPrice(date, fuel) {
-    const exact = fifoDaily.find(e => e.date === date);
-    if (exact?.[fuel]?.price) return exact[fuel].price;
-    const before = [...fifoDaily].filter(e => e.date <= date && e[fuel]?.price).pop();
-    if (before?.[fuel]?.price) return before[fuel].price;
     const list = prices.filter(p => p.fuel === fuel && p.date <= date);
     return list.length ? list[list.length-1].price : 0;
   }
 
   let totalProfit = 0;
-  let hasPrices = (prices.length + fifoDaily.length) > 0;
+  let hasPrices = prices.length > 0;
 
   for (const f of dailyFiles) {
     const d = readJSON(path.join(DAILY_DIR, f), {});
@@ -801,19 +796,14 @@ app.get('/api/annual-summary', (req, res) => {
   const year = parseInt(req.query.year) || new Date().getFullYear();
 
   const prices   = readJSON(PURCHASE_PRICES_FILE, []);
-  const fifoDaily = readJSON(FIFO_DAILY_FILE, []);
   const allExpenses = readJSON(EXPENSES_FILE, []);
 
   function getFifoPrice(date, fuel) {
-    const exact = fifoDaily.find(e => e.date === date);
-    if (exact?.[fuel]?.price) return exact[fuel].price;
-    const before = [...fifoDaily].filter(e => e.date <= date && e[fuel]?.price).pop();
-    if (before?.[fuel]?.price) return before[fuel].price;
     const list = prices.filter(p => p.fuel === fuel && p.date <= date);
     return list.length ? list[list.length-1].price : 0;
   }
 
-  const hasPrices = (prices.length + fifoDaily.length) > 0;
+  const hasPrices = prices.length > 0;
   const months = [];
 
   for (let m = 1; m <= 12; m++) {
