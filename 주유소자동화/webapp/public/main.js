@@ -106,7 +106,11 @@ function initTabs() {
   document.querySelectorAll('.main-tab').forEach(btn => {
     btn.addEventListener('click', () => switchGroup(btn.dataset.group));
   });
-  document.querySelectorAll('.tab-btn').forEach(btn => {
+  // 일마감 subnav 버튼은 switchDailySubTab으로, 나머지는 switchSubTab으로
+  document.querySelectorAll('#subnav-daily .tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchDailySubTab(btn.dataset.tab));
+  });
+  document.querySelectorAll('#subnav-monthly .tab-btn').forEach(btn => {
     btn.addEventListener('click', () => switchSubTab(btn.dataset.tab));
   });
 }
@@ -2488,28 +2492,27 @@ function renderCustomerSalesPivot({ year, customers }) {
   const activeMos = allMos.filter(mo => customers.some(c => c.months[mo]));
 
   if (!customers.length || !activeMos.length) {
-    thead.innerHTML = '<tr><th colspan="4">데이터 없음</th></tr>';
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">월마감 탭에서 BOS 거래내역서를 업로드하면 표시됩니다</td></tr>';
+    thead.innerHTML = '<tr><th colspan="5">데이터 없음</th></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">월마감 탭에서 BOS 거래내역서를 업로드하면 표시됩니다</td></tr>';
     return;
   }
 
   const stickyLeft = 'position:sticky;left:0;background:inherit;z-index:1;';
-  const colSpan = activeMos.length * 3 + 3 + 1;
 
   // 헤더 행 1: 고객명 + 월 그룹 + 합계
-  let h1 = `<tr>
-    <th rowspan="2" style="${stickyLeft}min-width:130px;">고객명</th>`;
+  let h1 = `<tr><th rowspan="2" style="${stickyLeft}min-width:130px;">고객명</th>`;
   for (const mo of activeMos) {
-    h1 += `<th colspan="3" style="text-align:center;">${moLabels[parseInt(mo)-1]}</th>`;
+    h1 += `<th colspan="4" style="text-align:center;">${moLabels[parseInt(mo)-1]}</th>`;
   }
   h1 += `<th colspan="3" style="text-align:center;background:#e2e8f0;">합계</th></tr>`;
 
-  // 헤더 행 2: 서브 컬럼
+  // 헤더 행 2: 서브 컬럼 (판매단가, 수량, 매출액, 전월비%)
   let h2 = `<tr>`;
   for (let i = 0; i < activeMos.length; i++) {
     h2 += `<th class="col-num" style="min-width:68px;font-size:11px;">판매단가</th>
       <th class="col-num" style="min-width:78px;font-size:11px;">수량(L)</th>
-      <th class="col-num" style="min-width:88px;font-size:11px;">매출액</th>`;
+      <th class="col-num" style="min-width:88px;font-size:11px;">매출액</th>
+      <th class="col-num" style="min-width:58px;font-size:11px;">전월비</th>`;
   }
   h2 += `<th class="col-num" style="min-width:78px;font-size:11px;background:#e2e8f0;">수량(L)</th>
     <th class="col-num" style="min-width:88px;font-size:11px;background:#e2e8f0;">매출액</th>
@@ -2521,23 +2524,36 @@ function renderCustomerSalesPivot({ year, customers }) {
   const totals = { months: {}, qty: 0, amount: 0 };
   for (const mo of activeMos) totals.months[mo] = { qty: 0, amount: 0 };
 
+  function pctCell(curr, prev) {
+    if (!prev || !curr) return `<td class="col-num" style="color:#cbd5e1;font-size:11px;">−</td>`;
+    const pct = ((curr - prev) / prev * 100).toFixed(1);
+    const color = pct > 0 ? '#16a34a' : pct < 0 ? '#dc2626' : '#64748b';
+    const sign  = pct > 0 ? '+' : '';
+    return `<td class="col-num" style="color:${color};font-size:11px;font-weight:600;">${sign}${pct}%</td>`;
+  }
+
   let rowsHtml = '';
   for (const c of customers) {
     let tQty = 0, tAmt = 0;
     let row = `<tr><td style="${stickyLeft}font-weight:500;">${esc(c.name)}</td>`;
-    for (const mo of activeMos) {
-      const d = c.months[mo];
+    for (let i = 0; i < activeMos.length; i++) {
+      const mo   = activeMos[i];
+      const prev = i > 0 ? activeMos[i - 1] : null;
+      const d    = c.months[mo];
+      const dp   = prev ? c.months[prev] : null;
       if (d && d.amount > 0) {
         const avg = d.qty > 0 ? Math.round(d.amount / d.qty) : 0;
         row += `<td class="col-num" style="font-size:12px;">${avg.toLocaleString()}</td>
           <td class="col-num" style="font-size:12px;">${d.qty.toLocaleString()}</td>
           <td class="col-num" style="font-size:12px;">${d.amount.toLocaleString()}</td>`;
+        row += pctCell(d.amount, dp?.amount);
         tQty += d.qty; tAmt += d.amount;
         totals.months[mo].qty += d.qty; totals.months[mo].amount += d.amount;
       } else {
         row += `<td class="col-num" style="color:#cbd5e1;">−</td>
           <td class="col-num" style="color:#cbd5e1;">−</td>
           <td class="col-num" style="color:#cbd5e1;">−</td>`;
+        row += pctCell(null, null);
       }
     }
     const avg = tQty > 0 ? Math.round(tAmt / tQty) : 0;
@@ -2552,12 +2568,16 @@ function renderCustomerSalesPivot({ year, customers }) {
   // 합계 행
   let totalRow = `<tr style="font-weight:700;background:#e2e8f0;">
     <td style="${stickyLeft}background:#e2e8f0;">합계</td>`;
-  for (const mo of activeMos) {
-    const d = totals.months[mo];
-    const avg = d.qty > 0 ? Math.round(d.amount / d.qty) : 0;
+  for (let i = 0; i < activeMos.length; i++) {
+    const mo   = activeMos[i];
+    const prev = i > 0 ? activeMos[i - 1] : null;
+    const d    = totals.months[mo];
+    const dp   = prev ? totals.months[prev] : null;
+    const avg  = d.qty > 0 ? Math.round(d.amount / d.qty) : 0;
     totalRow += `<td class="col-num">${avg.toLocaleString()}</td>
       <td class="col-num">${d.qty.toLocaleString()}</td>
       <td class="col-num">${d.amount.toLocaleString()}</td>`;
+    totalRow += pctCell(d.amount, dp?.amount);
   }
   const overallAvg = totals.qty > 0 ? Math.round(totals.amount / totals.qty) : 0;
   totalRow += `<td class="col-num" style="background:#cbd5e1;">${totals.qty.toLocaleString()}</td>
