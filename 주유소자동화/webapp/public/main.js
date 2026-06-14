@@ -10,7 +10,7 @@ const dailyState = {
 };
 
 // ── 지출관리 상태 ─────────────────────────────────────────────
-const expenseState = { year: new Date().getFullYear(), month: new Date().getMonth() + 1, list: [] };
+const expenseState = { year: new Date().getFullYear(), month: new Date().getMonth() + 1, list: [], allMonths: false };
 
 // ── 상태 ─────────────────────────────────────────────────────
 const PRINT_METHODS = ['유종별', '판매일자순', '차량별-판매일자순', '차량별-유종별'];
@@ -2006,7 +2006,7 @@ async function uploadExpenses(file) {
     if (data.ok) {
       if (label) label.textContent = `✅ ${data.count}건 임포트 완료`;
       toast(`✅ 지출내역 ${data.count}건 임포트 완료`, 'success');
-      loadExpenseTab();
+      loadAllExpenses();
     } else {
       if (label) label.textContent = '업로드 실패';
       toast(`오류: ${data.error}`, 'error');
@@ -2032,6 +2032,7 @@ async function addExpense() {
 // ── 지출관리 탭 ──────────────────────────────────────────────
 
 async function loadExpenseTab() {
+  expenseState.allMonths = false;
   expenseState.year  = parseInt(document.getElementById('expense-yr').value);
   expenseState.month = parseInt(document.getElementById('expense-mo').value);
   const ym = `${expenseState.year}-${String(expenseState.month).padStart(2, '0')}`;
@@ -2042,20 +2043,172 @@ async function loadExpenseTab() {
   }
 }
 
+async function loadAllExpenses() {
+  const res = await api('GET', '/api/expenses');
+  if (res.ok) {
+    expenseState.list = res.expenses || [];
+    expenseState.allMonths = true;
+    renderExpenseTab();
+  }
+}
+
 function renderExpenseTab() {
   const list = expenseState.list;
-  document.getElementById('expense-tab-month-label').textContent = `${expenseState.year}년 ${expenseState.month}월`;
-  document.getElementById('expense-detail-count').textContent    = `${list.length}건`;
+  const isAll = expenseState.allMonths;
+
+  document.getElementById('expense-tab-month-label').textContent =
+    isAll ? `전체 기간` : `${expenseState.year}년 ${expenseState.month}월`;
+  document.getElementById('expense-detail-count').textContent = `${list.length}건`;
 
   const summaryBody = document.getElementById('expense-summary-body');
   if (!list.length) {
-    summaryBody.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;">해당 월 지출 내역이 없습니다.</div>';
+    summaryBody.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;">해당 기간 지출 내역이 없습니다.</div>';
     document.getElementById('expense-detail-tbody').innerHTML =
-      '<tr class="empty-row"><td colspan="6">지출 내역이 없습니다</td></tr>';
+      '<tr class="empty-row"><td colspan="7">지출 내역이 없습니다</td></tr>';
     return;
   }
 
-  // 소분류별 합산
+  if (isAll) {
+    renderExpensePivot(list);
+  } else {
+    renderExpenseSingleMonth(list);
+  }
+}
+
+// ── 전체기간: 소분류 × 월별 피벗 테이블 ───────────────────────
+function renderExpensePivot(list) {
+  const months = [...new Set(list.map(e => e.month))].sort();
+
+  const pivot    = {};  // { "cat||sub": { month: total } }
+  const catInfo  = {};  // { "cat||sub": { cat, sub, account } }
+  const catTots  = {};  // { cat: { month: total } }
+  const grandTot = {};  // { month: total }
+
+  for (const e of list) {
+    const key = `${e.category}||${e.subCategory}`;
+    if (!pivot[key]) {
+      pivot[key]   = {};
+      catInfo[key] = { cat: e.category, sub: e.subCategory, account: e.account || e.subCategory };
+    }
+    pivot[key][e.month]    = (pivot[key][e.month]    || 0) + (e.amount || 0);
+    if (!catTots[e.category]) catTots[e.category] = {};
+    catTots[e.category][e.month] = (catTots[e.category][e.month] || 0) + (e.amount || 0);
+    grandTot[e.month] = (grandTot[e.month] || 0) + (e.amount || 0);
+  }
+
+  // 고정비 우선, 같은 대분류 내 합계 내림차순
+  const keys = Object.keys(pivot).sort((a, b) => {
+    const [ca] = a.split('||'); const [cb] = b.split('||');
+    if (ca !== cb) return ca === '고정비' ? -1 : 1;
+    const ta = Object.values(pivot[a]).reduce((s,v)=>s+v,0);
+    const tb = Object.values(pivot[b]).reduce((s,v)=>s+v,0);
+    return tb - ta;
+  });
+
+  const W = v => v ? Math.round(v).toLocaleString() : '-';
+  const mHeaders = months.map(m => `<th class="rpt-num">${parseInt(m.slice(5))}월</th>`).join('')
+    + '<th class="rpt-num rpt-total">합계</th>';
+
+  let rows = '', curCat = '';
+
+  for (const key of keys) {
+    const { cat, sub, account } = catInfo[key];
+
+    if (cat !== curCat) {
+      if (curCat) {
+        const cts = catTots[curCat] || {};
+        rows += `<tr style="background:#f0fdf4;">
+          <td style="font-weight:700;padding-left:8px;">${curCat} 소계</td>
+          ${months.map(m=>`<td class="rpt-num" style="font-weight:600;">${W(cts[m])}</td>`).join('')}
+          <td class="rpt-num rpt-total" style="font-weight:700;">${W(Object.values(cts).reduce((s,v)=>s+v,0))}</td>
+        </tr>`;
+      }
+      rows += `<tr style="background:#e2e8f0;">
+        <td colspan="${months.length+2}" style="font-weight:700;padding:5px 10px;font-size:11px;color:#374151;">[${cat}]</td>
+      </tr>`;
+      curCat = cat;
+    }
+
+    const rowTot = Object.values(pivot[key]).reduce((s,v)=>s+v,0);
+    rows += `<tr>
+      <td style="padding-left:16px;">${esc(sub)}
+        <span style="color:#6366f1;font-size:11px;margin-left:5px;">${esc(account)}</span>
+      </td>
+      ${months.map(m=>`<td class="rpt-num">${W(pivot[key][m])}</td>`).join('')}
+      <td class="rpt-num rpt-total">${W(rowTot)}</td>
+    </tr>`;
+  }
+
+  if (curCat) {
+    const cts = catTots[curCat] || {};
+    rows += `<tr style="background:#f0fdf4;">
+      <td style="font-weight:700;padding-left:8px;">${curCat} 소계</td>
+      ${months.map(m=>`<td class="rpt-num" style="font-weight:600;">${W(cts[m])}</td>`).join('')}
+      <td class="rpt-num rpt-total" style="font-weight:700;">${W(Object.values(cts).reduce((s,v)=>s+v,0))}</td>
+    </tr>`;
+  }
+
+  rows += `<tr style="background:#dbeafe;">
+    <td style="font-weight:700;">총 합계</td>
+    ${months.map(m=>`<td class="rpt-num" style="font-weight:700;">${W(grandTot[m])}</td>`).join('')}
+    <td class="rpt-num rpt-total" style="font-weight:700;background:#93c5fd;">${W(Object.values(grandTot).reduce((s,v)=>s+v,0))}</td>
+  </tr>`;
+
+  document.getElementById('expense-summary-body').innerHTML = `
+    <div style="overflow-x:auto;padding:4px 0;">
+      <table style="font-size:12px;border-collapse:collapse;min-width:400px;width:100%;">
+        <thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+          <th style="text-align:left;padding:6px 10px;min-width:140px;">소분류 · 계정과목</th>
+          ${mHeaders}
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+
+  // 상세 내역: 날짜순, 월 그룹 헤더
+  const sortedList = list.map((e, i) => ({ ...e, _idx: i }))
+    .sort((a, b) => (a.date || a.month).localeCompare(b.date || b.month));
+
+  let detail = '', curMo = '', moTot = 0;
+  for (const e of sortedList) {
+    if (e.month !== curMo) {
+      if (curMo) {
+        detail += `<tr style="background:#f1f5f9;font-weight:600;">
+          <td colspan="5">${curMo.slice(0,4)}년 ${parseInt(curMo.slice(5))}월 소계</td>
+          <td style="text-align:right;">${moTot.toLocaleString()}원</td><td></td>
+        </tr>`;
+      }
+      detail += `<tr style="background:#e2e8f0;">
+        <td colspan="7" style="font-weight:700;padding:6px 10px;">
+          ${e.month.slice(0,4)}년 ${parseInt(e.month.slice(5))}월
+        </td>
+      </tr>`;
+      curMo = e.month; moTot = 0;
+    }
+    moTot += e.amount || 0;
+    detail += `<tr>
+      <td>${e.date || e.month}</td>
+      <td><span class="badge-cat ${e.category === '고정비' ? 'badge-fixed' : 'badge-var'}">${esc(e.category)}</span></td>
+      <td>${esc(e.subCategory)}</td>
+      <td style="color:#6366f1;font-size:12px;">${esc(e.account || e.subCategory)}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(e.vendor)}">${esc(e.vendor)}</td>
+      <td style="text-align:right;">${(e.amount||0).toLocaleString()}원</td>
+      <td><button class="btn-sm btn-danger" onclick="deleteExpenseItem(${e._idx})">삭제</button></td>
+    </tr>`;
+  }
+  if (curMo) {
+    detail += `<tr style="background:#f1f5f9;font-weight:600;">
+      <td colspan="5">${curMo.slice(0,4)}년 ${parseInt(curMo.slice(5))}월 소계</td>
+      <td style="text-align:right;">${moTot.toLocaleString()}원</td><td></td>
+    </tr>`;
+  }
+
+  document.getElementById('expense-detail-tbody').innerHTML = detail ||
+    '<tr class="empty-row"><td colspan="7">내역 없음</td></tr>';
+}
+
+// ── 단월 조회 ──────────────────────────────────────────────────
+function renderExpenseSingleMonth(list) {
   const bySubCat = {};
   let grandTotal = 0;
   for (const e of list) {
@@ -2065,64 +2218,51 @@ function renderExpenseTab() {
     grandTotal += e.amount || 0;
   }
 
-  // 대분류 그룹으로 정렬 (고정비 먼저, 같은 대분류 내 금액 내림차순)
   const sorted = Object.entries(bySubCat).sort((a, b) => {
-    const [ca] = a[0].split('||');
-    const [cb] = b[0].split('||');
+    const [ca] = a[0].split('||'); const [cb] = b[0].split('||');
     if (ca !== cb) return ca === '고정비' ? -1 : 1;
     return b[1].amt - a[1].amt;
   });
 
-  let curCat = '';
-  let rows = '';
-  let catTotal = 0;
-
+  let curCat = '', rows = '', catTotal = 0;
   for (const [key, { amt, account }] of sorted) {
     const [cat, sub] = key.split('||');
     if (cat !== curCat) {
-      if (curCat) {
-        rows += `<tr style="font-weight:600;background:#f1f5f9;">
-          <td colspan="3">${curCat} 소계</td>
-          <td style="text-align:right;font-weight:600;">${catTotal.toLocaleString()}원</td>
-        </tr>`;
-      }
+      if (curCat) rows += `<tr style="font-weight:600;background:#f1f5f9;">
+        <td colspan="3">${curCat} 소계</td>
+        <td style="text-align:right;">${catTotal.toLocaleString()}원</td></tr>`;
       curCat = cat; catTotal = 0;
     }
     catTotal += amt;
     rows += `<tr>
-      <td style="padding-left:20px;color:#64748b;">${cat}</td>
-      <td>${sub}</td>
-      <td style="color:#6366f1;font-size:12px;">${account}</td>
+      <td style="padding-left:16px;color:#64748b;">${cat}</td>
+      <td>${esc(sub)}</td>
+      <td style="color:#6366f1;font-size:12px;">${esc(account)}</td>
       <td style="text-align:right;">${amt.toLocaleString()}원</td>
     </tr>`;
   }
-  if (curCat) {
-    rows += `<tr style="font-weight:600;background:#f1f5f9;">
-      <td colspan="3">${curCat} 소계</td>
-      <td style="text-align:right;font-weight:600;">${catTotal.toLocaleString()}원</td>
-    </tr>`;
-  }
+  if (curCat) rows += `<tr style="font-weight:600;background:#f1f5f9;">
+    <td colspan="3">${curCat} 소계</td>
+    <td style="text-align:right;">${catTotal.toLocaleString()}원</td></tr>`;
 
-  summaryBody.innerHTML = `
+  document.getElementById('expense-summary-body').innerHTML = `
     <table style="font-size:13px;">
       <thead><tr><th>대분류</th><th>소분류</th><th>계정과목</th><th class="col-num">금액</th></tr></thead>
       <tbody>${rows}</tbody>
       <tfoot><tr style="font-weight:700;border-top:2px solid #e2e8f0;">
-        <td colspan="3">합계</td>
-        <td style="text-align:right;">${grandTotal.toLocaleString()}원</td>
+        <td colspan="3">합계</td><td style="text-align:right;">${grandTotal.toLocaleString()}원</td>
       </tr></tfoot>
     </table>`;
 
-  // 상세 내역 테이블
   const detailRows = [...list]
     .sort((a, b) => (a.date || a.month || '').localeCompare(b.date || b.month || ''))
     .map((e, i) => `<tr>
       <td>${e.date || e.month}</td>
-      <td><span class="badge-cat ${e.category === '고정비' ? 'badge-fixed' : 'badge-var'}">${e.category}</span></td>
-      <td>${e.subCategory}</td>
-      <td style="color:#6366f1;font-size:12px;">${e.account || e.subCategory}</td>
-      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.vendor}">${e.vendor}</td>
-      <td style="text-align:right;">${(e.amount || 0).toLocaleString()}원</td>
+      <td><span class="badge-cat ${e.category === '고정비' ? 'badge-fixed' : 'badge-var'}">${esc(e.category)}</span></td>
+      <td>${esc(e.subCategory)}</td>
+      <td style="color:#6366f1;font-size:12px;">${esc(e.account || e.subCategory)}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(e.vendor)}">${esc(e.vendor)}</td>
+      <td style="text-align:right;">${(e.amount||0).toLocaleString()}원</td>
       <td><button class="btn-sm btn-danger" onclick="deleteExpenseItem(${i})">삭제</button></td>
     </tr>`).join('');
 
@@ -2134,12 +2274,9 @@ async function deleteExpenseItem(idx) {
   const e = expenseState.list[idx];
   if (!e) return;
   if (!confirm(`${e.vendor} ${(e.amount || 0).toLocaleString()}원을 삭제하시겠습니까?`)) return;
-  const ym  = `${expenseState.year}-${String(expenseState.month).padStart(2, '0')}`;
+  const month = e.month || `${expenseState.year}-${String(expenseState.month).padStart(2, '0')}`;
   const res = await api('DELETE', '/api/expenses/delete', {
-    month:  ym,
-    date:   e.date  || '',
-    vendor: e.vendor,
-    amount: e.amount,
+    month, date: e.date || '', vendor: e.vendor, amount: e.amount,
   });
   if (res.ok) {
     expenseState.list.splice(idx, 1);
@@ -2161,7 +2298,7 @@ async function uploadBankExpenses(file) {
     if (data.ok) {
       label.textContent = `✅ ${data.count}건 (${(data.months || []).join(', ')})`;
       toast(`✅ 수시입출예금 ${data.count}건 지출 임포트 완료`, 'success');
-      loadExpenseTab();
+      loadAllExpenses();
     } else {
       label.textContent = '업로드 실패';
       toast(`오류: ${data.error}`, 'error');
