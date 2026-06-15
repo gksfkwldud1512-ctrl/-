@@ -9,6 +9,15 @@ const app  = express();
 const PORT = 3000;
 
 app.use(express.json());
+// JS/CSS 파일 캐시 방지 (코드 업데이트 후 즉시 반영)
+app.use((req, res, next) => {
+  if (/\.(js|css)$/.test(req.path)) {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/version', (req, res) => res.json({ version }));
