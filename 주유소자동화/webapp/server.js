@@ -967,6 +967,72 @@ app.post('/api/daily/upload-bank', upload.single('file'), (req, res) => {
   } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
+// ── 서버 IP 조회 (모바일 공유용) ──────────────────────────────
+app.get('/api/server-info', (req, res) => {
+  const os = require('os');
+  const ifaces = os.networkInterfaces();
+  let localIP = 'localhost';
+  for (const iface of Object.values(ifaces)) {
+    for (const alias of iface) {
+      if (alias.family === 'IPv4' && !alias.internal) {
+        localIP = alias.address;
+        break;
+      }
+    }
+  }
+  res.json({ ok: true, ip: localIP, port: PORT, version });
+});
+
+// ── 모바일용 일마감 월별 데이터 ───────────────────────────────
+app.get('/api/daily-summary', (req, res) => {
+  const year  = parseInt(req.query.year)  || new Date().getFullYear();
+  const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+  const ym    = `${year}-${String(month).padStart(2,'0')}`;
+
+  const days = [];
+  if (fs.existsSync(DAILY_DIR)) {
+    fs.readdirSync(DAILY_DIR)
+      .filter(f => f.startsWith(ym) && f.endsWith('.json'))
+      .sort()
+      .forEach(f => {
+        const d = readJSON(path.join(DAILY_DIR, f), {});
+        if (d.bos) days.push(d);
+      });
+  }
+
+  const prices = readJSON(PURCHASE_PRICES_FILE, []);
+  function getFifoPrice(date, fuel) {
+    const list = prices.filter(p => p.fuel === fuel && p.date <= date);
+    return list.length ? list[list.length - 1].price : 0;
+  }
+
+  const result = days.map(d => {
+    const bos = d.bos;
+    let profit = null;
+    if (prices.length > 0 && bos) {
+      profit = 0;
+      ['휘발유', '경유', '등유'].forEach(fuel => {
+        const f = bos.fuels?.[fuel];
+        const buy = getFifoPrice(bos.date, fuel);
+        if (f && buy) profit += f.amount - f.qty * buy;
+      });
+      profit += (bos.carwash?.amount || 0);
+      profit += (bos.others?.amount  || 0) - (d.otherCost || 0);
+      profit -= (d.card?.totalFee    || 0);
+      profit = Math.round(profit);
+    }
+    return {
+      date:   bos?.date,
+      fuels:  bos?.fuels,
+      carwash: bos?.carwash,
+      others:  bos?.others,
+      profit,
+    };
+  });
+
+  res.json({ ok: true, year, month, days: result });
+});
+
 app.listen(PORT, () => {
   console.log('\n✅  주유소 자동화 웹앱 실행 중');
   console.log(`    브라우저에서 열기 → http://localhost:${PORT}\n`);

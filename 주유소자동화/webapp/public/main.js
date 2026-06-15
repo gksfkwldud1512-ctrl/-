@@ -2445,6 +2445,35 @@ function renderAnnualReport({ year, months, hasPrices }) {
   body.innerHTML = html;
 }
 
+// ── 모바일 공유 ───────────────────────────────────────────────
+let _mobileUrl = null;
+
+async function showMobileShare() {
+  const panel = document.getElementById('mobile-share-panel');
+  if (!panel) return;
+  panel.style.display = 'block';
+  if (_mobileUrl) {
+    document.getElementById('mobile-url-display').textContent = _mobileUrl;
+    return;
+  }
+  const res = await api('GET', '/api/server-info');
+  if (res.ok) {
+    _mobileUrl = `http://${res.ip}:${res.port}/mobile.html`;
+    document.getElementById('mobile-url-display').textContent = _mobileUrl;
+  } else {
+    document.getElementById('mobile-url-display').textContent = 'IP 조회 실패';
+  }
+}
+
+function copyMobileUrl() {
+  if (!_mobileUrl) return;
+  navigator.clipboard.writeText(_mobileUrl).then(() => {
+    toast('📋 주소가 복사되었습니다', 'success');
+  }).catch(() => {
+    prompt('아래 주소를 복사하세요:', _mobileUrl);
+  });
+}
+
 // ── 고객매출현황 탭: 월별 업체별 매출 리스트 ───────────────────
 async function loadCustomerSalesMonth() {
   const year  = parseInt(document.getElementById('cs-year')?.value)  || dailyState.year;

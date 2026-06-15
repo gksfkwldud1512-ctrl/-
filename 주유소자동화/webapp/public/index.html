@@ -140,6 +140,9 @@
         <span>월</span>
       </div>
       <div class="toolbar-group" style="margin-left:auto; gap:8px;">
+        <button class="btn-upload btn-purple" onclick="showMobileShare()" style="background:#7c3aed;border-color:#7c3aed;">
+          📱 모바일 공유
+        </button>
         <input type="file" id="bos-file-input" accept=".xlsx,.xls" hidden>
         <button class="btn-upload" onclick="document.getElementById('bos-file-input').click()">
           📂 BOS 데이터 업로드
@@ -148,6 +151,24 @@
         <button class="btn-upload btn-teal" onclick="document.getElementById('card-file-input').click()">
           💳 이지샵 카드내역 업로드
         </button>
+      </div>
+    </div>
+
+    <!-- 모바일 공유 패널 -->
+    <div id="mobile-share-panel" class="card" style="display:none;margin:0 0 12px;border:2px solid #7c3aed;">
+      <div class="card-header" style="background:#f5f3ff;">
+        <h2 style="color:#5b21b6;">📱 모바일 공유 링크</h2>
+        <button onclick="document.getElementById('mobile-share-panel').style.display='none'" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:16px;">✕</button>
+      </div>
+      <div style="padding:16px;">
+        <p style="font-size:13px;color:#64748b;margin-bottom:12px;">같은 Wi-Fi에 연결된 스마트폰에서 아래 주소로 접속하세요:</p>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;font-size:15px;font-weight:700;color:#1e293b;letter-spacing:0.5px;" id="mobile-url-display">
+          불러오는 중...
+        </div>
+        <button onclick="copyMobileUrl()" style="margin-top:10px;padding:8px 16px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">
+          🔗 주소 복사
+        </button>
+        <p style="font-size:11px;color:#94a3b8;margin-top:10px;">※ 같은 와이파이 네트워크에서만 접속 가능합니다</p>
       </div>
     </div>
 
