@@ -9,9 +9,9 @@ const app  = express();
 const PORT = 3000;
 
 app.use(express.json());
-// JS/CSS 파일 캐시 방지 (코드 업데이트 후 즉시 반영)
+// 정적 파일 캐시 완전 방지 (HTML 포함 — 코드 업데이트 즉시 반영)
 app.use((req, res, next) => {
-  if (/\.(js|css)$/.test(req.path)) {
+  if (/\.(js|css|html)$/.test(req.path) || req.path === '/' || req.path === '') {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');

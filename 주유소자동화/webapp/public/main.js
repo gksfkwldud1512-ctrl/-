@@ -144,9 +144,10 @@ function switchGroup(group) {
     if (subnavMonthly) subnavMonthly.style.display = 'none';
     if (subnavDaily)   subnavDaily.style.display   = '';
     // 월마감 tab-content 모두 숨김 (거래명세서 등이 보이는 버그 수정)
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.group-content').forEach(s => s.classList.remove('active'));
-    document.getElementById('group-daily').classList.add('active');
+    document.querySelectorAll('.tab-content').forEach(t => { t.classList.remove('active'); t.style.display = 'none'; });
+    document.querySelectorAll('.group-content').forEach(s => { s.classList.remove('active'); s.style.display = 'none'; });
+    const gd = document.getElementById('group-daily');
+    if (gd) { gd.classList.add('active'); gd.style.display = 'block'; }
     // 활성 탭 또는 기본값
     const activeBtn = document.querySelector('#subnav-daily .tab-btn.active');
     const activeTab = activeBtn ? activeBtn.dataset.tab : 'daily-main';
@@ -161,15 +162,22 @@ function switchGroup(group) {
 }
 
 function switchDailySubTab(tab) {
-  // subnav-daily 버튼 활성화
   document.querySelectorAll('#subnav-daily .tab-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === tab);
   });
-  // 탭 콘텐츠 표시/숨김
+  // CSS 클래스 + 인라인 style 양쪽 다 설정 (CSS 미적용 환경 대응)
   ['daily-main', 'daily-deposit', 'daily-expense', 'daily-customer', 'daily-customer-sales'].forEach(t => {
     const el = document.getElementById(`tab-${t}`);
-    if (el) el.classList.toggle('active', t === tab);
+    if (el) {
+      const show = (t === tab);
+      el.classList.toggle('active', show);
+      el.style.display = show ? 'block' : 'none';
+    }
   });
+  // group-daily도 반드시 visible
+  const gd = document.getElementById('group-daily');
+  if (gd) { gd.classList.add('active'); gd.style.display = 'block'; }
+
   if (tab === 'daily-deposit') renderDepositVerification();
   if (tab === 'daily-expense') loadAllExpenses();
   if (tab === 'daily-customer') loadCustomerSalesTab();
@@ -2081,11 +2089,19 @@ async function loadExpenseTab() {
 }
 
 async function loadAllExpenses() {
-  const res = await api('GET', '/api/expenses');
-  if (res.ok) {
-    expenseState.list = res.expenses || [];
-    expenseState.allMonths = true;
-    renderExpenseTab();
+  const summaryBody = document.getElementById('expense-summary-body');
+  if (summaryBody) summaryBody.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;">⏳ 불러오는 중…</div>';
+  try {
+    const res = await api('GET', '/api/expenses');
+    if (res.ok) {
+      expenseState.list = res.expenses || [];
+      expenseState.allMonths = true;
+      renderExpenseTab();
+    } else {
+      if (summaryBody) summaryBody.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;">API 오류: ${res.error || '알 수 없음'}</div>`;
+    }
+  } catch (err) {
+    if (summaryBody) summaryBody.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;">오류: ${err.message}</div>`;
   }
 }
 
@@ -2093,22 +2109,30 @@ function renderExpenseTab() {
   const list = expenseState.list;
   const isAll = expenseState.allMonths;
 
-  document.getElementById('expense-tab-month-label').textContent =
-    isAll ? `전체 기간` : `${expenseState.year}년 ${expenseState.month}월`;
-  document.getElementById('expense-detail-count').textContent = `${list.length}건`;
+  const monthLabel = document.getElementById('expense-tab-month-label');
+  const detailCount = document.getElementById('expense-detail-count');
+  if (monthLabel) monthLabel.textContent = isAll ? `전체 기간` : `${expenseState.year}년 ${expenseState.month}월`;
+  if (detailCount) detailCount.textContent = `${list.length}건`;
 
   const summaryBody = document.getElementById('expense-summary-body');
+  if (!summaryBody) return;
+
   if (!list.length) {
     summaryBody.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;">해당 기간 지출 내역이 없습니다.</div>';
-    document.getElementById('expense-detail-tbody').innerHTML =
-      '<tr class="empty-row"><td colspan="7">지출 내역이 없습니다</td></tr>';
+    const tbody = document.getElementById('expense-detail-tbody');
+    if (tbody) tbody.innerHTML = '<tr class="empty-row"><td colspan="7">지출 내역이 없습니다</td></tr>';
     return;
   }
 
-  if (isAll) {
-    renderExpensePivot(list);
-  } else {
-    renderExpenseSingleMonth(list);
+  try {
+    if (isAll) {
+      renderExpensePivot(list);
+    } else {
+      renderExpenseSingleMonth(list);
+    }
+  } catch (err) {
+    summaryBody.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;">렌더링 오류: ${err.message}</div>`;
+    console.error('renderExpenseTab error:', err);
   }
 }
 
