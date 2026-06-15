@@ -171,7 +171,7 @@ function switchDailySubTab(tab) {
     if (el) el.classList.toggle('active', t === tab);
   });
   if (tab === 'daily-deposit') renderDepositVerification();
-  if (tab === 'daily-expense') loadExpenseTab();
+  if (tab === 'daily-expense') loadAllExpenses();
   if (tab === 'daily-customer') loadCustomerSalesTab();
   if (tab === 'daily-customer-sales') loadCustomerSalesMonth();
 }
