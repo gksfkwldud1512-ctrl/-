@@ -166,13 +166,14 @@ function switchDailySubTab(tab) {
     b.classList.toggle('active', b.dataset.tab === tab);
   });
   // 탭 콘텐츠 표시/숨김
-  ['daily-main', 'daily-deposit', 'daily-expense', 'daily-customer'].forEach(t => {
+  ['daily-main', 'daily-deposit', 'daily-expense', 'daily-customer', 'daily-customer-sales'].forEach(t => {
     const el = document.getElementById(`tab-${t}`);
     if (el) el.classList.toggle('active', t === tab);
   });
   if (tab === 'daily-deposit') renderDepositVerification();
   if (tab === 'daily-expense') loadExpenseTab();
   if (tab === 'daily-customer') loadCustomerSalesTab();
+  if (tab === 'daily-customer-sales') loadCustomerSalesMonth();
 }
 
 function switchSubTab(tab) {
@@ -1128,6 +1129,26 @@ function initDailyYearMonth() {
       cSelYear.appendChild(opt);
     }
   }
+
+  // 고객매출현황 탭 년월 선택기 초기화
+  const csYear  = document.getElementById('cs-year');
+  const csMonth = document.getElementById('cs-month');
+  if (csYear) {
+    for (let y = now.getFullYear() - 1; y <= now.getFullYear() + 1; y++) {
+      const opt = document.createElement('option');
+      opt.value = y; opt.textContent = y;
+      if (y === now.getFullYear()) opt.selected = true;
+      csYear.appendChild(opt);
+    }
+  }
+  if (csMonth) {
+    for (let m = 1; m <= 12; m++) {
+      const opt = document.createElement('option');
+      opt.value = m; opt.textContent = m;
+      if (m === now.getMonth() + 1) opt.selected = true;
+      csMonth.appendChild(opt);
+    }
+  }
 }
 
 function initDailyUpload() {
@@ -1477,7 +1498,6 @@ async function loadDailyMonth() {
     renderDailyTable();
     renderDepositVerification();
   }
-  loadDailyCustomerSummary();
 }
 
 function calcDailyProfit(day) {
@@ -2425,21 +2445,27 @@ function renderAnnualReport({ year, months, hasPrices }) {
   body.innerHTML = html;
 }
 
-// ── 고객관리 탭: 일마감 하단 월별 고객 현황 ─────────────────────
-async function loadDailyCustomerSummary() {
-  const card  = document.getElementById('daily-customer-card');
-  const tbody = document.getElementById('daily-customer-tbody');
-  const label = document.getElementById('daily-customer-label');
-  if (!card) return;
+// ── 고객매출현황 탭: 월별 업체별 매출 리스트 ───────────────────
+async function loadCustomerSalesMonth() {
+  const year  = parseInt(document.getElementById('cs-year')?.value)  || dailyState.year;
+  const month = parseInt(document.getElementById('cs-month')?.value) || dailyState.month;
+  const label = document.getElementById('cs-label');
+  const tbody = document.getElementById('cs-tbody');
+  if (!tbody) return;
 
-  const res = await api('GET', `/api/vendors?year=${dailyState.year}&month=${dailyState.month}`);
-  if (!res.ok || !res.vendors) { card.style.display = 'none'; return; }
+  const res = await api('GET', `/api/vendors?year=${year}&month=${month}`);
+  if (!res.ok || !res.vendors) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">데이터 없음</td></tr>';
+    return;
+  }
 
   const vendors = res.vendors.filter(v => v.txs && v.txs.length > 0);
-  if (!vendors.length) { card.style.display = 'none'; return; }
+  if (!vendors.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">해당 월 거래 데이터가 없습니다 (월마감 BOS 업로드 필요)</td></tr>';
+    return;
+  }
 
-  if (label) label.textContent = `${dailyState.year}년 ${dailyState.month}월`;
-  card.style.display = '';
+  if (label) label.textContent = `${year}년 ${month}월`;
 
   const rows = vendors.map(v => {
     const qty    = v.txs.reduce((s, t) => s + (t.qty    || 0), 0);
@@ -2450,19 +2476,23 @@ async function loadDailyCustomerSummary() {
   const totalQty = rows.reduce((s, r) => s + r.qty, 0);
   const totalAmt = rows.reduce((s, r) => s + r.amount, 0);
 
-  tbody.innerHTML = rows.map(r => `
-    <tr>
+  tbody.innerHTML = rows.map(r => {
+    const pct = totalAmt > 0 ? (r.amount / totalAmt * 100).toFixed(1) : '0.0';
+    return `<tr>
       <td>${esc(r.name)}</td>
       <td class="col-num">${r.qty.toLocaleString()}</td>
       <td class="col-num">${r.amount.toLocaleString()}</td>
       <td class="col-num">${r.avgPrice.toLocaleString()}</td>
-    </tr>`).join('') + `
-    <tr style="font-weight:700;background:#f1f5f9;">
-      <td>합계</td>
-      <td class="col-num">${totalQty.toLocaleString()}</td>
-      <td class="col-num">${totalAmt.toLocaleString()}</td>
-      <td class="col-num"></td>
+      <td class="col-num">${pct}%</td>
     </tr>`;
+  }).join('') + `
+  <tr style="font-weight:700;background:#f1f5f9;">
+    <td>합계</td>
+    <td class="col-num">${totalQty.toLocaleString()}</td>
+    <td class="col-num">${totalAmt.toLocaleString()}</td>
+    <td class="col-num"></td>
+    <td class="col-num">100%</td>
+  </tr>`;
 }
 
 // ── 고객관리 탭: 연간 고객별 월별 판매 피벗 ─────────────────────
