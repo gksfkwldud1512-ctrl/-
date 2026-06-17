@@ -156,6 +156,10 @@ function switchGroup(group) {
 }
 
 function switchDailySubTab(tab) {
+  // group-daily 반드시 visible 보장 (subnav 직접 클릭 시 대비)
+  const gd = document.getElementById('group-daily');
+  if (gd) { gd.classList.add('active'); gd.style.display = ''; }
+
   document.querySelectorAll('#subnav-daily .tab-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === tab);
   });
@@ -2089,13 +2093,15 @@ async function loadAllExpenses() {
     if (res.ok) {
       expenseState.list = res.expenses || [];
       expenseState.allMonths = true;
+      // 진단: 데이터 수신 건수 표시 (렌더링 성공하면 테이블로 즉시 교체됨)
+      if (summaryBody) summaryBody.innerHTML = `<div style="padding:12px 24px;color:#1e40af;font-weight:600;">📊 ${expenseState.list.length}건 수신됨. 렌더링 중...</div>`;
       renderExpenseTab();
     } else {
       const msg = res.error || '알 수 없음';
-      if (summaryBody) summaryBody.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;">⚠ API 오류: ${msg}</div>`;
+      if (summaryBody) summaryBody.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;font-size:14px;font-weight:600;">⚠ API 오류: ${msg}</div>`;
     }
   } catch (err) {
-    if (summaryBody) summaryBody.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;">⚠ 오류: ${err.message}</div>`;
+    if (summaryBody) summaryBody.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;font-size:14px;font-weight:600;">⚠ 오류: ${err.message}</div>`;
   }
 }
 
@@ -2125,7 +2131,7 @@ function renderExpenseTab() {
       renderExpenseSingleMonth(list);
     }
   } catch (err) {
-    summaryBody.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;">렌더링 오류: ${err.message}</div>`;
+    summaryBody.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;font-size:16px;font-weight:700;">❌ 렌더링 오류: ${err.message}</div>`;
     console.error('renderExpenseTab error:', err);
   }
 }
