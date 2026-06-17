@@ -44,6 +44,7 @@ window.addEventListener('DOMContentLoaded', () => {
   initDailyYearMonth();
   initSummaryYearMonth();
   initTabs();
+  try { switchGroup('monthly'); } catch(e) {}
   initFileUpload();
   initDailyUpload();
   initEmailPreview();
@@ -133,7 +134,9 @@ function switchGroup(group) {
     subnav.classList.remove('hidden');
     if (subnavDaily)   subnavDaily.style.display   = 'none';
     if (subnavMonthly) subnavMonthly.style.display  = '';
-    document.querySelectorAll('.group-content').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.group-content').forEach(s => { s.classList.remove('active'); s.style.display = 'none'; });
+    const gm = document.getElementById('group-monthly');
+    if (gm) { gm.classList.add('active'); gm.style.display = 'block'; }
     // 일마감 tab-content도 비활성화
     document.querySelectorAll('#group-daily .tab-content').forEach(t => t.classList.remove('active'));
     const activeBtn = document.querySelector('#subnav-monthly .tab-btn.active');
@@ -1604,9 +1607,11 @@ function renderDailyTable() {
     const totalL    = gL + dL + kL;
     const totalDrum = totalL > 0 ? Math.floor(totalL / 200).toLocaleString() : '-';
 
+    const totalSales = gA + dA + kA + otA + cwA;
     return `<tr>
       <td class="daily-col-date">${md}</td>
       <td class="group-summary-cell">${totalDrum}</td>
+      <td class="group-summary-cell" style="font-weight:600;">${totalSales > 0 ? totalSales.toLocaleString() + '원' : '-'}</td>
       <td class="group-summary-cell daily-col-profit">${pf}</td>
       <td>${litL(gL)}</td><td>${drum(gL)}</td><td>${won(gA)}</td><td>${price(gA,gL)}</td><td>${buyPr(date,'휘발유')}</td>
       <td>${litL(dL)}</td><td>${drum(dL)}</td><td>${won(dA)}</td><td>${price(dA,dL)}</td><td>${buyPr(date,'경유')}</td>
@@ -1630,9 +1635,11 @@ function renderDailyTable() {
   const totalAllL    = totals.휘발유L + totals.경유L + totals.등유L;
   const totalAllDrum = Math.floor(totalAllL / 200).toLocaleString();
 
+  const totalAllSales = totals.휘발유A + totals.경유A + totals.등유A + totals.otherA + totals.carwashA;
   const totalRow = `<tr class="total-row">
     <td class="daily-col-date">합계</td>
     <td class="group-summary-cell">${totalAllDrum}</td>
+    <td class="group-summary-cell" style="font-weight:700;">${totalAllSales.toLocaleString()}원</td>
     <td class="group-summary-cell daily-col-profit">${totalPf}</td>
     <td>${Math.floor(totals.휘발유L).toLocaleString()}</td><td>${Math.floor(totals.휘발유L/200).toLocaleString()}</td><td>${totals.휘발유A.toLocaleString()}</td><td>-</td><td>-</td>
     <td>${Math.floor(totals.경유L).toLocaleString()}</td><td>${Math.floor(totals.경유L/200).toLocaleString()}</td><td>${totals.경유A.toLocaleString()}</td><td>-</td><td>-</td>
@@ -2089,8 +2096,11 @@ async function loadExpenseTab() {
 }
 
 async function loadAllExpenses() {
+  // 탭 강제 표시
+  const tabEl = document.getElementById('tab-daily-expense');
+  if (tabEl) tabEl.style.display = 'block';
   const summaryBody = document.getElementById('expense-summary-body');
-  if (summaryBody) summaryBody.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;">⏳ 불러오는 중…</div>';
+  if (summaryBody) summaryBody.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;">⏳ 지출 내역 불러오는 중…</div>';
   try {
     const res = await api('GET', '/api/expenses');
     if (res.ok) {
@@ -2098,10 +2108,11 @@ async function loadAllExpenses() {
       expenseState.allMonths = true;
       renderExpenseTab();
     } else {
-      if (summaryBody) summaryBody.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;">API 오류: ${res.error || '알 수 없음'}</div>`;
+      const msg = res.error || '알 수 없음';
+      if (summaryBody) summaryBody.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;">⚠ API 오류: ${msg}</div>`;
     }
   } catch (err) {
-    if (summaryBody) summaryBody.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;">오류: ${err.message}</div>`;
+    if (summaryBody) summaryBody.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;">⚠ 오류: ${err.message}</div>`;
   }
 }
 

@@ -44,12 +44,12 @@ function parseEasyshop(filePath) {
     const dep = String(r[16] || '').trim();
     if (dep && !dep.match(/^\s*-/)) day._depositDates.add(dep);
 
-    // 카드 거래 수집 (BOS 대사용)
+    // 카드 거래 수집 (BOS 대사용) — 매입카드사(r[9]) 기준으로 BOS와 비교
     const approvalNo = String(r[13] || '').trim();
     if (approvalNo) {
       day.cardTxs.push({
         approvalNo,
-        cardCompany: String(r[8] || '').trim(),
+        cardCompany: String(r[9] || '').trim(),  // 매입카드사 (BOS 카드사와 동일 기준)
         cardNo:      String(r[6] || '').trim().replace(/\s+/g, ''),
         fuel:        String(r[5] || '').trim(),
         amount,

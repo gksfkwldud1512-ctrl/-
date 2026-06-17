@@ -46,6 +46,7 @@ const FIFO_DAILY_FILE       = path.join(DATA_DIR, 'fifo_daily_prices.json');
 const EXPENSES_FILE         = path.join(DATA_DIR, 'expenses.json');
 const DAILY_DIR            = path.join(DATA_DIR, 'daily');
 const BANK_DEPOSITS_FILE   = path.join(DATA_DIR, 'bank_deposits.json');
+const COMPLETION_FILE      = path.join(DATA_DIR, 'completion.json');
 
 if (!fs.existsSync(DAILY_DIR)) fs.mkdirSync(DAILY_DIR, { recursive: true });
 
@@ -1040,6 +1041,26 @@ app.get('/api/daily-summary', (req, res) => {
   });
 
   res.json({ ok: true, year, month, days: result });
+});
+
+// ── 완료 상태 (거래명세서/이메일/세금계산서) ──────────────────────
+app.get('/api/completion', (req, res) => {
+  const year  = req.query.year  || new Date().getFullYear();
+  const month = req.query.month || (new Date().getMonth() + 1);
+  const all   = readJSON(COMPLETION_FILE, {});
+  const key   = `${year}-${String(month).padStart(2, '0')}`;
+  const def   = { statements: [], emails: [], taxInvoices: [] };
+  res.json({ ok: true, completion: all[key] || def });
+});
+
+app.post('/api/completion', (req, res) => {
+  const { year, month, completion } = req.body;
+  if (!year || !month || !completion) return res.json({ ok: false, error: '잘못된 요청' });
+  const all = readJSON(COMPLETION_FILE, {});
+  const key = `${year}-${String(month).padStart(2, '0')}`;
+  all[key]  = completion;
+  fs.writeFileSync(COMPLETION_FILE, JSON.stringify(all, null, 2));
+  res.json({ ok: true });
 });
 
 app.listen(PORT, () => {
