@@ -2112,7 +2112,7 @@ async function loadAllExpenses() {
   }
 }
 
-function renderExpenseTab() {
+async function renderExpenseTab() {
   const list = expenseState.list;
   const isAll = expenseState.allMonths;
 
@@ -2132,11 +2132,14 @@ function renderExpenseTab() {
   }
 
   try {
+    summaryBody.innerHTML = '<div style="background:red;color:white;padding:24px;font-size:18px;font-weight:700;">✅ 이게 보이면 요소 표시 정상 - 렌더링 중...</div>';
+    await new Promise(r => setTimeout(r, 1000));
     if (isAll) {
       renderExpensePivot(list);
     } else {
       renderExpenseSingleMonth(list);
     }
+    toast(`렌더링 완료 (summaryBody: ${summaryBody.innerHTML.length}자)`, 'success');
   } catch (err) {
     summaryBody.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;font-size:16px;font-weight:700;">❌ 렌더링 오류: ${err.message}</div>`;
     console.error('renderExpenseTab error:', err);
