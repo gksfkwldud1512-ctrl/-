@@ -117,6 +117,10 @@ function initTabs() {
 }
 
 function switchGroup(group) {
+  // 인라인 스타일 전체 초기화 → CSS 클래스가 제어하도록 (인라인 스타일이 CSS보다 우선순위 높아 충돌 방지)
+  document.querySelectorAll('.group-content').forEach(s => { s.classList.remove('active'); s.style.display = ''; });
+  document.querySelectorAll('.tab-content').forEach(t => { t.classList.remove('active'); t.style.display = ''; });
+
   document.querySelectorAll('.main-tab').forEach(b => b.classList.remove('active'));
   document.querySelector(`.main-tab[data-group="${group}"]`).classList.add('active');
 
@@ -126,19 +130,13 @@ function switchGroup(group) {
 
   if (group === 'summary') {
     subnav.classList.add('hidden');
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.group-content').forEach(s => s.classList.remove('active'));
     document.getElementById('group-summary').classList.add('active');
     loadSummary();
   } else if (group === 'monthly') {
     subnav.classList.remove('hidden');
     if (subnavDaily)   subnavDaily.style.display   = 'none';
-    if (subnavMonthly) subnavMonthly.style.display  = '';
-    document.querySelectorAll('.group-content').forEach(s => { s.classList.remove('active'); s.style.display = 'none'; });
-    const gm = document.getElementById('group-monthly');
-    if (gm) { gm.classList.add('active'); gm.style.display = 'block'; }
-    // 일마감 tab-content도 비활성화
-    document.querySelectorAll('#group-daily .tab-content').forEach(t => t.classList.remove('active'));
+    if (subnavMonthly) subnavMonthly.style.display = '';
+    document.getElementById('group-monthly').classList.add('active');
     const activeBtn = document.querySelector('#subnav-monthly .tab-btn.active');
     const activeTab = activeBtn ? activeBtn.dataset.tab : 'statements';
     switchSubTab(activeTab);
@@ -146,20 +144,13 @@ function switchGroup(group) {
     subnav.classList.remove('hidden');
     if (subnavMonthly) subnavMonthly.style.display = 'none';
     if (subnavDaily)   subnavDaily.style.display   = '';
-    // 월마감 tab-content 모두 숨김 (거래명세서 등이 보이는 버그 수정)
-    document.querySelectorAll('.tab-content').forEach(t => { t.classList.remove('active'); t.style.display = 'none'; });
-    document.querySelectorAll('.group-content').forEach(s => { s.classList.remove('active'); s.style.display = 'none'; });
-    const gd = document.getElementById('group-daily');
-    if (gd) { gd.classList.add('active'); gd.style.display = 'block'; }
-    // 활성 탭 또는 기본값
+    document.getElementById('group-daily').classList.add('active');
     const activeBtn = document.querySelector('#subnav-daily .tab-btn.active');
     const activeTab = activeBtn ? activeBtn.dataset.tab : 'daily-main';
     switchDailySubTab(activeTab);
     loadDailyMonth();
   } else {
     subnav.classList.add('hidden');
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.group-content').forEach(s => s.classList.remove('active'));
     document.getElementById(`group-${group}`).classList.add('active');
   }
 }
@@ -168,18 +159,13 @@ function switchDailySubTab(tab) {
   document.querySelectorAll('#subnav-daily .tab-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === tab);
   });
-  // CSS 클래스 + 인라인 style 양쪽 다 설정 (CSS 미적용 환경 대응)
   ['daily-main', 'daily-deposit', 'daily-expense', 'daily-customer', 'daily-customer-sales'].forEach(t => {
     const el = document.getElementById(`tab-${t}`);
     if (el) {
-      const show = (t === tab);
-      el.classList.toggle('active', show);
-      el.style.display = show ? 'block' : 'none';
+      el.classList.toggle('active', t === tab);
+      el.style.display = '';  // 인라인 스타일 초기화 → CSS(.tab-content.active)가 처리
     }
   });
-  // group-daily도 반드시 visible
-  const gd = document.getElementById('group-daily');
-  if (gd) { gd.classList.add('active'); gd.style.display = 'block'; }
 
   if (tab === 'daily-deposit') renderDepositVerification();
   if (tab === 'daily-expense') loadAllExpenses();
@@ -188,9 +174,9 @@ function switchDailySubTab(tab) {
 }
 
 function switchSubTab(tab) {
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#subnav-monthly .tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  const btn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
+  const btn = document.querySelector(`#subnav-monthly .tab-btn[data-tab="${tab}"]`);
   if (btn) btn.classList.add('active');
   const section = document.getElementById(`tab-${tab}`);
   if (section) section.classList.add('active');
@@ -2096,9 +2082,6 @@ async function loadExpenseTab() {
 }
 
 async function loadAllExpenses() {
-  // 탭 강제 표시
-  const tabEl = document.getElementById('tab-daily-expense');
-  if (tabEl) tabEl.style.display = 'block';
   const summaryBody = document.getElementById('expense-summary-body');
   if (summaryBody) summaryBody.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;">⏳ 지출 내역 불러오는 중…</div>';
   try {
