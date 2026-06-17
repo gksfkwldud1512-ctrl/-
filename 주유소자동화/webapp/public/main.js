@@ -156,9 +156,9 @@ function switchGroup(group) {
 }
 
 function switchDailySubTab(tab) {
-  // group-daily 반드시 visible 보장 (subnav 직접 클릭 시 대비)
+  // group-daily 인라인 + 클래스 양쪽으로 강제 표시
   const gd = document.getElementById('group-daily');
-  if (gd) { gd.classList.add('active'); gd.style.display = ''; }
+  if (gd) { gd.classList.add('active'); gd.style.display = 'block'; }
 
   document.querySelectorAll('#subnav-daily .tab-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === tab);
@@ -166,13 +166,14 @@ function switchDailySubTab(tab) {
   ['daily-main', 'daily-deposit', 'daily-expense', 'daily-customer', 'daily-customer-sales'].forEach(t => {
     const el = document.getElementById(`tab-${t}`);
     if (el) {
-      el.classList.toggle('active', t === tab);
-      el.style.display = '';  // 인라인 스타일 초기화 → CSS(.tab-content.active)가 처리
+      const show = (t === tab);
+      el.classList.toggle('active', show);
+      el.style.display = show ? 'block' : 'none';  // 인라인 강제 (CSS 의존 제거)
     }
   });
 
   if (tab === 'daily-deposit') renderDepositVerification();
-  if (tab === 'daily-expense') loadAllExpenses();
+  if (tab === 'daily-expense') { toast('지출관리 탭 진입', 'success'); loadAllExpenses(); }
   if (tab === 'daily-customer') loadCustomerSalesTab();
   if (tab === 'daily-customer-sales') loadCustomerSalesMonth();
 }
@@ -2086,15 +2087,21 @@ async function loadExpenseTab() {
 }
 
 async function loadAllExpenses() {
+  // 탭과 그룹 강제 표시 (CSS 의존 없이 인라인으로)
+  const tabEl = document.getElementById('tab-daily-expense');
+  const gd    = document.getElementById('group-daily');
+  if (gd)    { gd.style.display    = 'block'; gd.classList.add('active'); }
+  if (tabEl) { tabEl.style.display = 'block'; tabEl.classList.add('active'); }
+
   const summaryBody = document.getElementById('expense-summary-body');
+  toast(`loadAllExpenses 실행됨 (body:${summaryBody ? 'OK' : 'NULL'})`, 'success');
   if (summaryBody) summaryBody.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;">⏳ 지출 내역 불러오는 중…</div>';
   try {
     const res = await api('GET', '/api/expenses');
     if (res.ok) {
       expenseState.list = res.expenses || [];
       expenseState.allMonths = true;
-      // 진단: 데이터 수신 건수 표시 (렌더링 성공하면 테이블로 즉시 교체됨)
-      if (summaryBody) summaryBody.innerHTML = `<div style="padding:12px 24px;color:#1e40af;font-weight:600;">📊 ${expenseState.list.length}건 수신됨. 렌더링 중...</div>`;
+      toast(`${expenseState.list.length}건 수신 → 렌더링`, 'success');
       renderExpenseTab();
     } else {
       const msg = res.error || '알 수 없음';
