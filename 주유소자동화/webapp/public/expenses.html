@@ -268,14 +268,6 @@
           하나은행 수시입출예금 입출금내역 Excel (.xls / .xlsx)
         </div>
       </div>
-      <div style="border-left:1px solid #e2e8f0;padding-left:16px;">
-        <button class="btn-upload" id="btn-sync"
-                style="background:#7c3aed;border-color:#7c3aed;"
-                onclick="syncCategories()">
-          🔄 1~3월 계정과목 동기화
-        </button>
-        <div class="upload-info">4·5월 기준으로 1·2·3월 계정과목 일괄 적용</div>
-      </div>
     </div>
   </div>
 
@@ -657,32 +649,6 @@ async function deleteItem(idx) {
       showBanner('✅ 삭제 완료','ok');
     } else showBanner('삭제 실패: '+data.error,'err');
   } catch { showBanner('서버 오류','err'); }
-}
-
-// ── 계정과목 동기화 ───────────────────────────────────────────
-async function syncCategories() {
-  const btn = document.getElementById('btn-sync');
-  if (!confirm('4·5월 계정과목 기준으로 1·2·3월을 일괄 업데이트합니다.\n계속하시겠습니까?')) return;
-  btn.disabled = true;
-  btn.textContent = '⏳ 동기화 중…';
-  try {
-    const res  = await fetch('/api/expenses/sync-categories', { method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        srcMonths: ['2026-04', '2026-05'],
-        dstMonths: ['2026-01', '2026-02', '2026-03'],
-      }),
-    });
-    const data = await res.json();
-    if (data.ok) {
-      showBanner(`✅ 동기화 완료 — 1~3월 ${data.updated}건 계정과목 업데이트 (전체 ${data.total}건)`, 'ok');
-      await loadData();
-    } else {
-      showBanner('동기화 실패: ' + data.error, 'err');
-    }
-  } catch(e) { showBanner('서버 오류: ' + e.message, 'err'); }
-  btn.disabled = false;
-  btn.textContent = '🔄 1~3월 계정과목 동기화';
 }
 
 // ── 업로드 ───────────────────────────────────────────────────
