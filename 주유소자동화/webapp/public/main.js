@@ -2047,6 +2047,8 @@ async function loadAllExpenses() {
   if (res.ok) {
     expenseList = res.expenses || [];
     renderExpenseList();
+  } else {
+    toast('지출 내역 조회 실패: ' + (res.error || '서버 오류'), 'error');
   }
 }
 
@@ -2059,14 +2061,15 @@ function renderExpenseList() {
     tbody.innerHTML = '<tr class="empty-row"><td colspan="6">지출 내역이 없습니다. 엑셀 파일을 업로드하세요.</td></tr>';
     return;
   }
-  const sorted = [...expenseList].sort((a, b) => (a.date || a.month || '').localeCompare(b.date || b.month || ''));
-  tbody.innerHTML = sorted.map((e, i) => `<tr>
+  const sorted = expenseList.map((e, i) => ({ ...e, _i: i }))
+    .sort((a, b) => (a.date || a.month || '').localeCompare(b.date || b.month || ''));
+  tbody.innerHTML = sorted.map(e => `<tr>
     <td>${esc(e.date || e.month || '')}</td>
     <td>${esc(e.subCategory || '')}</td>
     <td><span class="badge-cat ${e.category === '고정비' ? 'badge-fixed' : 'badge-var'}">${esc(e.category || '')}</span></td>
     <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(e.vendor || '')}">${esc(e.vendor || '')}</td>
     <td style="text-align:right;">${(e.amount || 0).toLocaleString()}원</td>
-    <td><button class="btn-sm btn-danger" onclick="deleteExpenseItem(${i})">삭제</button></td>
+    <td><button class="btn-sm btn-danger" onclick="deleteExpenseItem(${e._i})">삭제</button></td>
   </tr>`).join('');
 }
 

@@ -70,7 +70,7 @@ function isInternalTransfer(vendor) {
  * @returns {{ date:string, month:string, category:string, subCategory:string, vendor:string, amount:number, source:'bank' }[]}
  */
 function parseBankExpenses(filePath) {
-  const wb = XLSX.readFile(filePath, { type: 'file', cellDates: true });
+  const wb = XLSX.readFile(filePath, { type: 'file', cellDates: true, codepage: 949 });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
