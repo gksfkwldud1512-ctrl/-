@@ -12,328 +12,171 @@
   <div class="header-inner">
     <div class="logo">⛽ 미소주유소 자동화 <span id="app-version" class="version-badge"></span></div>
     <nav class="nav-main">
-      <button class="main-tab" data-group="usage">사용방법</button>
-      <button class="main-tab" data-group="summary">종합</button>
-      <button class="main-tab" data-group="daily">일마감</button>
-      <button class="main-tab active" data-group="monthly">월마감</button>
+      <button class="main-tab active" data-group="daily">일마감</button>
     </nav>
   </div>
-  <!-- subnav: 일마감 and 월마감 groups both use this -->
   <div class="subnav" id="subnav">
-    <!-- 일마감 subnav -->
-    <div class="subnav-inner" id="subnav-daily" style="display:none;">
+    <div class="subnav-inner" id="subnav-daily">
       <button class="tab-btn active" data-tab="daily-main">일마감</button>
-      <button class="tab-btn" data-tab="daily-deposit">입금 검증</button>
       <button class="tab-btn" data-tab="daily-expense">지출목록</button>
-      <button class="tab-btn" data-tab="daily-customer">고객관리</button>
-      <button class="tab-btn" data-tab="daily-customer-sales">고객매출현황</button>
-    </div>
-    <!-- 월마감 subnav -->
-    <div class="subnav-inner" id="subnav-monthly">
-      <button class="tab-btn active" data-tab="statements">거래명세서 발행</button>
-      <button class="tab-btn" data-tab="customers">고객 관리</button>
-      <button class="tab-btn" data-tab="email">메일 발송</button>
-      <button class="tab-btn" data-tab="hometax">세금계산서 일괄발행</button>
-      <button class="tab-btn" data-tab="settings">설정</button>
     </div>
   </div>
 </header>
 
 <main>
 
-  <!-- ───── 대분류: 사용방법 ───── -->
-  <section id="group-usage" class="group-content">
-    <div class="card placeholder-card">
-      <div class="placeholder-icon">📖</div>
-      <h2>사용방법</h2>
-      <p>이 앱의 사용 방법 안내가 이곳에 표시됩니다.</p>
-      <p class="placeholder-sub">준비 중입니다.</p>
-    </div>
-  </section>
-
-  <!-- ───── 대분류: 종합 ───── -->
-  <section id="group-summary" class="group-content">
-
-    <!-- 툴바: 조회 년월 -->
-    <div class="toolbar">
-      <div class="toolbar-group">
-        <label class="label-sm">조회 년월</label>
-        <select id="summary-year"></select>
-        <span>년</span>
-        <select id="summary-month"></select>
-        <span>월</span>
-      </div>
-    </div>
-
-    <!-- 월별 종합 요약 카드 -->
-    <div id="summary-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;">
-      <div class="summary-kpi-card" id="kpi-revenue">
-        <div class="kpi-label">총 매출</div>
-        <div class="kpi-value" id="kpi-revenue-val">-</div>
-      </div>
-      <div class="summary-kpi-card" id="kpi-cost">
-        <div class="kpi-label">매입원가</div>
-        <div class="kpi-value" id="kpi-cost-val">-</div>
-      </div>
-      <div class="summary-kpi-card" id="kpi-profit">
-        <div class="kpi-label">영업이익</div>
-        <div class="kpi-value" id="kpi-profit-val">-</div>
-      </div>
-      <div class="summary-kpi-card" id="kpi-expense">
-        <div class="kpi-label">지출</div>
-        <div class="kpi-value" id="kpi-expense-val">-</div>
-      </div>
-      <div class="summary-kpi-card" id="kpi-net">
-        <div class="kpi-label">순이익</div>
-        <div class="kpi-value" id="kpi-net-val">-</div>
-      </div>
-      <div class="summary-kpi-card">
-        <div class="kpi-label">순이익률</div>
-        <div class="kpi-value" id="kpi-margin-val">-</div>
-      </div>
-    </div>
-
-    <!-- 판매/지출 상세 -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;flex-wrap:wrap;">
-
-      <!-- 유종별 판매 현황 -->
-      <div class="card" style="min-width:280px;">
-        <div class="card-header"><h2>유종별 판매 현황</h2></div>
-        <div id="summary-sales-body">
-          <div style="padding:16px;text-align:center;color:#94a3b8;">일마감 BOS 데이터 업로드 후 표시됩니다.</div>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- ── 연간 결과보고서 ── -->
-    <div class="card" style="margin-top:16px;">
-      <div class="card-header" style="flex-wrap:wrap;gap:8px;">
-        <h2>연간 결과보고서</h2>
-        <div style="display:flex;align-items:center;gap:8px;margin-left:auto;">
-          <select id="report-year" style="border:1px solid #e2e8f0;border-radius:6px;padding:4px 8px;font-size:13px;"></select>
-          <span style="font-size:13px;">년</span>
-          <button class="btn-primary" style="padding:5px 14px;font-size:13px;" onclick="loadAnnualReport()">조회</button>
-          <button class="btn-upload" style="padding:5px 14px;font-size:13px;" onclick="printAnnualReport()">🖨️ 인쇄</button>
-        </div>
-      </div>
-      <div id="annual-report-body" style="overflow-x:auto;padding:4px 0;">
-        <div style="padding:24px;text-align:center;color:#94a3b8;">연도를 선택하고 조회하세요</div>
-      </div>
-    </div>
-
-  </section>
-
-  <!-- ───── 대분류: 일마감 ───── -->
-  <section id="group-daily" class="group-content">
+  <!-- ───── 일마감 그룹 ───── -->
+  <section id="group-daily" class="group-content active">
 
     <!-- ── 일마감 탭 ── -->
     <div id="tab-daily-main" class="tab-content active">
 
-    <!-- 툴바 -->
-    <div class="toolbar">
-      <div class="toolbar-group">
-        <label class="label-sm">조회 년월</label>
-        <select id="daily-year"></select>
-        <span>년</span>
-        <select id="daily-month"></select>
-        <span>월</span>
-      </div>
-      <div class="toolbar-group" style="margin-left:auto; gap:8px;">
-        <button class="btn-upload btn-purple" onclick="showMobileShare()" style="background:#7c3aed;border-color:#7c3aed;">
-          📱 모바일 공유
-        </button>
-        <input type="file" id="bos-file-input" accept=".xlsx,.xls" hidden>
-        <button class="btn-upload" onclick="document.getElementById('bos-file-input').click()">
-          📂 BOS 데이터 업로드
-        </button>
-        <input type="file" id="card-file-input" accept=".xlsx,.xls" hidden>
-        <button class="btn-upload btn-teal" onclick="document.getElementById('card-file-input').click()">
-          💳 이지샵 카드내역 업로드
-        </button>
-      </div>
-    </div>
-
-    <!-- 모바일 공유 패널 -->
-    <div id="mobile-share-panel" class="card" style="display:none;margin:0 0 12px;border:2px solid #7c3aed;">
-      <div class="card-header" style="background:#f5f3ff;">
-        <h2 style="color:#5b21b6;">📱 모바일 공유 링크</h2>
-        <button onclick="document.getElementById('mobile-share-panel').style.display='none'" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:16px;">✕</button>
-      </div>
-      <div style="padding:16px;">
-        <p style="font-size:13px;color:#64748b;margin-bottom:12px;">같은 Wi-Fi에 연결된 스마트폰에서 아래 주소로 접속하세요:</p>
-        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;font-size:15px;font-weight:700;color:#1e293b;letter-spacing:0.5px;" id="mobile-url-display">
-          불러오는 중...
+      <!-- 툴바 -->
+      <div class="toolbar">
+        <div class="toolbar-group">
+          <label class="label-sm">조회 년월</label>
+          <select id="daily-year"></select><span>년</span>
+          <select id="daily-month"></select><span>월</span>
         </div>
-        <button onclick="copyMobileUrl()" style="margin-top:10px;padding:8px 16px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">
-          🔗 주소 복사
-        </button>
-        <p style="font-size:11px;color:#94a3b8;margin-top:10px;">※ 같은 와이파이 네트워크에서만 접속 가능합니다</p>
-      </div>
-    </div>
-
-    <!-- 매입단가 / 입고 이력 (기본 접힘) -->
-    <details class="card card-collapsible" id="pp-card">
-      <summary class="card-header" style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span class="collapse-arrow">▶</span>
-          <h2 style="margin:0;">매입단가 · 입고 이력</h2>
-          <span id="pp-summary-badge" style="font-size:12px;color:#64748b;"></span>
+        <div class="toolbar-group" style="margin-left:auto; gap:8px;">
+          <button class="btn-upload btn-purple" onclick="showMobileShare()" style="background:#7c3aed;border-color:#7c3aed;">
+            📱 모바일 공유
+          </button>
+          <input type="file" id="bos-file-input" accept=".xlsx,.xls" hidden>
+          <button class="btn-upload" onclick="document.getElementById('bos-file-input').click()">
+            📂 BOS 데이터 업로드
+          </button>
+          <input type="file" id="card-file-input" accept=".xlsx,.xls" hidden>
+          <button class="btn-upload btn-teal" onclick="document.getElementById('card-file-input').click()">
+            💳 이지샵 카드내역 업로드
+          </button>
         </div>
-      </summary>
+      </div>
 
-      <!-- 단가 직접 입력 -->
-      <div id="pp-tab-prices" style="margin-top:12px;">
-        <div class="pp-add-row">
-          <div class="form-group" style="flex:0 0 140px;">
-            <label>적용 시작일</label>
-            <input type="date" id="pp-date">
-          </div>
-          <div class="form-group" style="flex:0 0 110px;">
-            <label>유종</label>
-            <select id="pp-fuel" class="form-select">
-              <option value="경유">경유</option>
-              <option value="휘발유">휘발유</option>
-              <option value="등유">등유</option>
-            </select>
-          </div>
-          <div class="form-group" style="flex:0 0 130px;">
-            <label>단가 (원/L)</label>
-            <input type="number" id="pp-price" placeholder="예) 1934">
-          </div>
-          <div class="form-group-btn" style="padding-top:20px;">
-            <button class="btn-primary" onclick="addPurchasePrice()">추가</button>
-          </div>
+      <!-- 모바일 공유 패널 -->
+      <div id="mobile-share-panel" class="card" style="display:none;margin:0 0 12px;border:2px solid #7c3aed;">
+        <div class="card-header" style="background:#f5f3ff;">
+          <h2 style="color:#5b21b6;">📱 모바일 공유 링크</h2>
+          <button onclick="document.getElementById('mobile-share-panel').style.display='none'" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:16px;">✕</button>
         </div>
-        <table id="pp-table" style="margin-top:0;">
-          <thead>
-            <tr>
-              <th>적용 시작일</th><th>유종</th>
-              <th class="col-num">단가</th>
-              <th class="col-action">삭제</th>
-            </tr>
-          </thead>
-          <tbody id="pp-tbody">
-            <tr class="empty-row"><td colspan="4">등록된 단가 이력이 없습니다</td></tr>
-          </tbody>
-        </table>
+        <div style="padding:16px;">
+          <p style="font-size:13px;color:#64748b;margin-bottom:12px;">같은 Wi-Fi에 연결된 스마트폰에서 아래 주소로 접속하세요:</p>
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;font-size:15px;font-weight:700;color:#1e293b;letter-spacing:0.5px;" id="mobile-url-display">
+            불러오는 중...
+          </div>
+          <button onclick="copyMobileUrl()" style="margin-top:10px;padding:8px 16px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">
+            🔗 주소 복사
+          </button>
+          <p style="font-size:11px;color:#94a3b8;margin-top:10px;">※ 같은 와이파이 네트워크에서만 접속 가능합니다</p>
+        </div>
       </div>
 
-      <!-- 입고 이력 탭 -->
-    </details>
-
-    <!-- 일별 현황 테이블 -->
-    <div class="card">
-      <div class="card-header">
-        <h2>일별 판매 현황</h2>
-        <span id="daily-summary-label" style="font-size:13px; color:#64748b;"></span>
-      </div>
-      <details style="padding:0 16px 12px; font-size:12px; color:#64748b;">
-        <summary style="cursor:pointer; font-weight:600; color:#475569; user-select:none;">영업이익 계산 방법 보기</summary>
-        <div style="margin-top:10px; padding:12px; background:#f8fafc; border-radius:6px; line-height:2;">
-          <strong>영업이익 =</strong><br>
-          &nbsp;&nbsp;(휘발유 매출 − 휘발유 수량 × 매입단가)<br>
-          &nbsp;+ (경유 매출 − 경유 수량 × 매입단가)<br>
-          &nbsp;+ (등유 매출 − 등유 수량 × 매입단가)<br>
-          &nbsp;+ 세차 매출<br>
-          &nbsp;+ (유외상품 매출 − 수기 입력 원가)<br>
-          &nbsp;− <strong>카드 수수료</strong> (이지샵 업로드 시 자동 반영)<br>
-          <br>
-          <span style="color:#94a3b8;">※ 매입단가 미입력 시 이익 계산 불가 ("−" 표시)</span><br>
-          <span style="color:#94a3b8;">※ 매입단가는 적용 시작일 기준으로 자동 선택됩니다</span>
+      <!-- 매입단가 / 입고 이력 -->
+      <details class="card card-collapsible" id="pp-card">
+        <summary class="card-header" style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="collapse-arrow">▶</span>
+            <h2 style="margin:0;">매입단가 · 입고 이력</h2>
+            <span id="pp-summary-badge" style="font-size:12px;color:#64748b;"></span>
+          </div>
+        </summary>
+        <div id="pp-tab-prices" style="margin-top:12px;">
+          <div class="pp-add-row">
+            <div class="form-group" style="flex:0 0 140px;">
+              <label>적용 시작일</label>
+              <input type="date" id="pp-date">
+            </div>
+            <div class="form-group" style="flex:0 0 110px;">
+              <label>유종</label>
+              <select id="pp-fuel" class="form-select">
+                <option value="경유">경유</option>
+                <option value="휘발유">휘발유</option>
+                <option value="등유">등유</option>
+              </select>
+            </div>
+            <div class="form-group" style="flex:0 0 130px;">
+              <label>단가 (원/L)</label>
+              <input type="number" id="pp-price" placeholder="예) 1934">
+            </div>
+            <div class="form-group-btn" style="padding-top:20px;">
+              <button class="btn-primary" onclick="addPurchasePrice()">추가</button>
+            </div>
+          </div>
+          <table id="pp-table" style="margin-top:0;">
+            <thead>
+              <tr>
+                <th>적용 시작일</th><th>유종</th>
+                <th class="col-num">단가</th>
+                <th class="col-action">삭제</th>
+              </tr>
+            </thead>
+            <tbody id="pp-tbody">
+              <tr class="empty-row"><td colspan="4">등록된 단가 이력이 없습니다</td></tr>
+            </tbody>
+          </table>
         </div>
       </details>
-      <div class="daily-table-wrap">
-        <table id="daily-table">
-          <thead>
-            <tr>
-              <th rowspan="2" class="daily-col-date">날짜</th>
-              <th rowspan="2" class="group-summary">합계<br>드럼</th>
-              <th rowspan="2" class="group-summary" style="min-width:90px;">판매금액</th>
-              <th rowspan="2" class="daily-col-profit group-summary" style="min-width:80px;">영업이익</th>
-              <th colspan="5" class="group-gasoline">휘발유</th>
-              <th colspan="5" class="group-diesel">경유</th>
-              <th colspan="5" class="group-kerosene">등유</th>
-              <th colspan="2" class="group-other">유외상품</th>
-              <th colspan="1" class="group-carwash">세차</th>
-              <th colspan="2" class="group-card">카드(이지샵)</th>
-              <th rowspan="2" class="daily-col-profit">영업이익</th>
-              <th rowspan="2" class="group-match">카드대사</th>
-            </tr>
-            <tr>
-              <th class="group-gasoline">L</th><th class="group-gasoline">드럼</th><th class="group-gasoline">매출</th><th class="group-gasoline">판매가</th><th class="group-gasoline">매입가</th>
-              <th class="group-diesel">L</th><th class="group-diesel">드럼</th><th class="group-diesel">매출</th><th class="group-diesel">판매가</th><th class="group-diesel">매입가</th>
-              <th class="group-kerosene">L</th><th class="group-kerosene">드럼</th><th class="group-kerosene">매출</th><th class="group-kerosene">판매가</th><th class="group-kerosene">매입가</th>
-              <th class="group-other">매출</th><th class="group-other">원가(수기)</th>
-              <th class="group-carwash">매출</th>
-              <th class="group-card">수수료</th><th class="group-card">입금예정일</th>
-            </tr>
-          </thead>
-          <tbody id="daily-tbody">
-            <tr class="empty-row">
-              <td colspan="26">BOS 데이터를 업로드하면 현황이 표시됩니다</td>
-            </tr>
-          </tbody>
-        </table>
+
+      <!-- 일별 현황 테이블 -->
+      <div class="card">
+        <div class="card-header">
+          <h2>일별 판매 현황</h2>
+          <span id="daily-summary-label" style="font-size:13px; color:#64748b;"></span>
+        </div>
+        <details style="padding:0 16px 12px; font-size:12px; color:#64748b;">
+          <summary style="cursor:pointer; font-weight:600; color:#475569; user-select:none;">영업이익 계산 방법 보기</summary>
+          <div style="margin-top:10px; padding:12px; background:#f8fafc; border-radius:6px; line-height:2;">
+            <strong>영업이익 =</strong><br>
+            &nbsp;&nbsp;(휘발유 매출 − 휘발유 수량 × 매입단가)<br>
+            &nbsp;+ (경유 매출 − 경유 수량 × 매입단가)<br>
+            &nbsp;+ (등유 매출 − 등유 수량 × 매입단가)<br>
+            &nbsp;+ 세차 매출<br>
+            &nbsp;+ (유외상품 매출 − 수기 입력 원가)<br>
+            &nbsp;− <strong>카드 수수료</strong> (이지샵 업로드 시 자동 반영)<br>
+            <br>
+            <span style="color:#94a3b8;">※ 매입단가 미입력 시 이익 계산 불가 ("−" 표시)</span><br>
+            <span style="color:#94a3b8;">※ 매입단가는 적용 시작일 기준으로 자동 선택됩니다</span>
+          </div>
+        </details>
+        <div class="daily-table-wrap">
+          <table id="daily-table">
+            <thead>
+              <tr>
+                <th rowspan="2" class="daily-col-date">날짜</th>
+                <th rowspan="2" class="group-summary">합계<br>드럼</th>
+                <th rowspan="2" class="group-summary" style="min-width:90px;">판매금액</th>
+                <th rowspan="2" class="daily-col-profit group-summary" style="min-width:80px;">영업이익</th>
+                <th colspan="5" class="group-gasoline">휘발유</th>
+                <th colspan="5" class="group-diesel">경유</th>
+                <th colspan="5" class="group-kerosene">등유</th>
+                <th colspan="2" class="group-other">유외상품</th>
+                <th colspan="1" class="group-carwash">세차</th>
+                <th colspan="2" class="group-card">카드(이지샵)</th>
+                <th rowspan="2" class="daily-col-profit">영업이익</th>
+                <th rowspan="2" class="group-match">카드대사</th>
+              </tr>
+              <tr>
+                <th class="group-gasoline">L</th><th class="group-gasoline">드럼</th><th class="group-gasoline">매출</th><th class="group-gasoline">판매가</th><th class="group-gasoline">매입가</th>
+                <th class="group-diesel">L</th><th class="group-diesel">드럼</th><th class="group-diesel">매출</th><th class="group-diesel">판매가</th><th class="group-diesel">매입가</th>
+                <th class="group-kerosene">L</th><th class="group-kerosene">드럼</th><th class="group-kerosene">매출</th><th class="group-kerosene">판매가</th><th class="group-kerosene">매입가</th>
+                <th class="group-other">매출</th><th class="group-other">원가(수기)</th>
+                <th class="group-carwash">매출</th>
+                <th class="group-card">수수료</th><th class="group-card">입금예정일</th>
+              </tr>
+            </thead>
+            <tbody id="daily-tbody">
+              <tr class="empty-row">
+                <td colspan="26">BOS 데이터를 업로드하면 현황이 표시됩니다</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
+
     </div><!-- /tab-daily-main -->
 
-    <!-- ── 입금 검증 탭 ── -->
-    <div id="tab-daily-deposit" class="tab-content">
-
-      <!-- 파일 업로드 2개 -->
-      <div class="card">
-        <div class="card-header">
-          <h2>파일 업로드</h2>
-        </div>
-        <div style="display:flex;gap:16px;flex-wrap:wrap;padding:4px 0 8px;">
-
-          <!-- 이지샵 -->
-          <div style="flex:1;min-width:240px;border:1px solid #e2e8f0;border-radius:8px;padding:16px;">
-            <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:#0369a1;">💳 이지샵 카드내역</div>
-            <p style="font-size:12px;color:#64748b;margin:0 0 10px;">이지샵에서 다운로드한 카드거래/입금예정 Excel</p>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-              <input type="file" id="deposit-card-file-input" accept=".xlsx,.xls" hidden>
-              <button class="btn-upload btn-teal" onclick="document.getElementById('deposit-card-file-input').click()">
-                📂 이지샵 업로드
-              </button>
-              <span id="deposit-card-label" class="file-label" style="font-size:12px;color:#64748b;"></span>
-            </div>
-          </div>
-
-          <!-- 계좌 -->
-          <div style="flex:1;min-width:240px;border:1px solid #e2e8f0;border-radius:8px;padding:16px;">
-            <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:#7c3aed;">🏦 실 계좌 입금내역</div>
-            <p style="font-size:12px;color:#64748b;margin:0 0 10px;">은행 수시입출예금 입출금내역 Excel</p>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-              <input type="file" id="bank-file-input" accept=".xlsx,.xls" hidden>
-              <button class="btn-upload btn-purple" onclick="document.getElementById('bank-file-input').click()">
-                📂 계좌내역 업로드
-              </button>
-              <span id="bank-file-label" class="file-label" style="font-size:12px;color:#64748b;"></span>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- 입금 현황 대사 카드 -->
-      <div class="card">
-        <div class="card-header">
-          <h2>카드사별 입금 현황</h2>
-          <span id="deposit-summary-badge" style="font-size:13px;color:#64748b;"></span>
-        </div>
-        <div id="deposit-verify-body">
-          <div class="empty-row" style="padding:24px;text-align:center;color:#94a3b8;">
-            이지샵 카드내역 업로드 후 조회 가능합니다.
-          </div>
-        </div>
-      </div>
-
-    </div><!-- /tab-daily-deposit -->
-
     <!-- ── 지출목록 탭 ── -->
-    <div id="tab-daily-expense" class="tab-content">
+    <div id="tab-daily-expense" class="tab-content" style="display:none;">
       <!-- 툴바 -->
       <div class="toolbar">
         <div class="toolbar-group upload-group">
@@ -376,428 +219,23 @@
           </table>
         </div>
       </div>
-    </div>
+    </div><!-- /tab-daily-expense -->
 
-    <!-- ── 고객관리 탭 (고객별 월별 판매현황 피벗) ── -->
-    <div id="tab-daily-customer" class="tab-content">
-      <!-- 툴바 -->
-      <div class="toolbar">
-        <div class="toolbar-group">
-          <label class="label-sm">조회 연도</label>
-          <select id="customer-sales-year"></select><span>년</span>
-          <button class="btn-primary" onclick="loadCustomerSalesTab()">조회</button>
-        </div>
-      </div>
-      <!-- 고객별 월별 판매 현황 -->
-      <div class="card">
-        <div class="card-header">
-          <h2>고객별 월별 판매 현황</h2>
-          <span id="customer-sales-label" style="font-size:13px;color:#64748b;">월마감 BOS 데이터 기준 (외상 거래)</span>
-        </div>
-        <div style="overflow-x:auto;">
-          <table id="customer-sales-table">
-            <thead id="customer-sales-thead">
-              <tr><th colspan="4">연도를 선택하고 조회하세요</th></tr>
-            </thead>
-            <tbody id="customer-sales-tbody">
-              <tr class="empty-row"><td colspan="4"></td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── 고객매출현황 탭 (월별 고객 매출 리스트) ── -->
-    <div id="tab-daily-customer-sales" class="tab-content">
-      <div class="toolbar">
-        <div class="toolbar-group">
-          <label class="label-sm">조회 년월</label>
-          <select id="cs-year"></select><span>년</span>
-          <select id="cs-month"></select><span>월</span>
-          <button class="btn-primary" onclick="loadCustomerSalesMonth()">조회</button>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-header">
-          <h2>업체별 매출 현황</h2>
-          <span id="cs-label" style="font-size:13px;color:#64748b;"></span>
-        </div>
-        <div style="overflow-x:auto;">
-          <table id="cs-table">
-            <thead>
-              <tr>
-                <th style="min-width:130px;">고객명</th>
-                <th class="col-num" style="min-width:110px;">판매수량 (L)</th>
-                <th class="col-num" style="min-width:120px;">매출액</th>
-                <th class="col-num" style="min-width:100px;">평균단가</th>
-                <th class="col-num" style="min-width:80px;">비중(%)</th>
-              </tr>
-            </thead>
-            <tbody id="cs-tbody">
-              <tr class="empty-row"><td colspan="5">년월을 선택하고 조회하세요</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-  </section>
-
-  <!-- ───── Tab 1: 거래명세서 발행 ───── -->
-  <section id="tab-statements" class="tab-content active">
-
-    <!-- 툴바 -->
-    <div class="toolbar">
-      <div class="toolbar-group">
-        <label class="label-sm">거래 기간</label>
-        <select id="sel-year"></select>
-        <span>년</span>
-        <select id="sel-month"></select>
-        <span>월</span>
-      </div>
-      <div class="toolbar-group">
-        <label class="label-sm">발행일자</label>
-        <input type="date" id="issue-date">
-      </div>
-      <div class="toolbar-group upload-group">
-        <input type="file" id="file-input" accept=".xlsx,.xls" hidden>
-        <button class="btn-upload" onclick="document.getElementById('file-input').click()">
-          📂 BOS Excel 업로드
-        </button>
-        <span id="file-label" class="file-label">파일을 선택하세요</span>
-      </div>
-      <div class="toolbar-group upload-group">
-        <input type="file" id="delivery-file-input" accept=".xlsx,.xls" hidden>
-        <button class="btn-upload btn-orange" onclick="document.getElementById('delivery-file-input').click()">
-          🛵 배달 Excel 업로드
-        </button>
-        <span id="delivery-file-label" class="file-label"></span>
-      </div>
-    </div>
-
-    <!-- 월별 업로드 현황 -->
-    <div class="card monthly-card">
-      <span class="monthly-label">월별 거래내역서 현황</span>
-      <div id="monthly-chips" class="monthly-chips"></div>
-    </div>
-
-    <!-- 월 영업이익 분석 -->
-    <div class="card" id="monthly-profit-card" style="display:none;">
-      <div class="card-header">
-        <h2>영업이익 분석</h2>
-        <span id="monthly-profit-month" style="font-size:13px;color:#64748b;"></span>
-      </div>
-      <div id="monthly-profit-body"></div>
-    </div>
-
-    <!-- 업체 목록 -->
-    <div class="card">
-      <div class="card-header">
-        <h2>업체 목록</h2>
-        <div class="btn-group">
-          <button onclick="selectAll('vendor-check', true)">전체선택</button>
-          <button onclick="selectAll('vendor-check', false)">전체해제</button>
-          <button class="btn-primary" onclick="generateSelected()">선택 거래명세서 생성</button>
-        </div>
-      </div>
-      <table id="vendor-table">
-        <thead>
-          <tr>
-            <th class="col-chk">
-              <input type="checkbox" id="vendor-check-all"
-                     onchange="selectAll('vendor-check', this.checked)">
-            </th>
-            <th class="sortable" data-col="name" onclick="setSort('name')">업체명 <span class="sort-icon" id="sort-name">⇅</span></th>
-            <th class="col-num sortable" data-col="credit" onclick="setSort('credit')">외상 <span class="sort-icon" id="sort-credit">⇅</span></th>
-            <th class="col-num sortable" data-col="other" onclick="setSort('other')">카드/현금 <span class="sort-icon" id="sort-other">⇅</span></th>
-            <th class="col-num sortable" data-col="total" onclick="setSort('total')">합계 <span class="sort-icon" id="sort-total">⇅</span></th>
-            <th class="col-method">출력방법</th>
-            <th class="col-method">발행방식</th>
-            <th class="col-status">거래명세서</th>
-            <th class="col-action">다운로드</th>
-          </tr>
-        </thead>
-        <tbody id="vendor-tbody">
-          <tr class="empty-row">
-            <td colspan="8">Excel 파일을 업로드하면 업체 목록이 표시됩니다</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- ───── Tab 2: 고객 관리 ───── -->
-  <section id="tab-customers" class="tab-content">
-
-    <!-- Excel 일괄 등록 -->
-    <div class="card">
-      <div class="card-header"><h2>📋 Excel로 일괄 등록</h2></div>
-      <div class="notice notice-info" style="margin:0 0 12px 0;">
-        양식을 다운로드 → 업체 정보 작성 → 업로드하면 자동으로 등록됩니다.
-        기존에 등록된 업체는 정보가 업데이트되고, 새 업체는 추가됩니다.
-      </div>
-      <div class="import-row">
-        <a href="/api/customer-template" class="btn-upload" download>
-          ⬇ 양식 다운로드
-        </a>
-        <span class="import-divider">→ 작성 후 →</span>
-        <input type="file" id="customer-file-input" accept=".xlsx,.xls" hidden>
-        <button class="btn-upload btn-green" onclick="document.getElementById('customer-file-input').click()">
-          ⬆ 고객정보 업로드
-        </button>
-        <span id="customer-import-label" class="file-label"></span>
-      </div>
-    </div>
-
-    <!-- 개별 추가/수정 폼 -->
-    <div class="card" id="customer-form-card" style="display:none;">
-      <div class="card-header">
-        <h2 id="customer-form-title">개별 수정</h2>
-        <button onclick="closeCustomerForm()" style="font-size:13px;">✕ 닫기</button>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>업체명 <span class="required">*</span></label>
-          <input type="text" id="c-name" placeholder="업체명" readonly style="background:#f1f5f9;">
-        </div>
-        <div class="form-group">
-          <label>사업자번호</label>
-          <input type="text" id="c-bizno" placeholder="000-00-00000">
-        </div>
-        <div class="form-group">
-          <label>담당자명</label>
-          <input type="text" id="c-contact" placeholder="홍길동">
-        </div>
-        <div class="form-group">
-          <label>이메일</label>
-          <input type="email" id="c-email" placeholder="example@email.com">
-        </div>
-        <div class="form-group">
-          <label>연락처</label>
-          <input type="text" id="c-phone" placeholder="010-0000-0000">
-        </div>
-        <div class="form-group">
-          <label>주소</label>
-          <input type="text" id="c-address" placeholder="사업장 주소 (선택)">
-        </div>
-        <div class="form-group">
-          <label>업태</label>
-          <input type="text" id="c-biztype" placeholder="예) 제조업 (선택)">
-        </div>
-        <div class="form-group">
-          <label>종목</label>
-          <input type="text" id="c-bizitem" placeholder="예) 기계부품 (선택)">
-        </div>
-        <div class="form-group">
-          <label>출력방법</label>
-          <select id="c-print-method" class="form-select">
-            <option value="">기본(차량별-유종별)</option>
-            <option value="유종별">유종별</option>
-            <option value="판매일자순">판매일자순</option>
-            <option value="차량별-판매일자순">차량별-판매일자순</option>
-            <option value="차량별-유종별">차량별-유종별</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>세금계산서 발행구분</label>
-          <select id="c-tax-issuance" class="form-select">
-            <option value="합산">합산발행 (1장)</option>
-            <option value="분리">유종별 분리발행</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>배달 분리 발행</label>
-          <select id="c-split-delivery" class="form-select">
-            <option value="">미사용</option>
-            <option value="true">사용 (스탠드/배달 2부)</option>
-          </select>
-        </div>
-        <div class="form-group form-group-btn">
-          <button class="btn-primary" onclick="saveCustomer()">저장</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 고객 목록 -->
-    <div class="card">
-      <div class="card-header">
-        <h2>고객 목록</h2>
-        <span id="customer-count" class="badge-count"></span>
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th>업체명</th>
-            <th>사업자번호</th>
-            <th>담당자명</th>
-            <th>이메일</th>
-            <th>연락처</th>
-            <th class="col-method">출력방법</th>
-            <th class="col-action">관리</th>
-          </tr>
-        </thead>
-        <tbody id="customer-tbody">
-          <tr class="empty-row"><td colspan="7">등록된 고객이 없습니다</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- ───── Tab 3: 메일 발송 ───── -->
-  <section id="tab-email" class="tab-content">
-
-    <!-- 공통 메일 문구 -->
-    <div class="card">
-      <div class="card-header"><h2>✉️ 공통 메일 내용</h2></div>
-      <div class="email-body-wrap">
-        <div class="notice notice-info" style="margin:0 0 10px 0; font-size:12px;">
-          아래 내용이 모든 메일에 공통으로 포함됩니다. 빈칸이면 기본 문구가 사용됩니다.
-        </div>
-        <div class="form-group" style="padding: 0 0 12px 0;">
-          <label style="font-size:12px; font-weight:600; color:#64748b; margin-bottom:4px; display:block;">추가 메모 (선택)</label>
-          <textarea id="email-extra-memo" rows="3"
-            placeholder="예) 문의사항은 054-000-0000으로 연락 주시기 바랍니다."
-            style="width:100%; padding:8px 10px; border:1px solid #e2e8f0; border-radius:6px; font-family:inherit; font-size:13px; resize:vertical; line-height:1.6;"></textarea>
-        </div>
-        <details style="font-size:12px; color:#64748b;">
-          <summary style="cursor:pointer; font-weight:600;">기본 메일 본문 미리보기</summary>
-          <pre id="email-preview" style="margin-top:8px; padding:10px; background:#f8fafc; border-radius:4px; white-space:pre-wrap; font-family:inherit; line-height:1.8;"></pre>
-        </details>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header">
-        <h2>메일 발송</h2>
-        <div class="btn-group">
-          <button onclick="selectAll('email-check', true)">전체선택</button>
-          <button onclick="selectAll('email-check', false)">전체해제</button>
-          <button class="btn-primary" onclick="sendSelectedEmails()">선택 메일 발송</button>
-        </div>
-      </div>
-      <div class="notice notice-info">
-        거래명세서가 생성된 외상 업체만 발송 가능합니다. 이메일 미등록 업체는 [고객 관리]에서 먼저 등록하세요.
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th class="col-chk">
-              <input type="checkbox" id="email-check-all"
-                     onchange="selectAll('email-check', this.checked)">
-            </th>
-            <th>업체명</th>
-            <th>이메일</th>
-            <th class="col-status">거래명세서</th>
-            <th class="col-status">발송 상태</th>
-          </tr>
-        </thead>
-        <tbody id="email-tbody">
-          <tr class="empty-row"><td colspan="5">Excel 파일을 업로드하면 목록이 표시됩니다</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- ───── Tab 4: 세금계산서 일괄발행 ───── -->
-  <section id="tab-hometax" class="tab-content">
-
-    <div class="notice notice-info">
-      📋 <strong>홈택스 일괄발행 Excel</strong>을 생성합니다. 생성된 파일을 홈택스 → 전자세금계산서 → 발급 → <strong>Excel 일괄발급</strong>에서 업로드하세요.<br>
-      사업자번호가 없는 업체는 <strong>[고객 관리]</strong>에서 먼저 등록하세요.
-    </div>
-
-    <!-- 생성된 Excel 다운로드 패널 -->
-    <div id="tax-result-panel" class="card" style="display:none;">
-      <div class="card-header">
-        <h2>생성 완료</h2>
-        <button onclick="document.getElementById('tax-result-panel').style.display='none'">✕ 닫기</button>
-      </div>
-      <div id="tax-result-body" style="padding:16px;"></div>
-    </div>
-
-    <!-- 업체 목록 -->
-    <div class="card">
-      <div class="card-header">
-        <h2>세금계산서 일괄발행</h2>
-        <div class="btn-group">
-          <button onclick="selectAll('tax-check', true)">전체선택</button>
-          <button onclick="selectAll('tax-check', false)">전체해제</button>
-          <button class="btn-primary" onclick="generateTaxExcel()">선택 일괄발행 Excel 생성</button>
-        </div>
-      </div>
-      <table id="tax-table">
-        <thead>
-          <tr>
-            <th class="col-chk">
-              <input type="checkbox" id="tax-check-all"
-                     onchange="selectAll('tax-check', this.checked)">
-            </th>
-            <th>업체명</th>
-            <th>사업자번호</th>
-            <th class="col-num">공급가액</th>
-            <th class="col-num">세액</th>
-            <th class="col-num">합계금액</th>
-            <th class="col-products">유종/품목</th>
-            <th class="col-method">발행구분</th>
-            <th class="col-status">예상 장수</th>
-          </tr>
-        </thead>
-        <tbody id="tax-tbody">
-          <tr class="empty-row"><td colspan="9">Excel 파일을 업로드하면 목록이 표시됩니다</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- ───── Tab 5: 설정 ───── -->
-  <section id="tab-settings" class="tab-content">
-    <div class="card settings-card">
-      <div class="card-header"><h2>네이버 메일 SMTP 설정</h2></div>
-      <div class="settings-guide">
-        <p>📌 네이버 메일 SMTP 활성화 방법:</p>
-        <ol>
-          <li>네이버 메일 접속 → 우측 상단 <strong>환경설정</strong></li>
-          <li><strong>POP3/SMTP 설정</strong> 탭 선택</li>
-          <li>SMTP 서버 사용 <strong>사용함</strong> 체크 후 저장</li>
-        </ol>
-      </div>
-      <div class="form-row vertical">
-        <div class="form-group">
-          <label>네이버 이메일</label>
-          <input type="email" id="smtp-user" placeholder="example@naver.com">
-        </div>
-        <div class="form-group">
-          <label>앱 비밀번호</label>
-          <input type="password" id="smtp-pass" placeholder="네이버 앱 비밀번호 (16자리)">
-        </div>
-        <div class="form-group">
-          <button class="btn-primary" onclick="saveSettings()">저장</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="card settings-card">
-      <div class="card-header"><h2>🔐 공동인증서 설정</h2></div>
-      <div class="settings-guide">
-        <p>📌 홈택스 세금계산서 발행 시 사용하는 공동인증서 비밀번호를 미리 등록합니다.</p>
-        <p style="margin-top:6px; color:#dc2626;">⚠️ 비밀번호는 이 PC에만 저장되며 외부로 전송되지 않습니다.</p>
-      </div>
-      <div class="form-row vertical">
-        <div class="form-group">
-          <label>공동인증서 비밀번호</label>
-          <input type="password" id="cert-pass" placeholder="공동인증서 비밀번호">
-        </div>
-        <div class="form-group">
-          <button class="btn-primary" onclick="saveCertPass()">저장</button>
-        </div>
-        <div id="cert-pass-status" style="font-size:13px; color:#64748b;"></div>
-      </div>
-    </div>
   </section>
 
 </main>
 
+<!-- 카드 대사 모달 -->
+<div id="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;" onclick="closeModal()"></div>
+<div id="modal-box" style="display:none;position:fixed;top:5vh;left:50%;transform:translateX(-50%);width:min(96vw,860px);max-height:90vh;overflow-y:auto;background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);z-index:1001;padding:24px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <h2 id="modal-title" style="margin:0;font-size:16px;"></h2>
+    <button onclick="closeModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#64748b;">✕</button>
+  </div>
+  <div id="modal-body"></div>
+</div>
+
 <div id="toast" class="toast"></div>
-<script src="main.js?v=2.21.0"></script>
+<script src="main.js?v=2.22.0"></script>
 </body>
 </html>
