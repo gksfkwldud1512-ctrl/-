@@ -745,6 +745,22 @@ app.delete('/api/expenses/delete', (req, res) => {
   res.json({ ok: true });
 });
 
+// ── 지출 항목 수정 (계정과목/분류 변경) ──────────────────────────
+app.post('/api/expenses/update', (req, res) => {
+  const { month, date, vendor, amount, field, value } = req.body;
+  const ALLOWED = ['category', 'subCategory'];
+  if (!ALLOWED.includes(field)) return res.json({ ok: false, error: '수정 불가 필드' });
+  const list = readJSON(EXPENSES_FILE, []);
+  const idx  = list.findIndex(e =>
+    e.month === month &&
+    (e.date || '') === (date || '') &&
+    e.vendor === vendor &&
+    e.amount == amount
+  );
+  if (idx >= 0) { list[idx][field] = value; writeJSON(EXPENSES_FILE, list); }
+  res.json({ ok: true });
+});
+
 // 수동 지출 추가/삭제
 app.post('/api/expenses', (req, res) => {
   const { month, category, subCategory, vendor, amount } = req.body;

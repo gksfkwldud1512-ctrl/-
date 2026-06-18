@@ -167,6 +167,13 @@
     .col-date   { color: #64748b; white-space: nowrap; min-width: 90px; }
     .col-vendor { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { background: #e2e8f0; }
+    th.sort-asc  { color: #2563eb; }
+    th.sort-desc { color: #2563eb; }
+    .sort-icon { margin-left: 4px; font-size: 11px; color: #94a3b8; }
+    th.sort-asc  .sort-icon, th.sort-desc .sort-icon { color: #2563eb; }
+
     .btn-del {
       padding: 3px 10px;
       font-size: 11px;
@@ -254,11 +261,15 @@
       <table>
         <thead>
           <tr>
-            <th class="col-date">날짜</th>
+            <th class="col-date sortable" onclick="setSort('date')" id="th-date">
+              날짜 <span class="sort-icon">↕</span>
+            </th>
             <th>계정과목</th>
             <th>분류</th>
             <th>업체</th>
-            <th style="text-align:right;min-width:110px;">금액</th>
+            <th class="sortable" style="text-align:right;min-width:110px;" onclick="setSort('amount')" id="th-amount">
+              금액 <span class="sort-icon">↕</span>
+            </th>
             <th style="min-width:40px;"></th>
           </tr>
         </thead>
@@ -278,9 +289,11 @@
 <script>
 'use strict';
 
-let allData   = [];      // 전체 지출 항목
-let monthData = {};      // { '2026-01': [...], '2026-02': [...] }
-let activeMonth = null;  // 현재 선택된 월
+let allData     = [];      // 전체 지출 항목
+let monthData   = {};      // { '2026-01': [...], '2026-02': [...] }
+let activeMonth = null;    // 현재 선택된 월
+let sortCol     = 'date';  // 정렬 컬럼: 'date' | 'amount'
+let sortDir     = 'desc';  // 정렬 방향: 'asc' | 'desc'
 
 // ── 유틸 ─────────────────────────────────────────────────────
 function esc(s) {
@@ -414,17 +427,39 @@ function applyDetailFilter(src, metaEl, tbody) {
     return;
   }
 
-  const sorted = [...filtered].sort((a, b) =>
-    (b.date || b.month || '').localeCompare(a.date || a.month || '')
-  );
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortCol === 'amount') {
+      return sortDir === 'asc' ? (a.amount||0) - (b.amount||0) : (b.amount||0) - (a.amount||0);
+    }
+    // date
+    const da = a.date || a.month || '';
+    const db = b.date || b.month || '';
+    return sortDir === 'asc' ? da.localeCompare(db) : db.localeCompare(da);
+  });
+
+  const SUB_CATS = ['임대료','카드비','이자','전력비','기장비','신용보증','세금','자동차세','유외상품','운영비','수도비','커피','보험비','퇴직금','협회비','기타'];
 
   tbody.innerHTML = sorted.map((e) => {
     const origIdx = allData.indexOf(e);
+    const subOpts = SUB_CATS.map(s =>
+      `<option value="${s}" ${e.subCategory === s ? 'selected' : ''}>${s}</option>`
+    ).join('');
     return `
       <tr>
         <td class="col-date">${esc(e.date || e.month || '')}</td>
-        <td>${esc(e.subCategory || '')}</td>
-        <td><span class="badge ${e.category === '고정비' ? 'badge-fixed' : 'badge-var'}">${esc(e.category || '')}</span></td>
+        <td>
+          <select class="sel-sub" style="border:1px solid #e2e8f0;border-radius:4px;padding:2px 6px;font-size:12px;color:#1e293b;"
+                  onchange="updateItem(${origIdx},'subCategory',this.value)">
+            ${subOpts}
+          </select>
+        </td>
+        <td>
+          <select class="sel-cat" style="border:1px solid #e2e8f0;border-radius:4px;padding:2px 6px;font-size:12px;"
+                  onchange="updateItem(${origIdx},'category',this.value)">
+            <option value="고정비" ${e.category==='고정비'?'selected':''}>고정비</option>
+            <option value="변동비" ${e.category==='변동비'?'selected':''}>변동비</option>
+          </select>
+        </td>
         <td class="col-vendor" title="${esc(e.vendor || '')}">${esc(e.vendor || '')}</td>
         <td class="col-num">${won(e.amount)}</td>
         <td><button class="btn-del" onclick="deleteItem(${origIdx})">삭제</button></td>
@@ -437,6 +472,51 @@ function applyDetailFilter(src, metaEl, tbody) {
       <td></td>
     </tr>
   `;
+}
+
+// ── 정렬 ─────────────────────────────────────────────────────
+function setSort(col) {
+  if (sortCol === col) {
+    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortCol = col;
+    sortDir = col === 'date' ? 'desc' : 'desc';  // 날짜는 최신순, 금액은 높은순 기본
+  }
+  updateSortHeaders();
+  const src = activeMonth ? (monthData[activeMonth] || []) : allData;
+  applyDetailFilter(src, document.getElementById('detail-meta'), document.getElementById('detail-tbody'));
+}
+
+function updateSortHeaders() {
+  ['date', 'amount'].forEach(col => {
+    const th   = document.getElementById(`th-${col}`);
+    const icon = th?.querySelector('.sort-icon');
+    if (!th || !icon) return;
+    if (sortCol === col) {
+      th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+      th.classList.remove(sortDir === 'asc' ? 'sort-desc' : 'sort-asc');
+      icon.textContent = sortDir === 'asc' ? '↑' : '↓';
+    } else {
+      th.classList.remove('sort-asc', 'sort-desc');
+      icon.textContent = '↕';
+    }
+  });
+}
+
+// ── 항목 수정 (계정과목 / 분류 드롭다운) ─────────────────────
+async function updateItem(idx, field, value) {
+  const e = allData[idx];
+  if (!e) return;
+  e[field] = value;  // 클라이언트 즉시 반영
+  try {
+    await fetch('/api/expenses/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ month: e.month, date: e.date || '', vendor: e.vendor, amount: e.amount, field, value }),
+    });
+    buildMonthData();  // 카드 집계 갱신
+    renderMonthGrid();
+  } catch { /* 서버 오류 시 무시 (클라이언트 값은 이미 바뀜) */ }
 }
 
 // ── 필터 이벤트 ───────────────────────────────────────────────
