@@ -44,7 +44,9 @@ window.addEventListener('DOMContentLoaded', () => {
   initDailyYearMonth();
   initSummaryYearMonth();
   initTabs();
-  switchGroup('monthly');
+  // URL 파라미터로 시작 그룹 지정 가능 (?group=summary 등)
+  const startGroup = new URLSearchParams(location.search).get('group') || 'monthly';
+  switchGroup(startGroup);
   initFileUpload();
   initDailyUpload();
   initEmailPreview();
