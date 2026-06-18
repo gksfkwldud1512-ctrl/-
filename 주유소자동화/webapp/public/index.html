@@ -24,7 +24,7 @@
     <div class="subnav-inner" id="subnav-daily" style="display:none;">
       <button class="tab-btn active" data-tab="daily-main">일마감</button>
       <button class="tab-btn" data-tab="daily-deposit">입금 검증</button>
-      <button class="tab-btn" data-tab="daily-expense">지출관리</button>
+      <button class="tab-btn" data-tab="daily-expense">지출목록</button>
       <button class="tab-btn" data-tab="daily-customer">고객관리</button>
       <button class="tab-btn" data-tab="daily-customer-sales">고객매출현황</button>
     </div>
@@ -332,17 +332,10 @@
 
     </div><!-- /tab-daily-deposit -->
 
-    <!-- ── 지출관리 탭 ── -->
+    <!-- ── 지출목록 탭 ── -->
     <div id="tab-daily-expense" class="tab-content">
       <!-- 툴바 -->
       <div class="toolbar">
-        <div class="toolbar-group">
-          <label class="label-sm">조회 년월</label>
-          <select id="expense-yr"></select><span>년</span>
-          <select id="expense-mo"></select><span>월</span>
-          <button class="btn-primary" onclick="loadExpenseTab()">월별 조회</button>
-          <button class="btn-upload btn-teal" onclick="loadAllExpenses()">전체 기간</button>
-        </div>
         <div class="toolbar-group upload-group">
           <input type="file" id="bank-expense-input" accept=".xls,.xlsx" hidden>
           <button class="btn-upload btn-green" onclick="document.getElementById('bank-expense-input').click()">
@@ -355,42 +348,30 @@
           <button class="btn-upload btn-orange" onclick="document.getElementById('expense-file-input').click()">
             💰 마감자료 지출내역 업로드
           </button>
-          <span id="expense-file-label" class="file-label" style="font-size:12px;color:#64748b;"></span>
+          <span id="expense-file-label" class="file-label"></span>
         </div>
       </div>
 
-      <!-- 분류별 요약 -->
+      <!-- 지출 목록 -->
       <div class="card">
         <div class="card-header">
-          <h2>분류별 지출 요약</h2>
-          <span id="expense-tab-month-label" style="font-size:13px;color:#64748b;"></span>
-        </div>
-        <div id="expense-summary-body">
-          <div style="padding:24px;text-align:center;color:#94a3b8;">월을 선택하고 조회하세요</div>
-        </div>
-      </div>
-
-      <!-- 상세 내역 -->
-      <div class="card">
-        <div class="card-header">
-          <h2>지출 상세 내역</h2>
-          <span id="expense-detail-count" style="font-size:12px;color:#64748b;"></span>
+          <h2>지출 목록</h2>
+          <span id="expense-list-count" style="font-size:12px;color:#64748b;"></span>
         </div>
         <div style="overflow-x:auto;">
-          <table id="expense-detail-table">
+          <table id="expense-list-table">
             <thead>
               <tr>
                 <th style="min-width:90px">날짜</th>
-                <th style="min-width:60px">대분류</th>
-                <th style="min-width:80px">소분류</th>
-                <th style="min-width:90px">계정과목</th>
-                <th style="min-width:180px">거래처</th>
+                <th style="min-width:100px">계정과목</th>
+                <th style="min-width:70px">용도</th>
+                <th style="min-width:180px">업체</th>
                 <th class="col-num" style="min-width:110px">금액</th>
                 <th class="col-action">삭제</th>
               </tr>
             </thead>
-            <tbody id="expense-detail-tbody">
-              <tr class="empty-row"><td colspan="7">조회할 월을 선택하세요</td></tr>
+            <tbody id="expense-list-tbody">
+              <tr class="empty-row"><td colspan="6">엑셀 파일을 업로드하면 목록이 표시됩니다</td></tr>
             </tbody>
           </table>
         </div>
@@ -817,6 +798,6 @@
 </main>
 
 <div id="toast" class="toast"></div>
-<script src="main.js?v=2.20.3"></script>
+<script src="main.js?v=2.21.0"></script>
 </body>
 </html>
