@@ -97,8 +97,14 @@
       border-bottom: 2px solid #e2e8f0;
       white-space: nowrap;
       text-align: right;
+      cursor: pointer;
+      user-select: none;
     }
+    .pivot-wrap th:hover { background: #e2e8f0; }
     .pivot-wrap th:first-child { text-align: left; min-width: 100px; }
+    .pivot-wrap th.pv-sort-active { color: #2563eb; background: #eff6ff; }
+    .pv-sort-icon { margin-left: 3px; font-size: 10px; opacity: .45; }
+    .pv-sort-active .pv-sort-icon { opacity: 1; }
     .pivot-wrap td {
       padding: 8px 14px;
       border-bottom: 1px solid #f1f5f9;
@@ -345,6 +351,10 @@ let activeMonth = null;
 let sortCol     = 'date';
 let sortDir     = 'desc';
 
+// 피벗 정렬 상태
+let pivotSortCol = 'total';  // 'sub' | 월키('2026-01') | 'total'
+let pivotSortDir = 'desc';
+
 const SUB_CATS = ['임대료','카드비','이자','전력비','기장비','신용보증','세금','자동차세',
                   '유외상품','운영비','수도비','커피','보험비','퇴직금','협회비',
                   '급여','비품','경조금','수리검사비','식대','기타'];
@@ -412,12 +422,33 @@ function renderPivot() {
     pivot[s][m]=(pivot[s][m]||0)+(e.amount||0);
   });
 
-  // 헤더
+  // 헤더 (클릭 정렬)
+  function pivIcon(col) {
+    if (pivotSortCol !== col) return '<span class="pv-sort-icon">↕</span>';
+    return `<span class="pv-sort-icon">${pivotSortDir==='asc'?'↑':'↓'}</span>`;
+  }
+  function pivCls(col) { return pivotSortCol===col ? 'pv-sort-active' : ''; }
+
   document.getElementById('pivot-thead').innerHTML = `<tr>
-    <th>계정과목</th>
-    ${months.map(m=>`<th>${moLabel(m)}</th>`).join('')}
-    <th>합계</th>
+    <th class="${pivCls('sub')}" onclick="setPivotSort('sub')">계정과목 ${pivIcon('sub')}</th>
+    ${months.map(m=>`<th class="${pivCls(m)}" onclick="setPivotSort('${m}')">${moLabel(m)} ${pivIcon(m)}</th>`).join('')}
+    <th class="${pivCls('total')}" onclick="setPivotSort('total')">합계 ${pivIcon('total')}</th>
   </tr>`;
+
+  // 행 정렬
+  subs.sort((a, b) => {
+    let va, vb;
+    if (pivotSortCol === 'sub') {
+      va = a; vb = b;
+      return pivotSortDir === 'asc' ? va.localeCompare(vb,'ko') : vb.localeCompare(va,'ko');
+    }
+    if (pivotSortCol === 'total') {
+      va = subTot[a]||0; vb = subTot[b]||0;
+    } else {
+      va = pivot[a][pivotSortCol]||0; vb = pivot[b][pivotSortCol]||0;
+    }
+    return pivotSortDir === 'asc' ? va - vb : vb - va;
+  });
 
   // 데이터 행 + 열 합계
   const colTot = {};
@@ -449,6 +480,13 @@ function renderPivot() {
 
   document.getElementById('pivot-total').textContent =
     `전체 ${allData.length}건 · ${grand.toLocaleString()}원`;
+}
+
+// ── 피벗 정렬 ────────────────────────────────────────────────
+function setPivotSort(col) {
+  pivotSortDir = pivotSortCol === col ? (pivotSortDir==='asc'?'desc':'asc') : 'desc';
+  pivotSortCol = col;
+  renderPivot();
 }
 
 // ── 월별 카드 ────────────────────────────────────────────────
