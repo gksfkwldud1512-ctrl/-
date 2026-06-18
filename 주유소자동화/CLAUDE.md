@@ -214,18 +214,47 @@ C:\Users\82108\Desktop\주유소자동화\
 
 ---
 
+## 완료된 작업 전체 목록 (추가 - 2026-06-18) — v2.31.0
+
+### FIFO 영업이익 정확도 개선
+- [x] 경유 개시재고 오류 수정: 128,508L → 150,715L (managementParser.js extractLots col21 기준으로 변경)
+- [x] fifo_daily_prices.json 중복 날짜 제거 (4/2 중복 3개 → 1개, 4/2 영업이익 마이너스 수정)
+- [x] extractFifoDaily: 날짜 중복 첫 번째 항목만 사용 (seen Set 적용)
+- [x] fifoDailyMap 빌드: first-wins 전략 (server.js + main.js)
+- [x] 영업이익 계산 전체(summary, annual-summary, monthly-profit, 일마감): fifo_daily_prices 우선 적용
+  - purchase_prices.json은 fallback으로만 사용
+  - 2월~3월 영업이익 마이너스 완전 해결
+
+### FIFO 핵심 구조 파악 (중요)
+- fifo_daily_prices.json = 마감자료 판매관리 시트 col20(매입단가)/col21(실재고) 직접 추출 → **정확한 기준**
+- purchase_prices.json = recomputeFifoPrices()로 계산된 값 → **오차 발생** (extractLots 로직 한계)
+- extractLots 버그: Jan 15 이후 lot들을 다음 가격 변경일 단가로 잘못 배정 (근본 수정 미완)
+  - 실제로는 마감자료 월별 정산단가(1월=1459, 2월=1540)가 맞는 기준
+  - fifo_daily_prices 우선 사용으로 우회 해결
+
+### 탱크 현황 UI (일마감 탭 최상단)
+- [x] GET /api/daily/tank-status?date=YYYY-MM-DD 신규 엔드포인트
+- [x] 원형 도넛 SVG 탱크 3개 (휘발유 10만L / 경유 30만L / 등유 5만L)
+- [x] 현재고량 + 전달단가 잔여량 + % 시각화
+- [x] 월 말일 기준으로 자동 갱신
+
+### 입고이력 UI 통합
+- [x] 단가 직접입력 폼/표 제거
+- [x] 입고이력 (날짜/유종/입고량/단가/실재고) 통합 입력 폼
+- [x] 월별 탭 필터 + 월 헤더 그룹핑 + 유종 색상 배지
+- [x] 실재고(선택) 입력 → FIFO 보정 기준점으로 활용 가능
+
+---
+
 ## 다음 세션에서 할 작업
 
-### 우선순위 1 (미해결 버그)
-- [ ] **지출관리 탭 빈 화면 버그** — v2.17.4 적용 후 확인 필요
-  - API 282건 정상, 코드 정상 확인, CSS 강제 표시까지 추가했으나 여전히 빈 화면
-  - 내일 시작 시: F12 → Console 탭 오류 확인 후 진단
-- [ ] **고객매출현황 탭 API 오류** — "고객 판매 현황 조회 실패" 토스트
-  - /api/customer-sales 응답 확인 필요
+### 우선순위 1
+- [ ] **extractLots 근본 수정** — 월별 정산단가를 판매관리 시트 header(row2)에서 읽어 lot 단가 직접 배정
+  - 현재: "다음 가격변경일 단가" 방식 → 월 중간 구매분 단가 오배정
+  - 목표: 마감자료 재업로드 시에도 fifo_daily_prices와 일치하는 lot 구성
 
 ### 우선순위 2
 - [ ] 업체별 업태(bizType) 입력
-- [ ] 일마감 실제 데이터 업로드 후 영업이익 확인 테스트
 - [ ] 네이버 SMTP 메일 발송 테스트
 
 ---
