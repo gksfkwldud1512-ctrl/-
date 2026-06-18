@@ -19,7 +19,7 @@
       justify-content: space-between;
       position: sticky;
       top: 0;
-      z-index: 100;
+      z-index: 200;
     }
     header h1 { font-size: 16px; font-weight: 700; }
     .header-links { display: flex; gap: 16px; }
@@ -29,38 +29,45 @@
       text-decoration: none;
       padding: 4px 10px;
       border-radius: 4px;
-      transition: background .15s;
     }
     .header-links a:hover { background: rgba(255,255,255,.1); color: #fff; }
 
-    main { padding: 20px 24px; max-width: 1100px; margin: 0 auto; }
+    main { padding: 20px 24px; max-width: 1200px; margin: 0 auto; }
 
-    /* ── 상태 배너 ── */
-    #banner {
-      display: none;
-      padding: 10px 16px;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 16px;
-    }
+    /* ── 배너 ── */
+    #banner { display: none; padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; margin-bottom: 16px; }
     #banner.ok   { background: #dcfce7; color: #15803d; display: block; }
     #banner.err  { background: #fee2e2; color: #dc2626; display: block; }
     #banner.info { background: #dbeafe; color: #1e40af; display: block; }
 
-    /* ── 업로드 섹션 ── */
-    .upload-section {
+    /* ── 공통 카드 ── */
+    .card {
       background: #fff;
       border: 1px solid #e2e8f0;
       border-radius: 10px;
-      padding: 16px 20px;
       margin-bottom: 20px;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+      border-radius: 10px 10px 0 0;
+    }
+    .card-header h2 { font-size: 15px; font-weight: 700; color: #1e293b; }
+    .card-meta { font-size: 12px; color: #64748b; }
+
+    /* ── 업로드 ── */
+    .upload-section {
       display: flex;
       align-items: center;
       gap: 16px;
       flex-wrap: wrap;
+      padding: 16px 20px;
     }
-    .upload-section h2 { font-size: 14px; font-weight: 700; color: #475569; min-width: 80px; }
+    .upload-section h2 { font-size: 14px; font-weight: 700; color: #475569; }
     .btn-upload {
       display: inline-flex;
       align-items: center;
@@ -76,12 +83,41 @@
     }
     .btn-upload:hover { background: #15803d; }
     .btn-upload:disabled { background: #86efac; cursor: wait; }
-    .upload-info { font-size: 12px; color: #64748b; }
+    .upload-info { font-size: 12px; color: #64748b; margin-top: 5px; }
 
-    /* ── 월별 요약 카드 ── */
+    /* ── 피벗 테이블 ── */
+    .pivot-wrap { overflow-x: auto; }
+    .pivot-wrap table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .pivot-wrap th {
+      padding: 9px 14px;
+      background: #f1f5f9;
+      font-size: 12px;
+      font-weight: 700;
+      color: #475569;
+      border-bottom: 2px solid #e2e8f0;
+      white-space: nowrap;
+      text-align: right;
+    }
+    .pivot-wrap th:first-child { text-align: left; min-width: 100px; }
+    .pivot-wrap td {
+      padding: 8px 14px;
+      border-bottom: 1px solid #f1f5f9;
+      white-space: nowrap;
+      font-size: 13px;
+    }
+    .pivot-wrap tr:last-child td { border-bottom: none; }
+    .pivot-wrap tbody tr:hover td { background: #f8fafc; }
+    .pv-sub   { font-weight: 600; color: #334155; }
+    .pv-num   { text-align: right; color: #1e293b; }
+    .pv-zero  { text-align: right; color: #cbd5e1; }
+    .pv-total { text-align: right; background: #eff6ff !important; font-weight: 700; color: #1d4ed8; }
+    .pivot-wrap tfoot td { background: #f1f5f9; font-weight: 700; border-top: 2px solid #e2e8f0; text-align: right; color: #1d4ed8; }
+    .pivot-wrap tfoot td:first-child { text-align: left; color: #1e293b; }
+
+    /* ── 월별 카드 그리드 ── */
     .month-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
       gap: 12px;
       margin-bottom: 20px;
     }
@@ -93,31 +129,13 @@
       cursor: pointer;
       transition: border-color .15s, box-shadow .15s;
     }
-    .month-card:hover { border-color: #3b82f6; box-shadow: 0 2px 8px rgba(59,130,246,.15); }
+    .month-card:hover { border-color: #3b82f6; box-shadow: 0 2px 8px rgba(59,130,246,.12); }
     .month-card.active { border-color: #2563eb; background: #eff6ff; }
-    .month-card .mo-label { font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 6px; }
-    .month-card .mo-count { font-size: 11px; color: #94a3b8; }
-    .month-card .mo-total { font-size: 15px; font-weight: 700; color: #1e293b; margin-top: 4px; }
+    .mo-label { font-size: 14px; font-weight: 700; color: #334155; margin-bottom: 6px; }
+    .mo-count { font-size: 11px; color: #94a3b8; }
+    .mo-total { font-size: 15px; font-weight: 700; color: #1e293b; margin-top: 4px; }
 
-    /* ── 상세 리스트 패널 ── */
-    .detail-panel {
-      background: #fff;
-      border: 1px solid #e2e8f0;
-      border-radius: 10px;
-      overflow: hidden;
-    }
-    .detail-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 14px 20px;
-      background: #f8fafc;
-      border-bottom: 1px solid #e2e8f0;
-    }
-    .detail-header h2 { font-size: 15px; font-weight: 700; }
-    .detail-meta { font-size: 12px; color: #64748b; }
-
-    /* 필터 바 */
+    /* ── 필터 바 ── */
     .filter-bar {
       display: flex;
       gap: 10px;
@@ -127,53 +145,74 @@
       border-bottom: 1px solid #f1f5f9;
       background: #fafafa;
     }
+    .filter-bar label { font-size: 12px; color: #64748b; white-space: nowrap; }
     .filter-bar select, .filter-bar input {
-      padding: 5px 10px;
+      padding: 5px 9px;
       border: 1px solid #d1d5db;
       border-radius: 6px;
       font-size: 12px;
+      background: #fff;
     }
-    .filter-bar label { font-size: 12px; color: #64748b; }
+    .filter-bar input { width: 140px; }
 
-    /* 테이블 */
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th {
-      padding: 8px 12px;
+    /* ── 상세 테이블 ── */
+    .detail-wrap { overflow-x: auto; }
+    .detail-wrap table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+    /* 상세 테이블 헤더 — sticky는 여기만 적용 */
+    .detail-wrap th {
+      padding: 9px 12px;
       background: #f1f5f9;
       font-size: 12px;
-      font-weight: 600;
+      font-weight: 700;
       text-align: left;
       color: #475569;
       border-bottom: 2px solid #e2e8f0;
       white-space: nowrap;
       position: sticky;
       top: 52px;
+      z-index: 10;
     }
-    td { padding: 9px 12px; border-bottom: 1px solid #f8fafc; vertical-align: middle; }
-    tr:last-child td { border-bottom: none; }
-    tbody tr:hover td { background: #f8fafc; }
-
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 10px;
-      font-size: 11px;
-      font-weight: 600;
+    .detail-wrap td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #f8fafc;
+      vertical-align: middle;
     }
-    .badge-fixed { background: #dbeafe; color: #1e40af; }
-    .badge-var   { background: #dcfce7; color: #15803d; }
+    .detail-wrap tbody tr:last-child td { border-bottom: none; }
+    .detail-wrap tbody tr:hover td { background: #f8fafc; }
 
-    .col-num    { text-align: right; font-weight: 600; white-space: nowrap; }
-    .col-date   { color: #64748b; white-space: nowrap; min-width: 90px; }
-    .col-vendor { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* 정렬 헤더 */
+    .sortable { cursor: pointer; user-select: none; }
+    .sortable:hover { background: #e2e8f0 !important; }
+    .sort-active { color: #2563eb !important; }
+    .sort-icon { margin-left: 4px; font-size: 10px; opacity: .5; }
+    .sort-active .sort-icon { opacity: 1; color: #2563eb; }
 
-    th.sortable { cursor: pointer; user-select: none; }
-    th.sortable:hover { background: #e2e8f0; }
-    th.sort-asc  { color: #2563eb; }
-    th.sort-desc { color: #2563eb; }
-    .sort-icon { margin-left: 4px; font-size: 11px; color: #94a3b8; }
-    th.sort-asc  .sort-icon, th.sort-desc .sort-icon { color: #2563eb; }
+    /* 테이블 컬럼 */
+    .col-date   { min-width: 90px; color: #64748b; white-space: nowrap; }
+    .col-sub    { min-width: 120px; }
+    .col-cat    { min-width: 80px; }
+    .col-vendor { min-width: 160px; max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .col-num    { text-align: right !important; min-width: 110px; font-weight: 600; white-space: nowrap; }
+    .col-del    { min-width: 46px; text-align: center; }
 
+    /* 인라인 드롭다운 */
+    .sel-sub, .sel-cat {
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      padding: 3px 6px;
+      font-size: 12px;
+      color: #1e293b;
+      background: #fff;
+      width: 100%;
+    }
+    .sel-sub:focus, .sel-cat:focus { outline: 2px solid #3b82f6; border-color: #3b82f6; }
+
+    /* 합계행 */
+    .total-row td { background: #f1f5f9 !important; font-weight: 700; border-top: 2px solid #e2e8f0; }
+    .total-row .col-num { color: #1d4ed8; }
+
+    /* 삭제 버튼 */
     .btn-del {
       padding: 3px 10px;
       font-size: 11px;
@@ -182,44 +221,19 @@
       border: none;
       border-radius: 4px;
       cursor: pointer;
+      white-space: nowrap;
     }
     .btn-del:hover { background: #b91c1c; }
 
-    .total-row td {
-      background: #f1f5f9;
-      font-weight: 700;
-      border-top: 2px solid #e2e8f0;
-    }
+    /* 빈 상태 */
+    .empty-row td { padding: 32px; text-align: center; color: #94a3b8; font-size: 13px; }
+    .no-data { padding: 60px 20px; text-align: center; color: #94a3b8; }
+    .no-data .icon { font-size: 40px; margin-bottom: 12px; }
+    .no-data p { font-size: 14px; line-height: 1.9; }
 
-    .empty-msg { padding: 40px; text-align: center; color: #94a3b8; }
-
-    .no-data {
-      padding: 60px 20px;
-      text-align: center;
-      color: #94a3b8;
-    }
-    .no-data .no-data-icon { font-size: 40px; margin-bottom: 12px; }
-    .no-data p { font-size: 14px; line-height: 1.8; }
-
-    /* 피벗 테이블 */
-    #pivot-table th, #pivot-table td {
-      padding: 7px 12px;
-      white-space: nowrap;
-      font-size: 12px;
-    }
-    #pivot-table th { background: #f1f5f9; font-weight: 600; color: #475569; border-bottom: 2px solid #e2e8f0; }
-    #pivot-table td { border-bottom: 1px solid #f1f5f9; }
-    #pivot-table .pivot-sub { font-weight: 600; color: #334155; }
-    #pivot-table .pivot-num { text-align: right; color: #1e293b; }
-    #pivot-table .pivot-zero { color: #cbd5e1; text-align: right; }
-    #pivot-table .pivot-total-col { background: #eff6ff; font-weight: 700; text-align: right; color: #1e40af; }
-    #pivot-table .pivot-total-row td { background: #f1f5f9; font-weight: 700; border-top: 2px solid #e2e8f0; }
-    #pivot-table .pivot-total-row .pivot-num { color: #1e40af; }
-
-    /* 반응형 */
-    @media (max-width: 600px) {
+    @media (max-width: 640px) {
       main { padding: 12px; }
-      .month-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+      .month-grid { grid-template-columns: repeat(4, 1fr); gap: 8px; }
     }
   </style>
 </head>
@@ -229,7 +243,7 @@
   <h1>⛽ 지출목록 — 미소주유소</h1>
   <div class="header-links">
     <a href="/">← 메인</a>
-    <a href="/?tab=summary" id="link-summary">📊 종합 보고서</a>
+    <a href="/" id="link-summary">📊 종합 보고서</a>
   </div>
 </header>
 
@@ -237,43 +251,49 @@
 
   <div id="banner"></div>
 
-  <!-- ── 업로드 섹션 ── -->
-  <div class="upload-section">
-    <h2>💳 지출 업로드</h2>
-    <div>
-      <input type="file" id="bank-expense-input" accept=".xls,.xlsx" hidden>
-      <button class="btn-upload" id="btn-upload" onclick="document.getElementById('bank-expense-input').click()">
-        📥 수시입출예금 업로드
-      </button>
-      <div class="upload-info" id="upload-info" style="margin-top:6px;">
-        하나은행 수시입출예금 입출금내역 Excel 파일 (.xls / .xlsx)
+  <!-- ── 업로드 ── -->
+  <div class="card">
+    <div class="upload-section">
+      <div>💳 <strong>지출 업로드</strong></div>
+      <div>
+        <input type="file" id="bank-expense-input" accept=".xls,.xlsx" hidden>
+        <button class="btn-upload" id="btn-upload"
+                onclick="document.getElementById('bank-expense-input').click()">
+          📥 수시입출예금 업로드
+        </button>
+        <div class="upload-info" id="upload-info">
+          하나은행 수시입출예금 입출금내역 Excel (.xls / .xlsx)
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- ── 계정과목별 월별 지출 피벗 표 ── -->
-  <div id="pivot-section" class="detail-panel" style="display:none;margin-bottom:20px;">
-    <div class="detail-header">
-      <h2>계정과목별 월별 지출</h2>
-      <span class="detail-meta" id="pivot-total"></span>
+  <!-- ── 피벗: 계정과목 × 월별 지출 ── -->
+  <div class="card" id="pivot-section" style="display:none;">
+    <div class="card-header">
+      <h2>📊 계정과목별 월별 지출</h2>
+      <span class="card-meta" id="pivot-total"></span>
     </div>
-    <div style="overflow-x:auto;">
-      <table id="pivot-table">
+    <div class="pivot-wrap">
+      <table>
         <thead id="pivot-thead"></thead>
         <tbody id="pivot-tbody"></tbody>
+        <tfoot id="pivot-tfoot"></tfoot>
       </table>
     </div>
   </div>
 
-  <!-- ── 월별 요약 카드 ── -->
+  <!-- ── 월별 카드 ── -->
   <div id="month-grid" class="month-grid"></div>
 
   <!-- ── 상세 리스트 ── -->
-  <div id="detail-panel" class="detail-panel" style="display:none;">
-    <div class="detail-header">
+  <div class="card" id="detail-panel" style="display:none;">
+    <div class="card-header">
       <h2 id="detail-title">상세 내역</h2>
-      <span class="detail-meta" id="detail-meta"></span>
+      <span class="card-meta" id="detail-meta"></span>
     </div>
+
+    <!-- 필터 -->
     <div class="filter-bar">
       <label>분류</label>
       <select id="filter-cat">
@@ -284,32 +304,36 @@
       <label>계정과목</label>
       <select id="filter-sub"></select>
       <label>검색</label>
-      <input type="text" id="filter-search" placeholder="업체명 검색" style="width:140px;">
+      <input type="text" id="filter-search" placeholder="업체명 검색">
     </div>
-    <div style="overflow-x:auto;">
+
+    <!-- 테이블 -->
+    <div class="detail-wrap">
       <table>
         <thead>
           <tr>
-            <th class="col-date sortable" onclick="setSort('date')" id="th-date">
+            <th class="col-date sortable" id="th-date" onclick="setSort('date')">
               날짜 <span class="sort-icon">↕</span>
             </th>
-            <th>계정과목</th>
-            <th>분류</th>
-            <th>업체</th>
-            <th class="sortable" style="text-align:right;min-width:110px;" onclick="setSort('amount')" id="th-amount">
+            <th class="col-sub">계정과목</th>
+            <th class="col-cat">분류</th>
+            <th class="col-vendor">업체</th>
+            <th class="col-num sortable" id="th-amount" onclick="setSort('amount')">
               금액 <span class="sort-icon">↕</span>
             </th>
-            <th style="min-width:40px;"></th>
+            <th class="col-del"></th>
           </tr>
         </thead>
-        <tbody id="detail-tbody"></tbody>
+        <tbody id="detail-tbody">
+          <tr class="empty-row"><td colspan="6">월을 선택하면 내역이 표시됩니다.</td></tr>
+        </tbody>
       </table>
     </div>
   </div>
 
-  <!-- 데이터 없을 때 안내 -->
+  <!-- 데이터 없음 -->
   <div id="no-data-msg" class="no-data" style="display:none;">
-    <div class="no-data-icon">📂</div>
+    <div class="icon">📂</div>
     <p>아직 지출 데이터가 없습니다.<br>수시입출예금 파일을 업로드하면<br>1월~6월 지출 내역이 자동으로 정리됩니다.</p>
   </div>
 
@@ -318,22 +342,28 @@
 <script>
 'use strict';
 
-let allData     = [];      // 전체 지출 항목
-let monthData   = {};      // { '2026-01': [...], '2026-02': [...] }
-let activeMonth = null;    // 현재 선택된 월
-let sortCol     = 'date';  // 정렬 컬럼: 'date' | 'amount'
-let sortDir     = 'desc';  // 정렬 방향: 'asc' | 'desc'
+let allData     = [];
+let monthData   = {};
+let activeMonth = null;
+let sortCol     = 'date';
+let sortDir     = 'desc';
+
+const SUB_CATS = ['임대료','카드비','이자','전력비','기장비','신용보증','세금','자동차세',
+                  '유외상품','운영비','수도비','커피','보험비','퇴직금','협회비',
+                  '급여','비품','경조금','기타'];
 
 // ── 유틸 ─────────────────────────────────────────────────────
 function esc(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-function won(n) { return Number(n || 0).toLocaleString() + '원'; }
+function won(n) { return Number(n||0).toLocaleString()+'원'; }
+function moLabel(m) { return m.replace(/^\d{4}-0?/, '')+'월'; }
+
 function showBanner(msg, type) {
   const el = document.getElementById('banner');
   el.textContent = msg;
   el.className = type;
-  if (type !== 'err') setTimeout(() => { el.className = ''; el.style.display = 'none'; }, 4000);
+  if (type !== 'err') setTimeout(() => { el.className = ''; }, 4000);
 }
 
 // ── 데이터 로드 ───────────────────────────────────────────────
@@ -341,14 +371,14 @@ async function loadData() {
   try {
     const res  = await fetch('/api/expenses');
     const data = await res.json();
-    if (!data.ok) { showBanner('조회 실패: ' + data.error, 'err'); return; }
-
+    if (!data.ok) { showBanner('조회 실패: '+data.error, 'err'); return; }
     allData = data.expenses || [];
     buildMonthData();
     renderPivot();
     renderMonthGrid();
+    if (activeMonth !== null) renderDetail();
   } catch(e) {
-    showBanner('서버 연결 실패: ' + e.message, 'err');
+    showBanner('서버 연결 실패: '+e.message, 'err');
   }
 }
 
@@ -361,342 +391,254 @@ function buildMonthData() {
   });
 }
 
-// ── 계정과목×월 피벗 테이블 ───────────────────────────────────
+// ── 피벗 테이블 ──────────────────────────────────────────────
 function renderPivot() {
   const section = document.getElementById('pivot-section');
-  const thead   = document.getElementById('pivot-thead');
-  const tbody   = document.getElementById('pivot-tbody');
-  const totalEl = document.getElementById('pivot-total');
-
-  if (!allData.length) { section.style.display = 'none'; return; }
+  if (!allData.length) { section.style.display='none'; return; }
   section.style.display = 'block';
 
-  const months = Object.keys(monthData).sort();  // ['2026-01', ...]
-  const monthLabels = months.map(m => m.replace(/^2026-0?/, '') + '월');
+  const months = Object.keys(monthData).sort();
 
-  // 계정과목(subCategory) 목록 — 금액 큰 순
-  const subTotals = {};
+  // 계정과목 → 합계 내림차순
+  const subTot = {};
   allData.forEach(e => {
-    const s = e.subCategory || '기타';
-    subTotals[s] = (subTotals[s] || 0) + (e.amount || 0);
+    const s = e.subCategory||'기타';
+    subTot[s] = (subTot[s]||0)+(e.amount||0);
   });
-  const subs = Object.keys(subTotals).sort((a, b) => subTotals[b] - subTotals[a]);
+  const subs = Object.keys(subTot).sort((a,b)=>subTot[b]-subTot[a]);
 
-  // 피벗 데이터: pivot[sub][month] = 합계
+  // pivot[sub][month]
   const pivot = {};
-  subs.forEach(s => { pivot[s] = {}; });
+  subs.forEach(s => { pivot[s]={}; });
   allData.forEach(e => {
-    const s = e.subCategory || '기타';
-    const m = e.month || '';
-    pivot[s][m] = (pivot[s][m] || 0) + (e.amount || 0);
+    const s=e.subCategory||'기타', m=e.month||'';
+    pivot[s][m]=(pivot[s][m]||0)+(e.amount||0);
   });
 
   // 헤더
-  thead.innerHTML = `<tr>
-    <th style="min-width:90px;text-align:left;">계정과목</th>
-    ${monthLabels.map(l => `<th style="text-align:right;">${l}</th>`).join('')}
-    <th style="text-align:right;min-width:100px;">합계</th>
+  document.getElementById('pivot-thead').innerHTML = `<tr>
+    <th>계정과목</th>
+    ${months.map(m=>`<th>${moLabel(m)}</th>`).join('')}
+    <th>합계</th>
   </tr>`;
 
-  // 행
-  const monthColTotals = {};
-  months.forEach(m => { monthColTotals[m] = 0; });
-  let grandTotal = 0;
+  // 데이터 행 + 열 합계
+  const colTot = {};
+  months.forEach(m=>{colTot[m]=0;});
+  let grand=0;
 
-  tbody.innerHTML = subs.map(sub => {
-    let rowTotal = 0;
-    const cells = months.map(m => {
-      const v = pivot[sub][m] || 0;
-      rowTotal += v;
-      monthColTotals[m] += v;
-      return v > 0
-        ? `<td class="pivot-num">${v.toLocaleString()}</td>`
-        : `<td class="pivot-zero">-</td>`;
+  document.getElementById('pivot-tbody').innerHTML = subs.map(sub => {
+    let rowTot=0;
+    const cells=months.map(m=>{
+      const v=pivot[sub][m]||0;
+      rowTot+=v; colTot[m]+=v;
+      return v>0 ? `<td class="pv-num">${v.toLocaleString()}</td>`
+                 : `<td class="pv-zero">-</td>`;
     }).join('');
-    grandTotal += rowTotal;
+    grand+=rowTot;
     return `<tr>
-      <td class="pivot-sub">${esc(sub)}</td>
+      <td class="pv-sub">${esc(sub)}</td>
       ${cells}
-      <td class="pivot-total-col">${rowTotal.toLocaleString()}</td>
+      <td class="pv-total">${rowTot.toLocaleString()}</td>
     </tr>`;
-  }).join('') + `
-    <tr class="pivot-total-row">
-      <td style="font-weight:700;">합계</td>
-      ${months.map(m => `<td class="pivot-num">${(monthColTotals[m]||0).toLocaleString()}</td>`).join('')}
-      <td class="pivot-total-col">${grandTotal.toLocaleString()}</td>
-    </tr>
-  `;
+  }).join('');
 
-  totalEl.textContent = `전체 ${allData.length}건 · ${grandTotal.toLocaleString()}원`;
+  // 합계 행
+  document.getElementById('pivot-tfoot').innerHTML = `<tr>
+    <td>합계</td>
+    ${months.map(m=>`<td>${(colTot[m]||0).toLocaleString()}</td>`).join('')}
+    <td>${grand.toLocaleString()}</td>
+  </tr>`;
+
+  document.getElementById('pivot-total').textContent =
+    `전체 ${allData.length}건 · ${grand.toLocaleString()}원`;
 }
 
-// ── 월별 카드 렌더링 ─────────────────────────────────────────
+// ── 월별 카드 ────────────────────────────────────────────────
 function renderMonthGrid() {
   const grid  = document.getElementById('month-grid');
   const noMsg = document.getElementById('no-data-msg');
-
   const months = Object.keys(monthData).sort().reverse();
 
   if (!months.length) {
-    grid.innerHTML = '';
-    noMsg.style.display = 'block';
-    document.getElementById('detail-panel').style.display = 'none';
+    grid.innerHTML=''; noMsg.style.display='block';
+    document.getElementById('detail-panel').style.display='none';
     return;
   }
+  noMsg.style.display='none';
 
-  noMsg.style.display = 'none';
-
-  // 전체 합계 카드
-  const totalCount = allData.length;
-  const totalAmt   = allData.reduce((s, e) => s + (e.amount || 0), 0);
+  const totalAmt = allData.reduce((s,e)=>s+(e.amount||0),0);
 
   grid.innerHTML = `
-    <div class="month-card ${!activeMonth ? 'active' : ''}" onclick="selectMonth(null)">
+    <div class="month-card ${activeMonth===null?'active':''}" onclick="selectMonth(null)">
       <div class="mo-label">📊 전체</div>
-      <div class="mo-count">${totalCount}건</div>
+      <div class="mo-count">${allData.length}건</div>
       <div class="mo-total">${totalAmt.toLocaleString()}원</div>
     </div>
-  ` + months.map(m => {
-    const items = monthData[m];
-    const cnt   = items.length;
-    const total = items.reduce((s, e) => s + (e.amount || 0), 0);
-    const label = m.replace(/^2026-0?/, '') + '월';  // "2026-01" → "1월"
-    return `
-      <div class="month-card ${activeMonth === m ? 'active' : ''}" onclick="selectMonth('${m}')">
-        <div class="mo-label">${label}</div>
-        <div class="mo-count">${cnt}건</div>
-        <div class="mo-total">${total.toLocaleString()}원</div>
-      </div>
-    `;
+  ` + months.map(m=>{
+    const items=monthData[m]||[];
+    const tot=items.reduce((s,e)=>s+(e.amount||0),0);
+    return `<div class="month-card ${activeMonth===m?'active':''}" onclick="selectMonth('${m}')">
+      <div class="mo-label">${moLabel(m)}</div>
+      <div class="mo-count">${items.length}건</div>
+      <div class="mo-total">${tot.toLocaleString()}원</div>
+    </div>`;
   }).join('');
-
-  // 활성 월이 있으면 상세 표시
-  if (activeMonth !== undefined) renderDetail();
 }
 
 // ── 월 선택 ──────────────────────────────────────────────────
-function selectMonth(month) {
-  activeMonth = month;
+function selectMonth(m) {
+  activeMonth = m;
   renderMonthGrid();
   renderDetail();
 }
 
-// ── 상세 리스트 렌더링 ───────────────────────────────────────
+// ── 상세 렌더링 ───────────────────────────────────────────────
 function renderDetail() {
-  const panel  = document.getElementById('detail-panel');
-  const title  = document.getElementById('detail-title');
-  const meta   = document.getElementById('detail-meta');
-  const tbody  = document.getElementById('detail-tbody');
-  const subSel = document.getElementById('filter-sub');
+  const panel = document.getElementById('detail-panel');
+  panel.style.display='block';
+  document.getElementById('detail-title').textContent =
+    activeMonth ? moLabel(activeMonth)+' 지출 내역' : '전체 지출 내역';
 
-  const src = activeMonth ? (monthData[activeMonth] || []) : allData;
+  // 계정과목 필터 옵션 갱신
+  const src  = activeMonth ? (monthData[activeMonth]||[]) : allData;
+  const subs = [...new Set(src.map(e=>e.subCategory||'기타'))].sort();
+  const prev = document.getElementById('filter-sub').value;
+  document.getElementById('filter-sub').innerHTML =
+    '<option value="">전체</option>'+
+    subs.map(s=>`<option value="${s}" ${s===prev?'selected':''}>${s}</option>`).join('');
 
-  const label = activeMonth
-    ? activeMonth.replace(/^2026-0?/, '') + '월 지출 내역'
-    : '전체 지출 내역';
-  title.textContent = label;
-  panel.style.display = 'block';
-
-  // 계정과목 필터 목록 갱신
-  const subs = [...new Set(src.map(e => e.subCategory || '기타'))].sort();
-  const prevSub = subSel.value;
-  subSel.innerHTML = '<option value="">전체</option>' +
-    subs.map(s => `<option value="${s}" ${s === prevSub ? 'selected' : ''}>${s}</option>`).join('');
-
-  applyDetailFilter(src, meta, tbody);
+  applyFilter();
 }
 
-function applyDetailFilter(src, metaEl, tbody) {
+function applyFilter() {
+  const src    = activeMonth ? (monthData[activeMonth]||[]) : allData;
   const cat    = document.getElementById('filter-cat').value;
   const sub    = document.getElementById('filter-sub').value;
   const search = document.getElementById('filter-search').value.trim().toLowerCase();
 
-  const filtered = src.filter(e =>
-    (!cat    || e.category    === cat) &&
-    (!sub    || e.subCategory === sub) &&
+  const list = src.filter(e=>
+    (!cat    || e.category===cat) &&
+    (!sub    || e.subCategory===sub) &&
     (!search || (e.vendor||'').toLowerCase().includes(search))
   );
 
-  const total = filtered.reduce((s, e) => s + (e.amount || 0), 0);
+  const total = list.reduce((s,e)=>s+(e.amount||0),0);
+  document.getElementById('detail-meta').textContent =
+    `${list.length}건 · 합계 ${total.toLocaleString()}원`;
 
-  if (metaEl) metaEl.textContent = `${filtered.length}건 · 합계 ${total.toLocaleString()}원`;
-
-  if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">해당 조건의 내역이 없습니다.</td></tr>';
+  const tbody = document.getElementById('detail-tbody');
+  if (!list.length) {
+    tbody.innerHTML='<tr class="empty-row"><td colspan="6">해당 조건의 내역이 없습니다.</td></tr>';
     return;
   }
 
-  const sorted = [...filtered].sort((a, b) => {
-    if (sortCol === 'amount') {
-      return sortDir === 'asc' ? (a.amount||0) - (b.amount||0) : (b.amount||0) - (a.amount||0);
-    }
-    // date
-    const da = a.date || a.month || '';
-    const db = b.date || b.month || '';
-    return sortDir === 'asc' ? da.localeCompare(db) : db.localeCompare(da);
+  const sorted = [...list].sort((a,b)=>{
+    if (sortCol==='amount')
+      return sortDir==='asc' ? (a.amount||0)-(b.amount||0) : (b.amount||0)-(a.amount||0);
+    const da=a.date||a.month||'', db=b.date||b.month||'';
+    return sortDir==='asc' ? da.localeCompare(db) : db.localeCompare(da);
   });
 
-  const SUB_CATS = ['임대료','카드비','이자','전력비','기장비','신용보증','세금','자동차세','유외상품','운영비','수도비','커피','보험비','퇴직금','협회비','급여','비품','경조금','기타'];
-
-  tbody.innerHTML = sorted.map((e) => {
-    const origIdx = allData.indexOf(e);
-    const subOpts = SUB_CATS.map(s =>
-      `<option value="${s}" ${e.subCategory === s ? 'selected' : ''}>${s}</option>`
-    ).join('');
-    return `
-      <tr>
-        <td class="col-date">${esc(e.date || e.month || '')}</td>
-        <td>
-          <select class="sel-sub" style="border:1px solid #e2e8f0;border-radius:4px;padding:2px 6px;font-size:12px;color:#1e293b;"
-                  onchange="updateItem(${origIdx},'subCategory',this.value)">
-            ${subOpts}
-          </select>
-        </td>
-        <td>
-          <select class="sel-cat" style="border:1px solid #e2e8f0;border-radius:4px;padding:2px 6px;font-size:12px;"
-                  onchange="updateItem(${origIdx},'category',this.value)">
-            <option value="고정비" ${e.category==='고정비'?'selected':''}>고정비</option>
-            <option value="변동비" ${e.category==='변동비'?'selected':''}>변동비</option>
-          </select>
-        </td>
-        <td class="col-vendor" title="${esc(e.vendor || '')}">${esc(e.vendor || '')}</td>
-        <td class="col-num">${won(e.amount)}</td>
-        <td><button class="btn-del" onclick="deleteItem(${origIdx})">삭제</button></td>
-      </tr>
-    `;
-  }).join('') + `
-    <tr class="total-row">
-      <td colspan="4">합계 (${filtered.length}건)</td>
+  tbody.innerHTML = sorted.map(e=>{
+    const idx=allData.indexOf(e);
+    const subOpts=SUB_CATS.map(s=>`<option value="${s}" ${e.subCategory===s?'selected':''}>${s}</option>`).join('');
+    return `<tr>
+      <td class="col-date">${esc(e.date||e.month||'')}</td>
+      <td class="col-sub"><select class="sel-sub" onchange="updateItem(${idx},'subCategory',this.value)">${subOpts}</select></td>
+      <td class="col-cat"><select class="sel-cat" onchange="updateItem(${idx},'category',this.value)">
+        <option value="고정비" ${e.category==='고정비'?'selected':''}>고정비</option>
+        <option value="변동비" ${e.category==='변동비'?'selected':''}>변동비</option>
+      </select></td>
+      <td class="col-vendor" title="${esc(e.vendor||'')}">${esc(e.vendor||'')}</td>
+      <td class="col-num">${won(e.amount)}</td>
+      <td class="col-del"><button class="btn-del" onclick="deleteItem(${idx})">삭제</button></td>
+    </tr>`;
+  }).join('')
+  + `<tr class="total-row">
+      <td colspan="4" style="padding:8px 12px;">합계 (${list.length}건)</td>
       <td class="col-num">${won(total)}</td>
       <td></td>
-    </tr>
-  `;
+    </tr>`;
 }
 
 // ── 정렬 ─────────────────────────────────────────────────────
 function setSort(col) {
-  if (sortCol === col) {
-    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-  } else {
-    sortCol = col;
-    sortDir = col === 'date' ? 'desc' : 'desc';  // 날짜는 최신순, 금액은 높은순 기본
-  }
-  updateSortHeaders();
-  const src = activeMonth ? (monthData[activeMonth] || []) : allData;
-  applyDetailFilter(src, document.getElementById('detail-meta'), document.getElementById('detail-tbody'));
-}
-
-function updateSortHeaders() {
-  ['date', 'amount'].forEach(col => {
-    const th   = document.getElementById(`th-${col}`);
-    const icon = th?.querySelector('.sort-icon');
-    if (!th || !icon) return;
-    if (sortCol === col) {
-      th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
-      th.classList.remove(sortDir === 'asc' ? 'sort-desc' : 'sort-asc');
-      icon.textContent = sortDir === 'asc' ? '↑' : '↓';
-    } else {
-      th.classList.remove('sort-asc', 'sort-desc');
-      icon.textContent = '↕';
-    }
+  sortDir = sortCol===col ? (sortDir==='asc'?'desc':'asc') : 'desc';
+  sortCol = col;
+  // 헤더 아이콘
+  ['date','amount'].forEach(c=>{
+    const th=document.getElementById(`th-${c}`);
+    const ic=th?.querySelector('.sort-icon');
+    if (!th||!ic) return;
+    th.classList.toggle('sort-active', c===sortCol);
+    ic.textContent = c===sortCol ? (sortDir==='asc'?'↑':'↓') : '↕';
   });
+  applyFilter();
 }
 
-// ── 항목 수정 (계정과목 / 분류 드롭다운) ─────────────────────
+// ── 항목 수정 ────────────────────────────────────────────────
 async function updateItem(idx, field, value) {
-  const e = allData[idx];
+  const e=allData[idx];
   if (!e) return;
-  e[field] = value;  // 클라이언트 즉시 반영
+  e[field]=value;
   try {
     await fetch('/api/expenses/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ month: e.month, date: e.date || '', vendor: e.vendor, amount: e.amount, field, value }),
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({month:e.month,date:e.date||'',vendor:e.vendor,amount:e.amount,field,value}),
     });
-    buildMonthData();
-    renderPivot();
-    renderMonthGrid();
-  } catch { /* 서버 오류 시 무시 (클라이언트 값은 이미 바뀜) */ }
+    buildMonthData(); renderPivot(); renderMonthGrid();
+  } catch {}
 }
-
-// ── 필터 이벤트 ───────────────────────────────────────────────
-['filter-cat', 'filter-sub', 'filter-search'].forEach(id => {
-  document.getElementById(id).addEventListener('change', () => {
-    const src = activeMonth ? (monthData[activeMonth] || []) : allData;
-    applyDetailFilter(src, document.getElementById('detail-meta'), document.getElementById('detail-tbody'));
-  });
-});
-document.getElementById('filter-search').addEventListener('input', () => {
-  const src = activeMonth ? (monthData[activeMonth] || []) : allData;
-  applyDetailFilter(src, document.getElementById('detail-meta'), document.getElementById('detail-tbody'));
-});
 
 // ── 삭제 ─────────────────────────────────────────────────────
 async function deleteItem(idx) {
-  const e = allData[idx];
-  if (!e) return;
-  if (!confirm(`삭제하시겠습니까?\n${e.date || e.month} · ${e.vendor}\n${won(e.amount)}`)) return;
+  const e=allData[idx];
+  if (!e||!confirm(`삭제하시겠습니까?\n${e.date||e.month} · ${e.vendor}\n${won(e.amount)}`)) return;
   try {
-    const res  = await fetch('/api/expenses/delete', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ month: e.month, date: e.date || '', vendor: e.vendor, amount: e.amount }),
+    const res=await fetch('/api/expenses/delete',{
+      method:'DELETE', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({month:e.month,date:e.date||'',vendor:e.vendor,amount:e.amount}),
     });
-    const data = await res.json();
+    const data=await res.json();
     if (data.ok) {
-      allData.splice(idx, 1);
-      buildMonthData();
-      renderMonthGrid();
-      showBanner('✅ 삭제 완료', 'ok');
-    } else {
-      showBanner('삭제 실패: ' + data.error, 'err');
-    }
-  } catch(e) { showBanner('서버 오류', 'err'); }
+      allData.splice(idx,1);
+      buildMonthData(); renderPivot(); renderMonthGrid();
+      if (activeMonth!==null) renderDetail(); else applyFilter();
+      showBanner('✅ 삭제 완료','ok');
+    } else showBanner('삭제 실패: '+data.error,'err');
+  } catch { showBanner('서버 오류','err'); }
 }
 
-// ── 수시입출예금 업로드 ───────────────────────────────────────
-document.getElementById('bank-expense-input').addEventListener('change', async e => {
-  const file = e.target.files[0];
-  if (!file) return;
+// ── 업로드 ───────────────────────────────────────────────────
+document.getElementById('bank-expense-input').addEventListener('change', async e=>{
+  const file=e.target.files[0]; if (!file) return;
+  const btn=document.getElementById('btn-upload');
+  const info=document.getElementById('upload-info');
+  btn.disabled=true; btn.textContent='⏳ 업로드 중…';
+  info.textContent=`처리 중: ${file.name}`;
+  showBanner('업로드 및 파싱 중…','info');
 
-  const btn  = document.getElementById('btn-upload');
-  const info = document.getElementById('upload-info');
-  btn.disabled = true;
-  btn.textContent = '⏳ 업로드 중…';
-  info.textContent = `처리 중: ${file.name}`;
-  showBanner('업로드 및 파싱 중…', 'info');
-
-  const form = new FormData();
-  form.append('file', file);
-
+  const form=new FormData(); form.append('file',file);
   try {
-    const res  = await fetch('/api/upload-bank-expenses', { method: 'POST', body: form });
-    const data = await res.json();
-
+    const res=await fetch('/api/upload-bank-expenses',{method:'POST',body:form});
+    const data=await res.json();
     if (data.ok) {
-      info.textContent = `✅ ${data.count}건 임포트 완료 (${(data.months||[]).map(m=>m.replace(/^2026-0?/,'')+' 월').join(', ')})`;
-      showBanner(`✅ ${data.count}건 지출 데이터 임포트 완료`, 'ok');
-      activeMonth = null;
-      await loadData();  // 전체 새로고침 (피벗 포함)
-    } else {
-      info.textContent = '❌ 업로드 실패: ' + data.error;
-      showBanner('업로드 실패: ' + data.error, 'err');
-    }
-  } catch(err) {
-    info.textContent = '❌ 서버 연결 실패';
-    showBanner('서버 연결 실패: ' + err.message, 'err');
-  }
-
-  btn.disabled = false;
-  btn.textContent = '📥 수시입출예금 업로드';
-  e.target.value = '';
+      info.textContent=`✅ ${data.count}건 임포트 완료 (${(data.months||[]).map(m=>moLabel(m)).join(', ')})`;
+      showBanner(`✅ ${data.count}건 지출 데이터 임포트 완료`,'ok');
+      activeMonth=null; await loadData();
+    } else { info.textContent='❌ '+data.error; showBanner('업로드 실패: '+data.error,'err'); }
+  } catch(err) { info.textContent='❌ 서버 연결 실패'; showBanner(err.message,'err'); }
+  btn.disabled=false; btn.textContent='📥 수시입출예금 업로드'; e.target.value='';
 });
 
-// ── 종합 탭 링크 ─────────────────────────────────────────────
-// 메인 앱으로 돌아갈 때 종합 탭 활성화하도록 URL 파라미터 전달
-document.getElementById('link-summary').href = '/?group=summary';
+// ── 필터 이벤트 ───────────────────────────────────────────────
+['filter-cat','filter-sub'].forEach(id=>document.getElementById(id).addEventListener('change',applyFilter));
+document.getElementById('filter-search').addEventListener('input',applyFilter);
 
-// ── 페이지 로드 ───────────────────────────────────────────────
+// ── 종합 링크 ────────────────────────────────────────────────
+document.getElementById('link-summary').href='/?group=summary';
+
 loadData();
 </script>
 
