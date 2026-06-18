@@ -117,71 +117,58 @@ function initTabs() {
 }
 
 function switchGroup(group) {
-  // 인라인 스타일 전체 초기화 → CSS 클래스가 제어하도록 (인라인 스타일이 CSS보다 우선순위 높아 충돌 방지)
-  document.querySelectorAll('.group-content').forEach(s => { s.classList.remove('active'); s.style.display = ''; });
-  document.querySelectorAll('.tab-content').forEach(t => { t.classList.remove('active'); t.style.display = ''; });
-
-  document.querySelectorAll('.main-tab').forEach(b => b.classList.remove('active'));
-  document.querySelector(`.main-tab[data-group="${group}"]`).classList.add('active');
+  // 그룹 레벨만 제어 — tab-content는 건드리지 않음 (각 switchXxxSubTab이 독립 관리)
+  document.querySelectorAll('.group-content').forEach(s => {
+    s.classList.toggle('active', s.id === `group-${group}`);
+  });
+  document.querySelectorAll('.main-tab').forEach(b => {
+    b.classList.toggle('active', b.dataset.group === group);
+  });
 
   const subnav        = document.getElementById('subnav');
   const subnavDaily   = document.getElementById('subnav-daily');
   const subnavMonthly = document.getElementById('subnav-monthly');
 
-  if (group === 'summary') {
-    subnav.classList.add('hidden');
-    document.getElementById('group-summary').classList.add('active');
-    loadSummary();
-  } else if (group === 'monthly') {
+  if (group === 'daily' || group === 'monthly') {
     subnav.classList.remove('hidden');
-    if (subnavDaily)   subnavDaily.style.display   = 'none';
-    if (subnavMonthly) subnavMonthly.style.display = '';
-    document.getElementById('group-monthly').classList.add('active');
-    const activeBtn = document.querySelector('#subnav-monthly .tab-btn.active');
-    const activeTab = activeBtn ? activeBtn.dataset.tab : 'statements';
-    switchSubTab(activeTab);
-  } else if (group === 'daily') {
-    subnav.classList.remove('hidden');
-    if (subnavMonthly) subnavMonthly.style.display = 'none';
-    if (subnavDaily)   subnavDaily.style.display   = '';
-    document.getElementById('group-daily').classList.add('active');
-    const activeBtn = document.querySelector('#subnav-daily .tab-btn.active');
-    const activeTab = activeBtn ? activeBtn.dataset.tab : 'daily-main';
-    switchDailySubTab(activeTab);
-    loadDailyMonth();
+    if (subnavDaily)   subnavDaily.style.display   = group === 'daily'   ? '' : 'none';
+    if (subnavMonthly) subnavMonthly.style.display = group === 'monthly' ? '' : 'none';
   } else {
     subnav.classList.add('hidden');
-    document.getElementById(`group-${group}`).classList.add('active');
+  }
+
+  if (group === 'daily') {
+    const activeTab = document.querySelector('#subnav-daily .tab-btn.active')?.dataset.tab || 'daily-main';
+    switchDailySubTab(activeTab);
+    loadDailyMonth();
+  } else if (group === 'monthly') {
+    const activeTab = document.querySelector('#subnav-monthly .tab-btn.active')?.dataset.tab || 'statements';
+    switchSubTab(activeTab);
+  } else if (group === 'summary') {
+    loadSummary();
   }
 }
 
 function switchDailySubTab(tab) {
-  // group-daily 인라인 + 클래스 양쪽으로 강제 표시
-  const gd = document.getElementById('group-daily');
-  if (gd) { gd.classList.add('active'); gd.style.display = 'block'; }
-
+  // subnav 버튼
   document.querySelectorAll('#subnav-daily .tab-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === tab);
   });
+  // daily 탭 콘텐츠만 — CSS 클래스로 일관되게 제어
   ['daily-main', 'daily-expense'].forEach(t => {
-    const el = document.getElementById(`tab-${t}`);
-    if (el) {
-      const show = (t === tab);
-      el.classList.toggle('active', show);
-      el.style.display = show ? 'block' : 'none';
-    }
+    document.getElementById(`tab-${t}`)?.classList.toggle('active', t === tab);
   });
-
   if (tab === 'daily-expense') loadAllExpenses();
 }
 
 function switchSubTab(tab) {
-  document.querySelectorAll('#subnav-monthly .tab-btn').forEach(b => b.classList.remove('active'));
+  // subnav 버튼
+  document.querySelectorAll('#subnav-monthly .tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+  // monthly 탭 콘텐츠만
   document.querySelectorAll('#group-monthly .tab-content').forEach(t => t.classList.remove('active'));
-  const btn = document.querySelector(`#subnav-monthly .tab-btn[data-tab="${tab}"]`);
-  if (btn) btn.classList.add('active');
-  const section = document.getElementById(`tab-${tab}`);
-  if (section) section.classList.add('active');
+  document.getElementById(`tab-${tab}`)?.classList.add('active');
   renderAll();
 }
 
