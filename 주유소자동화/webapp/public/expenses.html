@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>지출목록 — 미소주유소</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Noto Sans KR', sans-serif; background: #f8fafc; color: #1e293b; font-size: 14px; }
+
+    header {
+      background: #1e293b;
+      color: #fff;
+      padding: 0 24px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 { font-size: 16px; font-weight: 700; }
+    header a { color: #94a3b8; font-size: 13px; text-decoration: none; }
+    header a:hover { color: #fff; }
+
+    main { padding: 20px 24px; max-width: 1200px; margin: 0 auto; }
+
+    /* 툴바 */
+    .toolbar {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 16px;
+      padding: 12px 16px;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+    }
+    .btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: 1px solid #d1d5db;
+      background: #fff;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .btn-green  { background: #16a34a; color: #fff; border-color: #16a34a; }
+    .btn-orange { background: #ea580c; color: #fff; border-color: #ea580c; }
+    .btn:hover  { opacity: 0.85; }
+    .file-label { font-size: 12px; color: #64748b; }
+
+    /* 카드 */
+    .card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid #e2e8f0;
+      background: #f8fafc;
+      border-radius: 8px 8px 0 0;
+    }
+    .card-header h2 { font-size: 15px; font-weight: 700; }
+    .count-badge { font-size: 12px; color: #64748b; }
+
+    /* 테이블 */
+    table { width: 100%; border-collapse: collapse; }
+    th { padding: 9px 12px; background: #f1f5f9; font-size: 12px; font-weight: 600; text-align: left; color: #475569; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
+    td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f8fafc; }
+
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .badge-fixed { background: #dbeafe; color: #1e40af; }
+    .badge-var   { background: #dcfce7; color: #15803d; }
+
+    .td-num  { text-align: right; font-weight: 600; white-space: nowrap; }
+    .td-date { color: #64748b; white-space: nowrap; }
+    .td-vendor { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .btn-del { padding: 3px 10px; font-size: 12px; background: #ef4444; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+    .btn-del:hover { background: #b91c1c; }
+
+    .empty-msg { padding: 40px; text-align: center; color: #94a3b8; font-size: 14px; }
+
+    /* 상태 메시지 */
+    #status { padding: 10px 16px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; font-weight: 600; display: none; }
+    #status.ok    { background: #dcfce7; color: #15803d; }
+    #status.err   { background: #fee2e2; color: #dc2626; }
+    #status.info  { background: #dbeafe; color: #1e40af; }
+
+    /* 필터 */
+    .filter-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid #e2e8f0; background: #fafafa; }
+    .filter-bar label { font-size: 12px; color: #64748b; }
+    .filter-bar select { padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px; }
+    .filter-bar input  { padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px; width: 120px; }
+
+    /* 합계행 */
+    .total-row td { background: #f1f5f9; font-weight: 700; border-top: 2px solid #e2e8f0; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⛽ 지출목록 — 미소주유소</h1>
+  <a href="/">← 메인으로</a>
+</header>
+
+<main>
+
+  <!-- 상태 메시지 -->
+  <div id="status"></div>
+
+  <!-- 툴바 -->
+  <div class="toolbar">
+    <input type="file" id="bank-expense-input" accept=".xls,.xlsx" hidden>
+    <button class="btn btn-green" onclick="document.getElementById('bank-expense-input').click()">
+      📥 수시입출예금 업로드
+    </button>
+    <span id="bank-label" class="file-label"></span>
+
+    <input type="file" id="expense-file-input" accept=".xls,.xlsx" hidden>
+    <button class="btn btn-orange" onclick="document.getElementById('expense-file-input').click()">
+      💰 마감자료 지출내역 업로드
+    </button>
+    <span id="expense-label" class="file-label"></span>
+  </div>
+
+  <!-- 지출 목록 카드 -->
+  <div class="card">
+    <div class="card-header">
+      <h2>지출 목록</h2>
+      <span id="count-badge" class="count-badge">로딩 중…</span>
+    </div>
+
+    <!-- 필터 -->
+    <div class="filter-bar">
+      <label>월 선택</label>
+      <select id="filter-month">
+        <option value="">전체</option>
+      </select>
+      <label>검색</label>
+      <input type="text" id="filter-search" placeholder="업체명 검색">
+      <button class="btn" onclick="applyFilter()" style="padding:4px 12px;font-size:12px;">적용</button>
+    </div>
+
+    <!-- 테이블 -->
+    <div style="overflow-x:auto;">
+      <table id="expense-table">
+        <thead>
+          <tr>
+            <th style="min-width:95px">날짜</th>
+            <th style="min-width:100px">계정과목</th>
+            <th style="min-width:65px">용도</th>
+            <th style="min-width:200px">업체</th>
+            <th style="min-width:110px;text-align:right">금액</th>
+            <th style="min-width:50px">삭제</th>
+          </tr>
+        </thead>
+        <tbody id="expense-tbody">
+          <tr><td colspan="6" class="empty-msg">로딩 중…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<script>
+'use strict';
+
+let allExpenses = [];
+let filtered    = [];
+
+// ── 유틸 ─────────────────────────────────────────────────────
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function showStatus(msg, type = 'info') {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = type;
+  el.style.display = 'block';
+  if (type !== 'err') setTimeout(() => { el.style.display = 'none'; }, 3000);
+}
+
+// ── 데이터 로드 ───────────────────────────────────────────────
+async function loadExpenses() {
+  try {
+    const res  = await fetch('/api/expenses');
+    const data = await res.json();
+    if (!data.ok) { showStatus('데이터 조회 실패: ' + data.error, 'err'); return; }
+    allExpenses = data.expenses || [];
+    buildMonthFilter();
+    applyFilter();
+  } catch (e) {
+    showStatus('서버 연결 실패: ' + e.message, 'err');
+  }
+}
+
+// ── 월 필터 목록 구성 ─────────────────────────────────────────
+function buildMonthFilter() {
+  const months = [...new Set(allExpenses.map(e => e.month || ''))].sort().reverse();
+  const sel = document.getElementById('filter-month');
+  sel.innerHTML = '<option value="">전체</option>' +
+    months.map(m => `<option value="${m}">${m}</option>`).join('');
+}
+
+// ── 필터 적용 + 렌더링 ───────────────────────────────────────
+function applyFilter() {
+  const month  = document.getElementById('filter-month').value;
+  const search = document.getElementById('filter-search').value.trim().toLowerCase();
+  filtered = allExpenses.filter(e =>
+    (!month  || e.month === month) &&
+    (!search || (e.vendor || '').toLowerCase().includes(search))
+  );
+  renderTable();
+}
+
+function renderTable() {
+  const tbody = document.getElementById('expense-tbody');
+  const badge = document.getElementById('count-badge');
+  badge.textContent = `${filtered.length}건 / 전체 ${allExpenses.length}건`;
+
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">해당 조건의 지출 내역이 없습니다.</td></tr>';
+    return;
+  }
+
+  const sorted = [...filtered].sort((a, b) =>
+    (b.date || b.month || '').localeCompare(a.date || a.month || '')
+  );
+
+  const totalAmt = sorted.reduce((s, e) => s + (e.amount || 0), 0);
+
+  tbody.innerHTML = sorted.map((e, i) => `
+    <tr>
+      <td class="td-date">${esc(e.date || e.month || '')}</td>
+      <td>${esc(e.subCategory || '')}</td>
+      <td><span class="badge ${e.category === '고정비' ? 'badge-fixed' : 'badge-var'}">${esc(e.category || '')}</span></td>
+      <td class="td-vendor" title="${esc(e.vendor || '')}">${esc(e.vendor || '')}</td>
+      <td class="td-num">${(e.amount || 0).toLocaleString()}원</td>
+      <td><button class="btn-del" onclick="deleteItem(${allExpenses.indexOf(e)})">삭제</button></td>
+    </tr>
+  `).join('') + `
+    <tr class="total-row">
+      <td colspan="4">합계 (${sorted.length}건)</td>
+      <td class="td-num">${totalAmt.toLocaleString()}원</td>
+      <td></td>
+    </tr>
+  `;
+}
+
+// ── 삭제 ─────────────────────────────────────────────────────
+async function deleteItem(idx) {
+  const e = allExpenses[idx];
+  if (!e) return;
+  if (!confirm(`${e.vendor}\n${(e.amount||0).toLocaleString()}원\n삭제하시겠습니까?`)) return;
+  try {
+    const res  = await fetch('/api/expenses/delete', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ month: e.month, date: e.date || '', vendor: e.vendor, amount: e.amount }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      allExpenses.splice(idx, 1);
+      buildMonthFilter();
+      applyFilter();
+      showStatus('삭제 완료', 'ok');
+    } else {
+      showStatus('삭제 실패: ' + data.error, 'err');
+    }
+  } catch (e) { showStatus('서버 오류', 'err'); }
+}
+
+// ── 업로드: 수시입출예금 ──────────────────────────────────────
+document.getElementById('bank-expense-input').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const label = document.getElementById('bank-label');
+  label.textContent = `업로드 중: ${file.name}`;
+  showStatus('업로드 중…', 'info');
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const res  = await fetch('/api/upload-bank-expenses', { method: 'POST', body: form });
+    const data = await res.json();
+    if (data.ok) {
+      label.textContent = `✅ ${data.count}건 (${(data.months||[]).join(', ')})`;
+      showStatus(`✅ 수시입출예금 ${data.count}건 임포트 완료`, 'ok');
+      await loadExpenses();
+    } else {
+      label.textContent = '실패';
+      showStatus('오류: ' + data.error, 'err');
+    }
+  } catch(err) { label.textContent = '오류'; showStatus('서버 연결 실패', 'err'); }
+  e.target.value = '';
+});
+
+// ── 업로드: 마감자료 지출내역 ────────────────────────────────
+document.getElementById('expense-file-input').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const label = document.getElementById('expense-label');
+  label.textContent = `업로드 중: ${file.name}`;
+  showStatus('업로드 중…', 'info');
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const res  = await fetch('/api/upload-expenses', { method: 'POST', body: form });
+    const data = await res.json();
+    if (data.ok) {
+      label.textContent = `✅ ${data.count}건`;
+      showStatus(`✅ 지출내역 ${data.count}건 임포트 완료`, 'ok');
+      await loadExpenses();
+    } else {
+      label.textContent = '실패';
+      showStatus('오류: ' + data.error, 'err');
+    }
+  } catch(err) { label.textContent = '오류'; showStatus('서버 연결 실패', 'err'); }
+  e.target.value = '';
+});
+
+// ── 실시간 검색 ───────────────────────────────────────────────
+document.getElementById('filter-search').addEventListener('input', applyFilter);
+document.getElementById('filter-month').addEventListener('change', applyFilter);
+
+// ── 페이지 로드 ───────────────────────────────────────────────
+loadExpenses();
+</script>
+
+</body>
+</html>

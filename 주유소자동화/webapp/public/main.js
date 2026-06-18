@@ -173,7 +173,7 @@ function switchDailySubTab(tab) {
     el.style.display = show ? 'block' : 'none';
     el.classList.toggle('active', show);
   });
-  if (tab === 'daily-expense') loadAllExpenses();
+  if (tab === 'daily-expense') window.location.href = '/expenses.html';
 }
 
 function switchSubTab(tab) {
@@ -2081,18 +2081,24 @@ function renderExpenseList() {
 
   const sorted = [...expenseList].sort((a, b) => (a.date || a.month || '').localeCompare(b.date || b.month || ''));
 
-  listDiv.innerHTML = sorted.map((e, i) => `
-    <div style="display:flex;align-items:center;padding:8px 16px;border-bottom:1px solid #e2e8f0;gap:12px;font-size:13px;">
-      <span style="min-width:90px;color:#64748b;">${esc(e.date || e.month || '')}</span>
-      <span style="min-width:100px;">${esc(e.subCategory || '')}</span>
-      <span style="min-width:60px;">
-        <span style="padding:1px 6px;border-radius:9px;font-size:11px;background:${e.category === '고정비' ? '#dbeafe' : '#dcfce7'};color:${e.category === '고정비' ? '#1e40af' : '#15803d'};">${esc(e.category || '')}</span>
-      </span>
-      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(e.vendor || '')}">${esc(e.vendor || '')}</span>
-      <span style="min-width:110px;text-align:right;font-weight:600;">${(e.amount || 0).toLocaleString()}원</span>
-      <button class="btn-sm btn-danger" onclick="deleteExpenseItem(${i})" style="flex-shrink:0;">삭제</button>
-    </div>
-  `).join('');
+  // 카드 외부에 직접 렌더링 (overflow:hidden 우회)
+  const tabEl2 = document.getElementById('tab-daily-expense');
+  let directList = document.getElementById('expense-direct-list');
+  if (!directList && tabEl2) {
+    directList = document.createElement('div');
+    directList.id = 'expense-direct-list';
+    directList.style.cssText = 'margin-top:8px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;';
+    tabEl2.appendChild(directList);
+  }
+
+  const target = directList || listDiv;
+  target.innerHTML = '<div style="padding:6px 16px;background:#f1f5f9;font-size:12px;color:#475569;font-weight:600;">날짜 | 계정과목 | 업체 | 금액</div>' +
+    sorted.map((e, i) => `<div style="padding:8px 16px;border-top:1px solid #f1f5f9;font-size:13px;color:#1e293b;">
+      <span style="color:#64748b;margin-right:12px;">${esc(e.date || e.month || '')}</span>
+      <span style="margin-right:12px;">${esc(e.subCategory || '')}</span>
+      <span style="margin-right:12px;">${esc(e.vendor || '')}</span>
+      <strong>${(e.amount || 0).toLocaleString()}원</strong>
+    </div>`).join('');
 
   if (diagEl) diagEl.textContent = `✅ ${expenseList.length}건 렌더링 완료`;
 }
