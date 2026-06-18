@@ -745,6 +745,38 @@ app.delete('/api/expenses/delete', (req, res) => {
   res.json({ ok: true });
 });
 
+// ── 계정과목 동기화: 4~5월 기준으로 1~3월 일괄 업데이트 ──────────
+app.post('/api/expenses/sync-categories', (req, res) => {
+  const { srcMonths = ['2026-04', '2026-05'], dstMonths = ['2026-01', '2026-02', '2026-03'] } = req.body;
+  const list = readJSON(EXPENSES_FILE, []);
+
+  // 1. 기준 월(4~5월)에서 업체명 → {category, subCategory} 매핑 구성
+  //    같은 업체가 여러 달에 있으면 가장 나중 월 값 사용
+  const vendorMap = {};
+  list
+    .filter(e => srcMonths.includes(e.month))
+    .sort((a, b) => (a.month||'').localeCompare(b.month||''))  // 월 순서대로
+    .forEach(e => {
+      vendorMap[e.vendor] = { category: e.category, subCategory: e.subCategory };
+    });
+
+  // 2. 대상 월(1~3월) 항목에 매핑 적용
+  let updated = 0;
+  list.forEach(e => {
+    if (!dstMonths.includes(e.month)) return;
+    const mapped = vendorMap[e.vendor];
+    if (!mapped) return;
+    if (e.category !== mapped.category || e.subCategory !== mapped.subCategory) {
+      e.category    = mapped.category;
+      e.subCategory = mapped.subCategory;
+      updated++;
+    }
+  });
+
+  writeJSON(EXPENSES_FILE, list);
+  res.json({ ok: true, updated, total: list.filter(e => dstMonths.includes(e.month)).length });
+});
+
 // ── 지출 항목 수정 (계정과목/분류 변경) ──────────────────────────
 app.post('/api/expenses/update', (req, res) => {
   const { month, date, vendor, amount, field, value } = req.body;
