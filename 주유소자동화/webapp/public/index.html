@@ -296,13 +296,21 @@
         </div>
       </div>
 
+      <!-- 진단 배너 -->
+      <div id="expense-diag" style="background:#1e40af;color:#fff;padding:10px 16px;border-radius:6px;margin-bottom:12px;font-size:13px;font-weight:600;display:none;">
+        진단 중...
+      </div>
+
       <!-- 지출 목록 -->
       <div class="card">
         <div class="card-header">
           <h2>지출 목록</h2>
           <span id="expense-list-count" style="font-size:12px;color:#64748b;"></span>
         </div>
-        <div style="overflow-x:auto;">
+        <!-- 단순 목록 (테이블 대신) -->
+        <div id="expense-simple-list" style="padding:8px 0;"></div>
+        <!-- 기존 테이블 (숨김) -->
+        <div style="overflow-x:auto;display:none;">
           <table id="expense-list-table">
             <thead>
               <tr>
@@ -684,6 +692,6 @@
 </main>
 
 <div id="toast" class="toast"></div>
-<script src="main.js?v=2.26.0"></script>
+<script src="main.js?v=2.27.0"></script>
 </body>
 </html>

@@ -2036,45 +2036,65 @@ async function uploadExpenses(file) {
 // ── 지출목록 탭 ──────────────────────────────────────────────
 
 async function loadAllExpenses() {
+  // 탭 강제 표시
+  ['tab-daily-expense', 'group-daily'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.style.display = 'block'; el.style.visibility = 'visible'; el.style.opacity = '1'; }
+  });
+
   const countEl = document.getElementById('expense-list-count');
   if (countEl) countEl.textContent = '불러오는 중…';
 
-  // 탭이 보이도록 강제 (안전장치)
-  const tabEl = document.getElementById('tab-daily-expense');
-  if (tabEl) tabEl.style.display = 'block';
-  const grpEl = document.getElementById('group-daily');
-  if (grpEl) grpEl.style.display = 'block';
+  const diagEl = document.getElementById('expense-diag');
+  if (diagEl) { diagEl.style.display = 'block'; diagEl.textContent = 'API 호출 중…'; }
 
   const res = await api('GET', '/api/expenses');
   if (res.ok) {
     expenseList = res.expenses || [];
+    if (diagEl) diagEl.textContent = `✅ API 응답: ${expenseList.length}건 수신됨`;
     toast(`지출목록 ${expenseList.length}건 로드`, expenseList.length ? 'success' : '');
     renderExpenseList();
   } else {
+    if (diagEl) diagEl.textContent = `❌ API 실패: ${res.error}`;
     toast('지출 내역 조회 실패: ' + (res.error || '서버 오류'), 'error');
     if (countEl) countEl.textContent = '조회 실패';
   }
 }
 
 function renderExpenseList() {
-  const tbody = document.getElementById('expense-list-tbody');
-  const count = document.getElementById('expense-list-count');
-  if (count) count.textContent = `${expenseList.length}건`;
-  if (!tbody) return;
-  if (!expenseList.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">지출 내역이 없습니다. 엑셀 파일을 업로드하세요.</td></tr>';
+  const countEl = document.getElementById('expense-list-count');
+  const diagEl  = document.getElementById('expense-diag');
+  const listDiv = document.getElementById('expense-simple-list');
+
+  if (countEl) countEl.textContent = `${expenseList.length}건`;
+
+  if (!listDiv) {
+    if (diagEl) diagEl.textContent += ' | ❌ expense-simple-list 없음!';
     return;
   }
-  const sorted = expenseList.map((e, i) => ({ ...e, _i: i }))
-    .sort((a, b) => (a.date || a.month || '').localeCompare(b.date || b.month || ''));
-  tbody.innerHTML = sorted.map(e => `<tr>
-    <td>${esc(e.date || e.month || '')}</td>
-    <td>${esc(e.subCategory || '')}</td>
-    <td><span class="badge-cat ${e.category === '고정비' ? 'badge-fixed' : 'badge-var'}">${esc(e.category || '')}</span></td>
-    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(e.vendor || '')}">${esc(e.vendor || '')}</td>
-    <td style="text-align:right;">${(e.amount || 0).toLocaleString()}원</td>
-    <td><button class="btn-sm btn-danger" onclick="deleteExpenseItem(${e._i})">삭제</button></td>
-  </tr>`).join('');
+
+  if (!expenseList.length) {
+    listDiv.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;">지출 내역이 없습니다. 수시입출예금 파일을 업로드하세요.</div>';
+    if (diagEl) diagEl.textContent += ' | 빈 목록 표시';
+    return;
+  }
+
+  const sorted = [...expenseList].sort((a, b) => (a.date || a.month || '').localeCompare(b.date || b.month || ''));
+
+  listDiv.innerHTML = sorted.map((e, i) => `
+    <div style="display:flex;align-items:center;padding:8px 16px;border-bottom:1px solid #e2e8f0;gap:12px;font-size:13px;">
+      <span style="min-width:90px;color:#64748b;">${esc(e.date || e.month || '')}</span>
+      <span style="min-width:100px;">${esc(e.subCategory || '')}</span>
+      <span style="min-width:60px;">
+        <span style="padding:1px 6px;border-radius:9px;font-size:11px;background:${e.category === '고정비' ? '#dbeafe' : '#dcfce7'};color:${e.category === '고정비' ? '#1e40af' : '#15803d'};">${esc(e.category || '')}</span>
+      </span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(e.vendor || '')}">${esc(e.vendor || '')}</span>
+      <span style="min-width:110px;text-align:right;font-weight:600;">${(e.amount || 0).toLocaleString()}원</span>
+      <button class="btn-sm btn-danger" onclick="deleteExpenseItem(${i})" style="flex-shrink:0;">삭제</button>
+    </div>
+  `).join('');
+
+  if (diagEl) diagEl.textContent = `✅ ${expenseList.length}건 렌더링 완료`;
 }
 
 async function deleteExpenseItem(idx) {
