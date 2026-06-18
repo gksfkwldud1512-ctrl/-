@@ -6,6 +6,7 @@ const dailyState = {
   month:           new Date().getMonth() + 1,
   days:            [],   // 해당 월 일별 데이터
   purchasePrices:  [],   // [{ date, fuel, price }] — 직접 입력
+  fifoDailyMap:    {},   // { 'YYYY-MM-DD': { 경유: {price,remaining}, ... } } — 마감자료 기준
   bankDeposits:    {},   // { "2026-05-08": { "신한카드": 9637628, ... } }
 };
 
@@ -52,6 +53,7 @@ window.addEventListener('DOMContentLoaded', () => {
   initEmailPreview();
   loadAll();
   loadDailyPurchasePrices();
+  loadPurchaseLots();
   loadBankDeposits();
 });
 
@@ -1402,69 +1404,140 @@ function renderDepositVerification() {
 }
 
 async function loadDailyPurchasePrices() {
-  const pRes = await api('GET', '/api/daily/purchase-prices');
+  const [pRes, fRes] = await Promise.all([
+    api('GET', '/api/daily/purchase-prices'),
+    api('GET', '/api/daily/fifo-prices'),
+  ]);
   if (pRes.ok) dailyState.purchasePrices = Array.isArray(pRes.prices) ? pRes.prices : [];
-  renderPurchasePriceTable();
-}
-
-function renderPurchasePriceTable() {
-  updatePpBadge();
-  const tbody = document.getElementById('pp-tbody');
-  if (!tbody) return;
-  const list = dailyState.purchasePrices;
-  if (!list.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">등록된 단가 이력이 없습니다</td></tr>';
-    return;
+  if (fRes.ok && Array.isArray(fRes.prices)) {
+    dailyState.fifoDailyMap = {};
+    for (const e of fRes.prices) { if (!dailyState.fifoDailyMap[e.date]) dailyState.fifoDailyMap[e.date] = e; }
   }
-  tbody.innerHTML = list.map(e => `<tr>
-    <td>${e.date}</td>
-    <td>${esc(e.fuel)}</td>
-    <td class="col-num"><strong>${Number(e.price).toLocaleString()}원</strong></td>
-    <td class="col-action">
-      <button class="btn-sm btn-danger" onclick="deletePurchasePrice('${e.date}','${esc(e.fuel)}')">삭제</button>
-    </td>
-  </tr>`).join('');
 }
 
 function updatePpBadge() {
   const badge = document.getElementById('pp-summary-badge');
   if (!badge) return;
-  const priceCount = dailyState.purchasePrices.length;
-  badge.textContent = priceCount ? `단가 ${priceCount}건 등록` : '단가 미등록';
-  badge.style.color = priceCount ? '#22c55e' : '#f59e0b';
+  const cnt = _allLots.length;
+  const months = cnt ? [...new Set(_allLots.map(l=>l.date.slice(0,7)))].length : 0;
+  badge.textContent = cnt ? `${months}개월 · ${cnt}건` : '입고 이력 없음';
+  badge.style.color = cnt ? '#22c55e' : '#f59e0b';
 }
 
-// 날짜 기준으로 해당 유종의 적용 단가 찾기 (수동 입력 단가만 사용)
+// 날짜 기준으로 해당 유종의 적용 단가 찾기
+// 1순위: fifo_daily_prices (마감자료 기준 정확한 단가), 2순위: purchase_prices (fallback)
 function getPriceForDate(date, fuel) {
+  const fifoEntry = dailyState.fifoDailyMap[date];
+  if (fifoEntry && fifoEntry[fuel]?.price) return fifoEntry[fuel].price;
   const list = dailyState.purchasePrices.filter(e => e.fuel === fuel && e.date <= date);
   if (!list.length) return 0;
   return list[list.length - 1].price;
 }
 
-async function addPurchasePrice() {
-  const date  = document.getElementById('pp-date').value;
-  const fuel  = document.getElementById('pp-fuel').value;
-  const price = Number(document.getElementById('pp-price').value);
-  if (!date) return toast('적용 시작일을 선택하세요.', 'warn');
-  if (!price) return toast('단가를 입력하세요.', 'warn');
-  const res = await api('POST', '/api/daily/purchase-prices', { date, fuel, price });
+// ── 입고 이력 ────────────────────────────────────────────────
+let _allLots = [];
+let _lotFilterMonth = 'all';
+
+async function loadPurchaseLots() {
+  const res = await api('GET', '/api/daily/lots');
   if (res.ok) {
-    dailyState.purchasePrices = res.prices;
-    renderPurchasePriceTable();
-    renderDailyTable();
-    document.getElementById('pp-price').value = '';
-    toast(`✅ ${date} ${fuel} ${price.toLocaleString()}원 등록 완료`, 'success');
-  } else {
-    toast(`오류: ${res.error}`, 'error');
+    _allLots = res.lots || [];
+    renderLotMonthTabs(_allLots);
+    renderLotTable(_allLots, _lotFilterMonth);
+    updatePpBadge();
   }
 }
 
-async function deletePurchasePrice(date, fuel) {
-  if (!confirm(`${date} ${fuel} 단가를 삭제하시겠습니까?`)) return;
-  const res = await api('DELETE', '/api/daily/purchase-prices', { date, fuel });
+function renderLotMonthTabs(lots) {
+  const tabs = document.getElementById('lot-month-tabs');
+  if (!tabs) return;
+  const months = [...new Set(lots.map(l => l.date.slice(0,7)))].sort().reverse();
+  tabs.innerHTML = `<button class="lot-month-btn ${_lotFilterMonth==='all'?'active':''}" onclick="filterLotMonth('all')">전체</button>`
+    + months.map(m => {
+        const label = m.replace('-','년 ')+'월';
+        return `<button class="lot-month-btn ${_lotFilterMonth===m?'active':''}" onclick="filterLotMonth('${m}')">${label}</button>`;
+      }).join('');
+}
+
+function filterLotMonth(month) {
+  _lotFilterMonth = month;
+  renderLotMonthTabs(_allLots);
+  renderLotTable(_allLots, month);
+}
+
+function renderLotTable(lots, filterMonth) {
+  const tbody = document.getElementById('lot-tbody');
+  if (!tbody) return;
+
+  const filtered = filterMonth === 'all' ? [...lots] : lots.filter(l => l.date.startsWith(filterMonth));
+  const sorted = [...filtered].sort((a,b) => b.date.localeCompare(a.date) || b.fuel.localeCompare(a.fuel));
+
+  if (!sorted.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">입고 이력이 없습니다</td></tr>';
+    return;
+  }
+
+  // 월별로 그룹핑해서 표시
+  let html = '';
+  let lastMonth = '';
+  for (const l of sorted) {
+    const ym = l.date.slice(0,7);
+    if (ym !== lastMonth) {
+      const [y, m] = ym.split('-');
+      const totQty = sorted.filter(x => x.date.startsWith(ym)).reduce((s,x)=>s+x.qty,0);
+      html += `<tr style="background:#f1f5f9;">
+        <td colspan="3" style="font-weight:700;color:#334155;padding:6px 10px;">${y}년 ${+m}월</td>
+        <td colspan="3" style="font-size:11px;color:#64748b;text-align:right;padding-right:10px;">총 입고 ${totQty.toLocaleString()}L</td>
+      </tr>`;
+      lastMonth = ym;
+    }
+    html += `<tr>
+      <td>${l.date}</td>
+      <td><span class="fuel-badge fuel-${l.fuel}">${l.fuel}</span></td>
+      <td class="col-num">${l.qty.toLocaleString()}</td>
+      <td class="col-num">${l.price.toLocaleString()}원</td>
+      <td class="col-num" style="${l.stock!=null?'color:#0ea5e9;font-weight:600;':'color:#cbd5e1;'}">${l.stock!=null?l.stock.toLocaleString():'-'}</td>
+      <td class="col-action"><button class="btn-delete" onclick="deletePurchaseLot('${l.date}','${l.fuel}',${l.price})">✕</button></td>
+    </tr>`;
+  }
+  tbody.innerHTML = html;
+}
+
+async function addPurchaseLot() {
+  const date  = document.getElementById('lot-date').value;
+  const fuel  = document.getElementById('lot-fuel').value;
+  const qty   = Number(document.getElementById('lot-qty').value);
+  const price = Number(document.getElementById('lot-price').value);
+  const stockEl = document.getElementById('lot-stock');
+  const stock = stockEl.value !== '' ? Number(stockEl.value) : undefined;
+
+  if (!date || !fuel || !qty || !price) { toast('날짜/유종/입고량/단가를 모두 입력하세요', 'error'); return; }
+  const body = { date, fuel, qty, price };
+  if (stock !== undefined) body.stock = stock;
+
+  const res = await api('POST', '/api/daily/lots', body);
   if (res.ok) {
-    dailyState.purchasePrices = res.prices;
-    renderPurchasePriceTable();
+    _allLots = res.lots || [];
+    _lotFilterMonth = date.slice(0,7);
+    renderLotMonthTabs(_allLots);
+    renderLotTable(_allLots, _lotFilterMonth);
+    updatePpBadge();
+    document.getElementById('lot-qty').value = '';
+    document.getElementById('lot-price').value = '';
+    stockEl.value = '';
+    renderDailyTable();
+    toast('입고 등록 완료', 'success');
+  }
+}
+
+async function deletePurchaseLot(date, fuel, price) {
+  if (!confirm(`${date} ${fuel} 입고를 삭제하시겠습니까?`)) return;
+  const res = await api('DELETE', '/api/daily/lots', { date, fuel, price });
+  if (res.ok) {
+    _allLots = res.lots || [];
+    renderLotMonthTabs(_allLots);
+    renderLotTable(_allLots, _lotFilterMonth);
+    updatePpBadge();
     renderDailyTable();
     toast('삭제 완료', 'success');
   }
@@ -1477,6 +1550,85 @@ async function loadDailyMonth() {
     dailyState.days = res.days;
     renderDailyTable();
     renderDepositVerification();
+  }
+  // 해당 월 말일 기준으로 탱크 현황 갱신
+  const lastDay = new Date(dailyState.year, dailyState.month, 0).getDate();
+  const lastDate = `${dailyState.year}-${String(dailyState.month).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+  loadTankStatus(lastDate);
+}
+
+// ── 탱크 현황 ────────────────────────────────────────────────
+async function loadTankStatus(date) {
+  const res = await api('GET', `/api/daily/tank-status?date=${date}`);
+  if (!res.ok) return;
+  renderTankStatus(res.tanks, date);
+}
+
+function renderTankStatus(tanks, date) {
+  const label = document.getElementById('tank-date-label');
+  if (label) label.textContent = `(${date} 기준)`;
+
+  const COLORS = {
+    '휘발유': { main: '#f97316', old: '#fdba74', bg: '#fff7ed', text: '#9a3412' },
+    '경유':   { main: '#3b82f6', old: '#93c5fd', bg: '#eff6ff', text: '#1e3a8a' },
+    '등유':   { main: '#22c55e', old: '#86efac', bg: '#f0fdf4', text: '#14532d' },
+  };
+  const LABELS = { '휘발유': '휘발유', '경유': '경유', '등유': '등유' };
+
+  for (const [fuel, t] of Object.entries(tanks)) {
+    const el = document.getElementById(`tank-${fuel}`);
+    if (!el) continue;
+    const col = COLORS[fuel];
+    const cap = t.capacity;
+    const total = Math.min(t.totalRemaining, cap);
+    const oldQty = Math.min(t.currentLotRemaining, total);
+    const newQty = total - oldQty;
+    const totalPct = cap > 0 ? Math.round(total / cap * 100) : 0;
+    const oldPct   = cap > 0 ? Math.round(oldQty / cap * 100) : 0;
+
+    // SVG 원형 탱크 (r=70, 중심 cx=80 cy=80)
+    const R = 70, CX = 80, CY = 80;
+    const totalAngle = totalPct / 100 * 360;
+    const oldAngle   = oldPct   / 100 * 360;
+
+    function arcPath(cx, cy, r, angleDeg) {
+      if (angleDeg >= 360) angleDeg = 359.99;
+      const rad = (angleDeg - 90) * Math.PI / 180;
+      const x = cx + r * Math.cos(rad);
+      const y = cy + r * Math.sin(rad);
+      const large = angleDeg > 180 ? 1 : 0;
+      return `M ${cx} ${cy - r} A ${r} ${r} 0 ${large} 1 ${x} ${y} L ${cx} ${cy}`;
+    }
+
+    const fmtL = n => n >= 1000 ? (n/1000).toFixed(1)+'천L' : n+'L';
+    const fmtK = n => Math.round(n/1000).toLocaleString()+'천L';
+
+    el.innerHTML = `
+      <div style="text-align:center;padding:8px 12px 12px;background:${col.bg};border-radius:12px;min-width:160px;">
+        <div style="font-weight:700;font-size:15px;color:${col.text};margin-bottom:8px;">${LABELS[fuel]}</div>
+        <svg width="160" height="160" viewBox="0 0 160 160">
+          <!-- 배경 원 -->
+          <circle cx="${CX}" cy="${CY}" r="${R}" fill="#e5e7eb"/>
+          <!-- 신규단가 채움 -->
+          ${totalAngle > 0 ? `<path d="${arcPath(CX,CY,R,totalAngle)}" fill="${col.main}" opacity="0.9"/>` : ''}
+          <!-- 전달단가 채움 (하단, 더 진한색) -->
+          ${oldAngle > 0 ? `<path d="${arcPath(CX,CY,R,oldAngle)}" fill="${col.old}"/>` : ''}
+          <!-- 내부 흰 원 (도넛) -->
+          <circle cx="${CX}" cy="${CY}" r="45" fill="white"/>
+          <!-- 중앙 텍스트 -->
+          <text x="${CX}" y="${CY-8}" text-anchor="middle" font-size="13" font-weight="700" fill="${col.text}">${totalPct}%</text>
+          <text x="${CX}" y="${CY+8}" text-anchor="middle" font-size="10" fill="#6b7280">${fmtK(total)}</text>
+          <text x="${CX}" y="${CY+22}" text-anchor="middle" font-size="9" fill="#9ca3af">/ ${(cap/10000).toFixed(0)}만L</text>
+        </svg>
+        <div style="font-size:11px;margin-top:4px;line-height:1.6;">
+          ${t.currentPrice ? `<div style="color:${col.text};font-weight:600;">현재단가 ${t.currentPrice.toLocaleString()}원</div>` : ''}
+          ${oldQty > 0 && t.currentPrice ? `
+          <div style="background:${col.old};border-radius:6px;padding:3px 6px;margin-top:4px;color:${col.text};">
+            전달단가 ${t.previousPrice ? t.previousPrice.toLocaleString()+'원' : '-'} 잔여<br>
+            <strong>${oldQty.toLocaleString()}L</strong> (${oldPct}%)
+          </div>` : (t.previousPrice ? `<div style="color:#9ca3af;font-size:10px;">전달단가 소진 완료</div>` : '')}
+        </div>
+      </div>`;
   }
 }
 

@@ -207,6 +207,31 @@ main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
   white-space: nowrap;
 }
 
+/* ── 탱크 현황 ───────────────────────────────────── */
+.tank-card {
+  display: inline-block;
+}
+
+/* ── 입고 이력 월별 탭 ───────────────────────────── */
+.lot-month-btn {
+  padding: 3px 10px;
+  font-size: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 20px;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+  transition: all .15s;
+}
+.lot-month-btn:hover { border-color: #94a3b8; color: #334155; }
+.lot-month-btn.active { background: #334155; color: #fff; border-color: #334155; }
+
+/* ── 유종 배지 ────────────────────────────────────── */
+.fuel-badge { display:inline-block; padding:1px 7px; border-radius:10px; font-size:11px; font-weight:600; }
+.fuel-경유  { background:#dbeafe; color:#1e40af; }
+.fuel-휘발유 { background:#ffedd5; color:#c2410c; }
+.fuel-등유  { background:#dcfce7; color:#166534; }
+
 /* ── Card ────────────────────────────────────────── */
 .card {
   background: var(--card);

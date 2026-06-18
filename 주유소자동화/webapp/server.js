@@ -175,13 +175,20 @@ app.get('/api/monthly-profit', (req, res) => {
 
   const fuelSummary   = readJSON(fuelSummaryFile(year, month), null);
   const prices        = readJSON(PURCHASE_PRICES_FILE, []);
+  // fifo_daily_prices.json = 마감자료에서 직접 추출한 일별 FIFO 단가 (정확한 기준)
+  const fifoDaily     = readJSON(FIFO_DAILY_FILE, []);
+  const fifoDailyMap  = {};
+  for (const e of fifoDaily) { if (!fifoDailyMap[e.date]) fifoDailyMap[e.date] = e; } // 날짜별 첫 번째 항목 우선
 
   if (!fuelSummary) return res.json({ ok: true, fuelTotals: null });
 
-  // 날짜 기준 매입단가 조회 (purchase_prices 오름차순 정렬 가정)
+  // 날짜 기준 매입단가 조회 — fifo_daily_prices 우선, 없으면 purchase_prices fallback
   function getPriceForDate(date, fuel) {
-    // date 형식: 'YYYY/MM/DD' → 비교를 위해 'YYYY-MM-DD'로 변환
     const d = date.replace(/\//g, '-');
+    // 1순위: 마감자료에서 추출한 일별 FIFO 단가
+    const fifoEntry = fifoDailyMap[d];
+    if (fifoEntry && fifoEntry[fuel]?.price) return fifoEntry[fuel].price;
+    // 2순위: 입고 이력 기반 계산 단가 (fallback)
     let found = null;
     for (const p of prices) {
       if (p.fuel === fuel && p.date <= d) found = p.price;
@@ -624,17 +631,115 @@ app.get('/api/daily/fifo-prices', (req, res) => {
   res.json({ ok: true, prices: readJSON(FIFO_DAILY_FILE, []) });
 });
 
+// ── 탱크 현황 조회 (FIFO 기준 현재고 + 전달단가 잔여량) ────────
+app.get('/api/daily/tank-status', (req, res) => {
+  const targetDate = req.query.date || new Date().toISOString().slice(0, 10);
+  const lots = readJSON(PURCHASE_LOTS_FILE, []);
+  const CAPACITY = { '휘발유': 100000, '경유': 300000, '등유': 50000 };
+
+  const totalSoldByFuel = {};
+  if (fs.existsSync(DAILY_DIR)) {
+    fs.readdirSync(DAILY_DIR).filter(f => f.endsWith('.json')).forEach(f => {
+      const day = readJSON(path.join(DAILY_DIR, f), {});
+      if (!day.bos?.date || day.bos.date > targetDate) return;
+      for (const [fuel, data] of Object.entries(day.bos.fuels || {})) {
+        if (!['휘발유', '경유', '등유'].includes(fuel)) continue;
+        totalSoldByFuel[fuel] = (totalSoldByFuel[fuel] || 0) + (data.qty || 0);
+      }
+    });
+  }
+
+  const tanks = {};
+  for (const fuel of ['휘발유', '경유', '등유']) {
+    const fuelLots = lots
+      .filter(l => l.fuel === fuel && l.qty > 0 && l.date <= targetDate)
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // 실재고(stock) 보정 기준점 — 가장 최근 stock 입력이 있는 lot
+    let stockCorrection = null;
+    for (const lot of fuelLots) {
+      if (lot.stock != null) stockCorrection = lot;
+    }
+
+    let sold = totalSoldByFuel[fuel] || 0;
+    let lotIdx = 0;
+    let remainingInLot = fuelLots[0]?.qty || 0;
+    let prevPrice = null;
+
+    if (stockCorrection) {
+      // stock 기준점 이후 판매량 재계산
+      const stockDate = stockCorrection.date;
+      let soldAfterStock = 0;
+      if (fs.existsSync(DAILY_DIR)) {
+        fs.readdirSync(DAILY_DIR).filter(f => f.endsWith('.json')).forEach(f => {
+          const day = readJSON(path.join(DAILY_DIR, f), {});
+          if (!day.bos?.date || day.bos.date <= stockDate || day.bos.date > targetDate) return;
+          soldAfterStock += (day.bos.fuels?.[fuel]?.qty || 0);
+        });
+      }
+      // stock 기준점 이후 입고량
+      const lotsAfterStock = fuelLots.filter(l => l.date > stockDate);
+      const receivedAfterStock = lotsAfterStock.reduce((s, l) => s + l.qty, 0);
+      // 현재 재고 = 실재고 + 이후 입고 - 이후 판매
+      const totalRemaining = Math.max(0, stockCorrection.stock + receivedAfterStock - soldAfterStock);
+      // 현재 소비 중인 lot의 남은 양 (stock 기준점의 단가 lot이 얼마나 남았는지)
+      const currentLotRemaining = Math.max(0, stockCorrection.stock - soldAfterStock);
+      const nextQty = receivedAfterStock;
+      tanks[fuel] = {
+        capacity: CAPACITY[fuel],
+        totalRemaining: Math.round(totalRemaining),
+        currentLotRemaining: Math.round(Math.min(currentLotRemaining, totalRemaining)),
+        nextLotsQty: Math.round(Math.max(0, totalRemaining - Math.min(currentLotRemaining, totalRemaining))),
+        currentPrice: stockCorrection.price,
+        previousPrice: null,
+        stockCorrected: true,
+        stockDate,
+      };
+      continue;
+    }
+
+    while (lotIdx < fuelLots.length && sold > 0) {
+      if (sold >= remainingInLot) {
+        sold -= remainingInLot;
+        prevPrice = fuelLots[lotIdx].price;
+        lotIdx++;
+        remainingInLot = lotIdx < fuelLots.length ? fuelLots[lotIdx].qty : 0;
+      } else {
+        remainingInLot -= sold;
+        sold = 0;
+      }
+    }
+
+    const currentPrice = fuelLots[lotIdx]?.price || null;
+    let nextLotsQty = 0;
+    for (let i = lotIdx + 1; i < fuelLots.length; i++) nextLotsQty += fuelLots[i].qty;
+
+    tanks[fuel] = {
+      capacity: CAPACITY[fuel],
+      totalRemaining: Math.round(remainingInLot + nextLotsQty),
+      currentLotRemaining: Math.round(remainingInLot),
+      nextLotsQty: Math.round(nextLotsQty),
+      currentPrice,
+      previousPrice: prevPrice,
+    };
+  }
+
+  res.json({ ok: true, date: targetDate, tanks });
+});
+
 // ── 입고 이력 (FIFO 재고 관리) ─────────────────────────────
 // 조회
 app.get('/api/daily/lots', (req, res) => {
   res.json({ ok: true, lots: readJSON(PURCHASE_LOTS_FILE, []) });
 });
-// 추가 { date, fuel, qty, price }
+// 추가 { date, fuel, qty, price, stock? }
 app.post('/api/daily/lots', (req, res) => {
-  const { date, fuel, qty, price } = req.body;
+  const { date, fuel, qty, price, stock } = req.body;
   if (!date || !fuel || !qty || !price) return res.json({ ok: false, error: '날짜/유종/수량/단가를 모두 입력하세요.' });
   const lots = readJSON(PURCHASE_LOTS_FILE, []);
-  lots.push({ date, fuel, qty: +qty, price: +price });
+  const entry = { date, fuel, qty: +qty, price: +price };
+  if (stock !== undefined && stock !== '' && stock !== null) entry.stock = +stock;
+  lots.push(entry);
   lots.sort((a, b) => a.date.localeCompare(b.date) || a.fuel.localeCompare(b.fuel));
   writeJSON(PURCHASE_LOTS_FILE, lots);
   recomputeFifoPrices();
@@ -823,8 +928,14 @@ app.get('/api/summary/:yearMonth', (req, res) => {
   let totalQty   = { 휘발유: 0, 경유: 0, 등유: 0 };
   let totalCardFee = 0;
   const prices = readJSON(PURCHASE_PRICES_FILE, []);
+  const fifoDaily = readJSON(FIFO_DAILY_FILE, []);
+  const fifoDailyMap = {};
+  for (const e of fifoDaily) { if (!fifoDailyMap[e.date]) fifoDailyMap[e.date] = e; }
 
   function getFifoPrice(date, fuel) {
+    // fifo_daily_prices 우선 (마감자료 기준), fallback → purchase_prices
+    const fe = fifoDailyMap[date];
+    if (fe && fe[fuel]?.price) return fe[fuel].price;
     const list = prices.filter(p => p.fuel === fuel && p.date <= date);
     return list.length ? list[list.length-1].price : 0;
   }
@@ -884,8 +995,14 @@ app.get('/api/annual-summary', (req, res) => {
 
   const prices   = readJSON(PURCHASE_PRICES_FILE, []);
   const allExpenses = readJSON(EXPENSES_FILE, []);
+  const fifoDaily = readJSON(FIFO_DAILY_FILE, []);
+  const fifoDailyMap = {};
+  for (const e of fifoDaily) { if (!fifoDailyMap[e.date]) fifoDailyMap[e.date] = e; }
 
   function getFifoPrice(date, fuel) {
+    // fifo_daily_prices 우선 (마감자료 기준), fallback → purchase_prices
+    const fe = fifoDailyMap[date];
+    if (fe && fe[fuel]?.price) return fe[fuel].price;
     const list = prices.filter(p => p.fuel === fuel && p.date <= date);
     return list.length ? list[list.length-1].price : 0;
   }

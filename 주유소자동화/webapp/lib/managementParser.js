@@ -76,13 +76,11 @@ function extractLots(filePath) {
   const firstRow = dataRows[0];
   const firstDate = parseDate(firstRow[0]);
 
-  // 전월재고를 첫 lot으로 등록 (초기 재고)
-  // prevStockCol은 당일 판매 후 남은 잔량 → 첫날 판매량(sellQtyCol)을 더해야 실제 개시재고
+  // 개시재고를 첫 lot으로 등록
+  // remainingCol(실재고) = 당일 판매 전 시작 재고량 → 그대로 개시재고로 사용
   for (const fuel of FUELS) {
-    const endOfDayRemaining = Number(firstRow[fuel.prevStockCol]) || 0;
-    const firstDaySold      = Number(firstRow[fuel.sellQtyCol])   || 0;
-    const openingStock      = endOfDayRemaining + firstDaySold;
-    const initPrice         = Number(firstRow[fuel.buyPriceCol])  || 0;
+    const openingStock = Math.round(Number(firstRow[fuel.remainingCol]) || 0);
+    const initPrice    = Number(firstRow[fuel.buyPriceCol]) || 0;
     if (openingStock > 0 && initPrice > 0) {
       lots.push({ date: firstDate, fuel: fuel.name, qty: Math.round(openingStock), price: initPrice });
     }
@@ -132,10 +130,12 @@ function extractLots(filePath) {
 function extractFifoDaily(filePath) {
   const dataRows = readSheet(filePath);
 
+  const seen   = new Set();
   const result = [];
   for (const row of dataRows) {
     const date = parseDate(row[0]);
-    if (!date) continue;
+    if (!date || seen.has(date)) continue; // 날짜 중복 첫 번째만 사용
+    seen.add(date);
 
     const entry = { date };
     let hasAny = false;

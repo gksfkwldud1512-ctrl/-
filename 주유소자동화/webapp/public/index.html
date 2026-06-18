@@ -127,6 +127,16 @@
     <!-- ── 일마감 탭 ── -->
     <div id="tab-daily-main" class="tab-content">
 
+    <!-- 탱크 현황 -->
+    <div id="tank-section" class="card" style="margin-bottom:12px;">
+      <div class="card-header"><h2>⛽ 탱크 현황 <span id="tank-date-label" style="font-size:13px;font-weight:400;color:#94a3b8;"></span></h2></div>
+      <div id="tank-container" style="display:flex;gap:24px;justify-content:center;padding:16px 8px;flex-wrap:wrap;">
+        <div class="tank-card" id="tank-휘발유"></div>
+        <div class="tank-card" id="tank-경유"></div>
+        <div class="tank-card" id="tank-등유"></div>
+      </div>
+    </div>
+
     <!-- 툴바 -->
     <div class="toolbar">
       <div class="toolbar-group">
@@ -169,7 +179,7 @@
       </div>
     </div>
 
-    <!-- 매입단가 / 입고 이력 (기본 접힘) -->
+    <!-- 매입단가 · 입고 이력 -->
     <details class="card card-collapsible" id="pp-card">
       <summary class="card-header" style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;">
         <div style="display:flex;align-items:center;gap:8px;">
@@ -179,44 +189,61 @@
         </div>
       </summary>
 
-      <!-- 단가 직접 입력 -->
-      <div id="pp-tab-prices" style="margin-top:12px;">
-        <div class="pp-add-row">
+      <div style="margin-top:12px;">
+        <!-- 입력 폼 -->
+        <div class="pp-add-row" style="flex-wrap:wrap;gap:8px;align-items:flex-end;">
           <div class="form-group" style="flex:0 0 140px;">
-            <label>적용 시작일</label>
-            <input type="date" id="pp-date">
+            <label>입고 날짜</label>
+            <input type="date" id="lot-date">
           </div>
-          <div class="form-group" style="flex:0 0 110px;">
+          <div class="form-group" style="flex:0 0 100px;">
             <label>유종</label>
-            <select id="pp-fuel" class="form-select">
+            <select id="lot-fuel" class="form-select">
               <option value="경유">경유</option>
               <option value="휘발유">휘발유</option>
               <option value="등유">등유</option>
             </select>
           </div>
-          <div class="form-group" style="flex:0 0 130px;">
-            <label>단가 (원/L)</label>
-            <input type="number" id="pp-price" placeholder="예) 1934">
+          <div class="form-group" style="flex:0 0 120px;">
+            <label>입고량 (L)</label>
+            <input type="number" id="lot-qty" placeholder="예) 28000">
           </div>
-          <div class="form-group-btn" style="padding-top:20px;">
-            <button class="btn-primary" onclick="addPurchasePrice()">추가</button>
+          <div class="form-group" style="flex:0 0 120px;">
+            <label>매입단가 (원/L)</label>
+            <input type="number" id="lot-price" placeholder="예) 1934">
+          </div>
+          <div class="form-group" style="flex:0 0 140px;">
+            <label>실재고 (L) <span style="color:#94a3b8;font-size:11px;">입고 후 탱크 실측 (선택)</span></label>
+            <input type="number" id="lot-stock" placeholder="예) 185000">
+          </div>
+          <div class="form-group-btn" style="padding-bottom:1px;">
+            <button class="btn-primary" onclick="addPurchaseLot()">추가</button>
           </div>
         </div>
-        <table id="pp-table" style="margin-top:0;">
+
+        <!-- 월별 필터 -->
+        <div style="margin:10px 0 6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <span style="font-size:12px;color:#64748b;">월별 보기:</span>
+          <div id="lot-month-tabs" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
+        </div>
+
+        <!-- 입고 이력 표 -->
+        <table id="lot-table" style="font-size:13px;">
           <thead>
             <tr>
-              <th>적용 시작일</th><th>유종</th>
-              <th class="col-num">단가</th>
+              <th>날짜</th>
+              <th>유종</th>
+              <th class="col-num">입고량(L)</th>
+              <th class="col-num">매입단가(원)</th>
+              <th class="col-num">실재고(L)</th>
               <th class="col-action">삭제</th>
             </tr>
           </thead>
-          <tbody id="pp-tbody">
-            <tr class="empty-row"><td colspan="4">등록된 단가 이력이 없습니다</td></tr>
+          <tbody id="lot-tbody">
+            <tr class="empty-row"><td colspan="6">등록된 입고 이력이 없습니다</td></tr>
           </tbody>
         </table>
       </div>
-
-      <!-- 입고 이력 탭 -->
     </details>
 
     <!-- 일별 현황 테이블 -->
