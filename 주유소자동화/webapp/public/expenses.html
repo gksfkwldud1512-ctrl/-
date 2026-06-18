@@ -574,18 +574,24 @@ function setSort(col) {
   applyFilter();
 }
 
-// ── 항목 수정 ────────────────────────────────────────────────
+// ── 항목 수정 (드롭다운 변경 즉시 저장 + 피벗 자동 갱신) ────
 async function updateItem(idx, field, value) {
   const e=allData[idx];
   if (!e) return;
-  e[field]=value;
+  e[field]=value;  // 클라이언트 즉시 반영
   try {
-    await fetch('/api/expenses/update', {
+    const res  = await fetch('/api/expenses/update', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({month:e.month,date:e.date||'',vendor:e.vendor,amount:e.amount,field,value}),
     });
-    buildMonthData(); renderPivot(); renderMonthGrid();
-  } catch {}
+    const data = await res.json();
+    if (data.ok) {
+      showBanner('✅ 저장됨 — 상단 표가 자동 반영되었습니다', 'ok');
+      buildMonthData(); renderPivot(); renderMonthGrid();
+    } else {
+      showBanner('저장 실패: ' + (data.error||''), 'err');
+    }
+  } catch { showBanner('서버 오류', 'err'); }
 }
 
 // ── 삭제 ─────────────────────────────────────────────────────
