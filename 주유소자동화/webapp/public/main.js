@@ -44,7 +44,7 @@ window.addEventListener('DOMContentLoaded', () => {
   initDailyYearMonth();
   initSummaryYearMonth();
   initTabs();
-  try { switchGroup('monthly'); } catch(e) {}
+  switchGroup('monthly');
   initFileUpload();
   initDailyUpload();
   initEmailPreview();
@@ -177,7 +177,7 @@ function switchDailySubTab(tab) {
 
 function switchSubTab(tab) {
   document.querySelectorAll('#subnav-monthly .tab-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('#group-monthly .tab-content').forEach(t => t.classList.remove('active'));
   const btn = document.querySelector(`#subnav-monthly .tab-btn[data-tab="${tab}"]`);
   if (btn) btn.classList.add('active');
   const section = document.getElementById(`tab-${tab}`);
