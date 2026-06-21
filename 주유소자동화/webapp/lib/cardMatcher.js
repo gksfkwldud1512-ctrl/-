@@ -23,7 +23,8 @@ function matchCards(bosCards, easyCards) {
     }
     const g = bosMap.get(t.approvalNo);
     g.totalAmount += t.amount;
-    if (t.product && !g.products.includes(t.product)) g.products.push(t.product);
+    const prod = (t.product || '').trim();
+    if (prod && !g.products.includes(prod)) g.products.push(prod);
   }
 
   const easyMap = new Map(easyCards.map(t => [t.approvalNo, t]));
@@ -33,7 +34,7 @@ function matchCards(bosCards, easyCards) {
   // BOS 기준 체크
   for (const [no, bosGroup] of bosMap) {
     const easyTx = easyMap.get(no);
-    const product = bosGroup.products.join('+') || '';
+    const product = bosGroup.products.length > 0 ? bosGroup.products.join('+') : '미분류';
     if (!easyTx) {
       errors.push({
         type:        'bos_only',

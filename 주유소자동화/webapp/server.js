@@ -127,11 +127,19 @@ function getVendors(year, month) {
 
 function readJSON(file, def) {
   try { if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, 'utf8')); }
-  catch {}
+  catch (e) { console.error('[readJSON]', file, e.message); }
   return def;
 }
 function writeJSON(file, data) {
-  fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
+  // 원자적 쓰기: 임시 파일에 먼저 쓰고 rename → 전원 차단 시에도 데이터 보존
+  const tmp = file + '.tmp';
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
+    fs.renameSync(tmp, file);
+  } catch (e) {
+    try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch {}
+    throw e;
+  }
 }
 
 // ── Excel 업로드 & 파싱 ────────────────────────────────────────
@@ -782,30 +790,35 @@ app.get('/api/daily/tank-status', (req, res) => {
 // ── 입고 이력 (FIFO 재고 관리) ─────────────────────────────
 // 조회
 app.get('/api/daily/lots', (req, res) => {
-  res.json({ ok: true, lots: readJSON(PURCHASE_LOTS_FILE, []) });
+  try { res.json({ ok: true, lots: readJSON(PURCHASE_LOTS_FILE, []) }); }
+  catch (e) { res.json({ ok: false, error: e.message }); }
 });
 // 추가 { date, fuel, qty, price, stock? }
 app.post('/api/daily/lots', (req, res) => {
-  const { date, fuel, qty, price, stock } = req.body;
-  if (!date || !fuel || !qty || !price) return res.json({ ok: false, error: '날짜/유종/수량/단가를 모두 입력하세요.' });
-  const lots = readJSON(PURCHASE_LOTS_FILE, []);
-  const entry = { date, fuel, qty: +qty, price: +price };
-  if (stock !== undefined && stock !== '' && stock !== null) entry.stock = +stock;
-  lots.push(entry);
-  lots.sort((a, b) => a.date.localeCompare(b.date) || a.fuel.localeCompare(b.fuel));
-  writeJSON(PURCHASE_LOTS_FILE, lots);
-  recomputeFifoPrices();
-  res.json({ ok: true, lots, prices: readJSON(PURCHASE_PRICES_FILE, []) });
+  try {
+    const { date, fuel, qty, price, stock } = req.body;
+    if (!date || !fuel || !qty || !price) return res.json({ ok: false, error: '날짜/유종/수량/단가를 모두 입력하세요.' });
+    const lots = readJSON(PURCHASE_LOTS_FILE, []);
+    const entry = { date, fuel, qty: +qty, price: +price };
+    if (stock !== undefined && stock !== '' && stock !== null) entry.stock = +stock;
+    lots.push(entry);
+    lots.sort((a, b) => a.date.localeCompare(b.date) || a.fuel.localeCompare(b.fuel));
+    writeJSON(PURCHASE_LOTS_FILE, lots);
+    try { recomputeFifoPrices(); } catch (e2) { console.error('[recomputeFifoPrices]', e2.message); }
+    res.json({ ok: true, lots, prices: readJSON(PURCHASE_PRICES_FILE, []) });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 // 삭제 { date, fuel, price } (같은 날짜+유종+단가 첫 번째 삭제)
 app.delete('/api/daily/lots', (req, res) => {
-  const { date, fuel, price } = req.body;
-  const lots = readJSON(PURCHASE_LOTS_FILE, []);
-  const idx = lots.findIndex(l => l.date === date && l.fuel === fuel && l.price === +price);
-  if (idx >= 0) lots.splice(idx, 1);
-  writeJSON(PURCHASE_LOTS_FILE, lots);
-  recomputeFifoPrices();
-  res.json({ ok: true, lots, prices: readJSON(PURCHASE_PRICES_FILE, []) });
+  try {
+    const { date, fuel, price } = req.body;
+    const lots = readJSON(PURCHASE_LOTS_FILE, []);
+    const idx = lots.findIndex(l => l.date === date && l.fuel === fuel && l.price === +price);
+    if (idx >= 0) lots.splice(idx, 1);
+    writeJSON(PURCHASE_LOTS_FILE, lots);
+    try { recomputeFifoPrices(); } catch (e2) { console.error('[recomputeFifoPrices]', e2.message); }
+    res.json({ ok: true, lots, prices: readJSON(PURCHASE_PRICES_FILE, []) });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
 // ── 마감자료 Excel 업로드 (FIFO 단가 + 입고 이력 임포트) ─────
@@ -1715,6 +1728,17 @@ app.post('/api/completion', (req, res) => {
   all[key]  = completion;
   fs.writeFileSync(COMPLETION_FILE, JSON.stringify(all, null, 2));
   res.json({ ok: true });
+});
+
+// ── 전역 에러 핸들러 (try-catch 없는 핸들러 오류 포착) ────────
+app.use((err, req, res, next) => {
+  console.error('[Express Error]', req.method, req.path, err.message);
+  res.status(500).json({ ok: false, error: '서버 오류: ' + err.message });
+});
+
+// 처리되지 않은 Promise 거부 로그
+process.on('unhandledRejection', (reason) => {
+  console.error('[Unhandled Rejection]', reason);
 });
 
 app.listen(PORT, () => {
