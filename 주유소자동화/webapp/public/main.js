@@ -2252,14 +2252,11 @@ function renderCustomerSales(customers, avgBuy) {
       const qty = fd.qty || 0;
       const buy = avgBuy[fuel] || 0;
       const fp  = buy && qty > 0 ? Math.round(fd.amount - qty * buy) : null;
-      const sellP = fd.avgPrice;
       totQty[fuel] += qty;
       totAmt[fuel] += fd.amount || 0;
       const fpStyle = fp != null ? (fp >= 0 ? 'color:#16a34a' : 'color:#dc2626') : 'color:#94a3b8';
-      return `<td style="text-align:right;padding:6px 5px;">${L(qty)}</td>
-              <td style="text-align:right;padding:6px 5px;">${w(sellP)}</td>
-              <td style="text-align:right;padding:6px 5px;">${buy ? buy.toLocaleString()+'원' : '-'}</td>
-              <td style="text-align:right;padding:6px 5px;${fpStyle};font-weight:600;">${fp != null ? Math.round(fp).toLocaleString()+'원' : '-'}</td>`;
+      return `<td style="text-align:right;padding:6px 6px;">${buy ? buy.toLocaleString()+'원' : '-'}</td>
+              <td style="text-align:right;padding:6px 6px;${fpStyle};font-weight:600;">${fp != null ? Math.round(fp).toLocaleString()+'원' : '-'}</td>`;
     });
 
     const pfColor = custProfit >= 0 ? '#16a34a' : '#dc2626';
@@ -2281,30 +2278,25 @@ function renderCustomerSales(customers, avgBuy) {
     </tr>`;
   });
 
-  // 합계행
+  // 합계행 (유종별: 매입가 + 영업이익 각 2컬럼)
   const totFuelCells = FUELS.map(fuel => {
     const qty = totQty[fuel];
     const amt = totAmt[fuel];
     const buy = avgBuy[fuel] || 0;
-    const avgSell = qty > 0 ? Math.round(amt/qty) : null;
     const fp = buy && qty > 0 ? Math.round(amt - qty*buy) : null;
     const fpStyle = fp != null ? (fp>=0?'color:#16a34a':'color:#dc2626') : '';
-    return `<td style="text-align:right;padding:7px 5px;font-weight:700;">${L(qty)}</td>
-            <td style="text-align:right;padding:7px 5px;font-weight:700;">${avgSell?avgSell.toLocaleString()+'원':'-'}</td>
-            <td style="text-align:right;padding:7px 5px;font-weight:700;">${buy?buy.toLocaleString()+'원':'-'}</td>
-            <td style="text-align:right;padding:7px 5px;font-weight:700;${fpStyle}">${fp!=null?fp.toLocaleString()+'원':'-'}</td>`;
+    return `<td style="text-align:right;padding:7px 6px;font-weight:700;">${buy?buy.toLocaleString()+'원':'-'}</td>
+            <td style="text-align:right;padding:7px 6px;font-weight:700;${fpStyle}">${fp!=null?fp.toLocaleString()+'원':'-'}</td>`;
   }).join('');
   const totPfColor = totProfit >= 0 ? '#16a34a' : '#dc2626';
   const totPct = totRevenue > 0 ? (totProfit/totRevenue*100).toFixed(1) : '-';
 
-  // 유종 헤더 그룹
+  // 유종 헤더 그룹 (colspan=2: 매입가+영업이익)
   const fuelGroupTh = FUELS.map(f =>
-    `<th colspan="4" style="padding:6px;background:#f8fafc;border-bottom:1px solid #e2e8f0;text-align:center;font-size:11px;font-weight:700;color:${FUEL_COLOR[f]};border-left:1px solid #e2e8f0;">${f}</th>`
+    `<th colspan="2" style="padding:6px;background:#f8fafc;border-bottom:1px solid #e2e8f0;text-align:center;font-size:11px;font-weight:700;color:${FUEL_COLOR[f]};border-left:1px solid #e2e8f0;">${f}</th>`
   ).join('');
   const fuelSubTh = FUELS.map(f => `
-    ${th('수량(L)', f+'_qty','right','border-left:1px solid #e2e8f0;')}
-    ${th('판매가', f+'_price')}
-    ${th('매입가', f+'_buy')}
+    ${th('매입가', f+'_buy', 'right', 'border-left:1px solid #e2e8f0;')}
     ${th('영업이익', f+'_profit')}`
   ).join('');
 
@@ -2315,12 +2307,12 @@ function renderCustomerSales(customers, avgBuy) {
       <thead>
         <tr>
           <th rowspan="2" style="padding:6px 4px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;font-size:11px;text-align:center;">#</th>
-          ${th('업체명','name','left','rowspan:2;')}
-          ${th('구분','payType','center','rowspan:2;')}
+          <th rowspan="2" class="cust-th" onclick="sortCustBy('name')" style="padding:7px 6px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;white-space:nowrap;font-size:11px;text-align:left;cursor:pointer;">업체명${arrow('name')}</th>
+          <th rowspan="2" class="cust-th" onclick="sortCustBy('payType')" style="padding:7px 6px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;white-space:nowrap;font-size:11px;text-align:center;cursor:pointer;">구분${arrow('payType')}</th>
           ${fuelGroupTh}
-          <th rowspan="2" style="padding:6px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;font-size:11px;text-align:right;border-left:1px solid #e2e8f0;">총 매출</th>
-          ${th('영업이익','totalProfit','right')}
-          ${th('이익률','totalProfit','right')}
+          <th rowspan="2" class="cust-th" onclick="sortCustBy('totalAmount')" style="padding:7px 6px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;white-space:nowrap;font-size:11px;text-align:right;cursor:pointer;border-left:1px solid #e2e8f0;">총 매출${arrow('totalAmount')}</th>
+          <th rowspan="2" class="cust-th" onclick="sortCustBy('totalProfit')" style="padding:7px 6px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;white-space:nowrap;font-size:11px;text-align:right;cursor:pointer;">영업이익${arrow('totalProfit')}</th>
+          <th rowspan="2" class="cust-th" onclick="sortCustBy('totalProfit')" style="padding:7px 6px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;white-space:nowrap;font-size:11px;text-align:right;cursor:pointer;">이익률${arrow('totalProfit')}</th>
         </tr>
         <tr>${fuelSubTh}</tr>
       </thead>
