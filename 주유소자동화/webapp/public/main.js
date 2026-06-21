@@ -1554,10 +1554,21 @@ async function loadDailyMonth() {
   // 해당 월 말일 기준으로 탱크 현황 갱신
   const lastDay = new Date(dailyState.year, dailyState.month, 0).getDate();
   const lastDate = `${dailyState.year}-${String(dailyState.month).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+  const tankInput = document.getElementById('tank-date-input');
+  if (tankInput) tankInput.value = lastDate;
   loadTankStatus(lastDate);
 }
 
 // ── 탱크 현황 ────────────────────────────────────────────────
+function selectDailyRow(tr, date) {
+  document.querySelectorAll('#daily-tbody tr.row-selected').forEach(r => r.classList.remove('row-selected'));
+  tr.classList.add('row-selected');
+  const input = document.getElementById('tank-date-input');
+  if (input) input.value = date;
+  loadTankStatus(date);
+  document.getElementById('tank-section')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 async function loadTankStatus(date) {
   const res = await api('GET', `/api/daily/tank-status?date=${date}`);
   if (!res.ok) return;
@@ -1565,8 +1576,8 @@ async function loadTankStatus(date) {
 }
 
 function renderTankStatus(tanks, date) {
-  const label = document.getElementById('tank-date-label');
-  if (label) label.textContent = `(${date} 기준)`;
+  const tankInput = document.getElementById('tank-date-input');
+  if (tankInput && tankInput.value !== date) tankInput.value = date;
 
   const COLORS = {
     '휘발유': { main: '#f97316', old: '#fdba74', bg: '#fff7ed', text: '#9a3412' },
@@ -1729,7 +1740,7 @@ function renderDailyTable() {
     const totalDrum = totalL > 0 ? Math.floor(totalL / 200).toLocaleString() : '-';
 
     const totalSales = gA + dA + kA + otA + cwA;
-    return `<tr>
+    return `<tr data-date="${date}" onclick="selectDailyRow(this, '${date}')" style="cursor:pointer;">
       <td class="daily-col-date">${md}</td>
       <td class="group-summary-cell">${totalDrum}</td>
       <td class="group-summary-cell" style="font-weight:600;">${totalSales > 0 ? totalSales.toLocaleString() + '원' : '-'}</td>

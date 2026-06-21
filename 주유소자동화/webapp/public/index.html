@@ -129,7 +129,11 @@
 
     <!-- 탱크 현황 -->
     <div id="tank-section" class="card" style="margin-bottom:12px;">
-      <div class="card-header"><h2>⛽ 탱크 현황 <span id="tank-date-label" style="font-size:13px;font-weight:400;color:#94a3b8;"></span></h2></div>
+      <div class="card-header"><h2>⛽ 탱크 현황
+        <input type="date" id="tank-date-input"
+          style="font-size:13px;font-weight:400;color:#475569;border:1px solid #cbd5e1;border-radius:6px;padding:2px 8px;margin-left:8px;vertical-align:middle;"
+          onchange="loadTankStatus(this.value)">
+      </h2></div>
       <div id="tank-container" style="display:flex;gap:24px;justify-content:center;padding:16px 8px;flex-wrap:wrap;">
         <div class="tank-card" id="tank-휘발유"></div>
         <div class="tank-card" id="tank-경유"></div>

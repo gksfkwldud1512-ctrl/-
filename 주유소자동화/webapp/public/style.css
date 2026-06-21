@@ -715,7 +715,8 @@ th.sortable.sort-active .sort-icon { color: var(--primary); }
 #daily-table td.daily-col-date { text-align: center; font-weight: 600; }
 #daily-table .daily-col-profit,
 #daily-table td.daily-col-profit { font-weight: 700; color: var(--success-fg); }
-#daily-table tbody tr:hover td { background: #f8fafc; }
+#daily-table tbody tr:hover td { background: #f0f9ff; cursor: pointer; }
+#daily-table tbody tr.row-selected td { background: #dbeafe !important; }
 #daily-table .total-row td { background: #f1f5f9 !important; font-weight: 700; border-top: 2px solid var(--border); }
 
 /* 유종별 컬럼 그룹 색 */
