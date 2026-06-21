@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <title>미소주유소 종합현황</title>
+  <title>미소주유소 월간 보고서</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -237,34 +237,37 @@ function render(d, year, month) {
   }
   expHtml += '</div>';
 
-  // 고객 Top5
-  let custHtml = '<div class="card"><div class="card-head">고객 매출 Top 5</div>';
-  if (d.customerTop5?.length) {
-    d.customerTop5.forEach((c, i) => {
-      const fpClass = c.profit >= 0 ? 'pos' : 'neg';
-      custHtml += `<div class="cust-row">
-        <div class="cust-header">
-          <span class="cust-name">${i+1}. ${c.name}</span>
-          <span class="cust-amt">${c.amount.toLocaleString()}원</span>
-        </div>
-        <div class="cust-detail">
-          <span>${fmtL(c.qty)}</span>
-          <span>판매가 ${c.avgSellPrice ? c.avgSellPrice.toLocaleString()+'원' : '-'}</span>
-          <span class="${fpClass}">이익 ${c.profit.toLocaleString()}원 (${c.profitPct ?? '-'}%)</span>
-        </div>
-      </div>`;
-    });
-  } else {
-    custHtml += '<div class="empty">거래 데이터 없음</div>';
+  // 고객 Top5 공통 렌더 함수
+  function renderTop5Card(title, list) {
+    let html = `<div class="card"><div class="card-head">${title}</div>`;
+    if (list?.length) {
+      list.forEach((c, i) => {
+        const fpClass = (c.profit ?? 0) >= 0 ? 'pos' : 'neg';
+        html += `<div class="cust-row">
+          <div class="cust-header">
+            <span class="cust-name">${i+1}. ${c.name}</span>
+            <span class="cust-amt">${Math.round(c.amount).toLocaleString()}원</span>
+          </div>
+          <div class="cust-detail">
+            <span>${c.qty ? c.qty.toLocaleString()+'L' : '-'}</span>
+            <span>판매가 ${c.avgSellPrice ? c.avgSellPrice.toLocaleString()+'원' : '-'}</span>
+            <span class="${fpClass}">이익 ${c.profit != null ? Math.round(c.profit).toLocaleString()+'원' : '-'} (${c.profitPct ?? '-'}%)</span>
+          </div>
+        </div>`;
+      });
+    } else {
+      html += '<div class="empty">데이터 없음</div>';
+    }
+    return html + '</div>';
   }
-  custHtml += '</div>';
 
   $('main').innerHTML = `
     <div style="padding:8px 0 4px;font-size:12px;color:#475569;text-align:center;">${year}년 ${month}월 종합현황</div>
     ${kpiHtml}
     ${salesHtml}
     ${expHtml}
-    ${custHtml}
+    ${renderTop5Card('외상 고객 Top 5', d.customerTop5)}
+    ${renderTop5Card('카드 고객 Top 5', d.cardTop5)}
   `;
 }
 </script>

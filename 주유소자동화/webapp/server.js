@@ -1299,14 +1299,19 @@ app.get('/api/server-info', (req, res) => {
   const os = require('os');
   const ifaces = os.networkInterfaces();
   let localIP = 'localhost';
+  // 192.168.x.x(가정용WiFi) > 10.x.x.x > 기타 순으로 우선
+  const candidates = [];
   for (const iface of Object.values(ifaces)) {
     for (const alias of iface) {
-      if (alias.family === 'IPv4' && !alias.internal) {
-        localIP = alias.address;
-        break;
-      }
+      if (alias.family !== 'IPv4' || alias.internal) continue;
+      if (alias.address.startsWith('169.254.')) continue; // APIPA 제외
+      candidates.push(alias.address);
     }
   }
+  const wifi = candidates.find(ip => ip.startsWith('192.168.'))
+            || candidates.find(ip => ip.startsWith('10.'))
+            || candidates[0];
+  if (wifi) localIP = wifi;
   res.json({ ok: true, ip: localIP, port: PORT, version });
 });
 
