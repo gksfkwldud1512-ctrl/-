@@ -128,7 +128,8 @@ function parseCustomerSales(filePath) {
     if (!dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) return;
     const ym     = dateStr.slice(0, 7);
 
-    const custName  = String(r[custCol] || '').trim() || '알수없음';
+    const rawName   = String(r[custCol] || '').trim();
+    const custName  = rawName || '현금고객';
     const custNo    = String(r[custNoCol] || '').trim();
     const payType   = String(r[payCol] || '').trim();
     const product   = String(r[prodCol] || '').trim();
