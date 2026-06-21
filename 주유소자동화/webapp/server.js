@@ -641,7 +641,7 @@ app.get('/api/daily/tank-status', (req, res) => {
   if (fs.existsSync(DAILY_DIR)) {
     fs.readdirSync(DAILY_DIR).filter(f => f.endsWith('.json')).forEach(f => {
       const day = readJSON(path.join(DAILY_DIR, f), {});
-      if (!day.bos?.date || day.bos.date > targetDate) return;
+      if (!day.bos?.date || day.bos.date >= targetDate) return;
       for (const [fuel, data] of Object.entries(day.bos.fuels || {})) {
         if (!['휘발유', '경유', '등유'].includes(fuel)) continue;
         totalSoldByFuel[fuel] = (totalSoldByFuel[fuel] || 0) + (data.qty || 0);
@@ -673,7 +673,7 @@ app.get('/api/daily/tank-status', (req, res) => {
       if (fs.existsSync(DAILY_DIR)) {
         fs.readdirSync(DAILY_DIR).filter(f => f.endsWith('.json')).forEach(f => {
           const day = readJSON(path.join(DAILY_DIR, f), {});
-          if (!day.bos?.date || day.bos.date <= stockDate || day.bos.date > targetDate) return;
+          if (!day.bos?.date || day.bos.date <= stockDate || day.bos.date >= targetDate) return;
           soldAfterStock += (day.bos.fuels?.[fuel]?.qty || 0);
         });
       }
