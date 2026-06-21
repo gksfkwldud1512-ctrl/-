@@ -1294,6 +1294,162 @@ app.post('/api/daily/upload-bank', upload.single('file'), (req, res) => {
   } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
+// ── 월간 보고서 HTML 내보내기 (카카오톡 파일 공유용) ─────────────
+app.get('/api/export-html/:yearMonth', async (req, res) => {
+  const ym = req.params.yearMonth; // "2026-05"
+  const [yy, mm] = ym.split('-');
+
+  // 로컬 API 호출 헬퍼
+  function fetchLocal(path) {
+    return new Promise((resolve, reject) => {
+      const http = require('http');
+      let data = '';
+      http.get(`http://127.0.0.1:${PORT}${path}`, r => {
+        r.on('data', c => { data += c; });
+        r.on('end', () => { try { resolve(JSON.parse(data)); } catch(e) { resolve({}); } });
+      }).on('error', reject);
+    });
+  }
+
+  try {
+    const [summary, custRes] = await Promise.all([
+      fetchLocal(`/api/summary/${ym}`),
+      fetchLocal(`/api/daily/customer-sales?month=${ym}`),
+    ]);
+    if (!summary.ok) return res.status(500).send('데이터 조회 실패');
+
+    // custTop5를 summary에 병합
+    summary.custAll = custRes.customers || [];
+
+    const generatedAt = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+    const dataJson = JSON.stringify(summary).replace(/<\/script>/g, '<\\/script>');
+
+    const html = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>미소주유소 ${yy}년 ${mm}월 월간 보고서</title>
+  <meta property="og:title" content="미소주유소 ${yy}년 ${mm}월 월간 보고서">
+  <meta property="og:description" content="유종별 매출, 영업이익, 고객현황 종합보고">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; font-size: 14px; }
+    header { background: #1e293b; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; position: sticky; top: 0; z-index: 10; }
+    .logo { font-size: 16px; font-weight: 700; color: #f8fafc; }
+    .sub  { font-size: 11px; color: #64748b; text-align: right; }
+    main  { padding: 12px; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
+    .kpi-card { background: #1e293b; border-radius: 10px; padding: 12px; border: 1px solid #334155; }
+    .kpi-label { font-size: 11px; color: #94a3b8; margin-bottom: 3px; }
+    .kpi-value { font-size: 16px; font-weight: 700; color: #f8fafc; word-break: keep-all; }
+    .kpi-value.pos { color: #4ade80; } .kpi-value.neg { color: #f87171; }
+    .card { background: #1e293b; border-radius: 10px; border: 1px solid #334155; margin-bottom: 12px; overflow: hidden; }
+    .card-head { padding: 11px 14px 9px; font-size: 13px; font-weight: 700; color: #94a3b8; border-bottom: 1px solid #334155; }
+    .fuel-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .fuel-table th { padding: 7px 10px; text-align: right; color: #94a3b8; font-weight: 600; border-bottom: 1px solid #334155; white-space: nowrap; }
+    .fuel-table th:first-child { text-align: left; }
+    .fuel-table td { padding: 8px 10px; text-align: right; border-bottom: 1px solid #1e3a5f22; color: #cbd5e1; }
+    .fuel-table td:first-child { text-align: left; font-weight: 600; color: #f8fafc; }
+    .fuel-table tr.total-row td { background: #334155; font-weight: 700; border-top: 1px solid #475569; border-bottom: none; }
+    .pos { color: #4ade80; } .neg { color: #f87171; }
+    .top5-row { padding: 9px 14px; border-bottom: 1px solid #0f172a; }
+    .top5-row:last-child { border-bottom: none; }
+    .top5-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .top5-name { font-size: 13px; font-weight: 600; color: #e2e8f0; }
+    .top5-amt  { font-size: 13px; font-weight: 700; color: #60a5fa; }
+    .bar-bg { background: #334155; border-radius: 3px; height: 4px; }
+    .bar-fill { background: #3b82f6; border-radius: 3px; height: 4px; }
+    .cust-row { padding: 9px 14px; border-bottom: 1px solid #0f172a; }
+    .cust-row:last-child { border-bottom: none; }
+    .cust-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
+    .cust-name { font-size: 13px; font-weight: 600; color: #e2e8f0; }
+    .cust-amt  { font-size: 13px; font-weight: 700; color: #f8fafc; }
+    .cust-detail { font-size: 11px; color: #64748b; display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+    .empty { padding: 24px; text-align: center; color: #475569; font-size: 13px; }
+    @media (max-width: 360px) { .kpi-value { font-size: 14px; } }
+  </style>
+</head>
+<body>
+<header>
+  <div class="logo">⛽ 미소주유소</div>
+  <div class="sub">${yy}년 ${mm}월 보고서<br>${generatedAt}</div>
+</header>
+<main id="main"></main>
+<script>
+(function() {
+  const d = ${dataJson};
+  const year = '${yy}', month = '${mm}';
+  function fmtW(n) { return n == null ? '-' : Math.round(n).toLocaleString() + '원'; }
+  function fmtL(n) { return n == null ? '-' : Math.floor(n).toLocaleString() + 'L'; }
+  const revenue = d.revenue || 0, profit = d.profit, expense = d.expense || 0, netProfit = d.netProfit;
+  const cost = profit != null ? revenue - profit : null;
+  const margin = netProfit != null && revenue > 0 ? (netProfit / revenue * 100).toFixed(1) + '%' : '-';
+  const kpiItems = [
+    ['총 매출', fmtW(revenue), ''],
+    ['매입원가', fmtW(cost), ''],
+    ['영업이익', fmtW(profit), profit == null ? '' : profit >= 0 ? 'pos' : 'neg'],
+    ['지출', fmtW(expense), ''],
+    ['순이익', fmtW(netProfit), netProfit == null ? '' : netProfit >= 0 ? 'pos' : 'neg'],
+    ['순이익률', margin, netProfit == null ? '' : netProfit >= 0 ? 'pos' : 'neg'],
+  ];
+  let html = '<div class="kpi-grid">';
+  kpiItems.forEach(([label, value, cls]) => {
+    html += '<div class="kpi-card"><div class="kpi-label">' + label + '</div><div class="kpi-value ' + cls + '">' + value + '</div></div>';
+  });
+  html += '</div>';
+  const FUELS = [['경유','#60a5fa'],['휘발유','#fb923c'],['등유','#4ade80']];
+  let salesRows = '';
+  FUELS.forEach(([key, color]) => {
+    const amt = d.sales?.[key] || 0, qty = d.qty?.[key] || 0;
+    const drums = Math.floor(qty / 200);
+    const avgSell = qty > 0 ? Math.round(amt / qty) : null;
+    const avgBuy = d.avgBuyPriceByFuel?.[key] || null;
+    const fp = d.profitByFuel?.[key] ?? null;
+    const fpPct = fp != null && amt > 0 ? (fp / amt * 100).toFixed(1) + '%' : '-';
+    const fpCls = fp == null ? '' : fp >= 0 ? 'pos' : 'neg';
+    salesRows += '<tr><td style="color:' + color + ';">' + key + '</td><td>' + (qty > 0 ? Math.floor(qty).toLocaleString() + 'L (' + drums + '드럼)' : '-') + '</td><td>' + (avgSell ? avgSell.toLocaleString() + '원' : '-') + '</td><td>' + (avgBuy ? avgBuy.toLocaleString() + '원' : '-') + '</td><td class="' + fpCls + '">' + (fp != null ? Math.round(fp).toLocaleString() + '원 (' + fpPct + ')' : '-') + '</td></tr>';
+  });
+  const etcAmt = (d.sales?.carwash || 0) + (d.sales?.others || 0);
+  salesRows += '<tr class="total-row"><td>합계</td><td>-</td><td>-</td><td>-</td><td class="' + (profit == null ? '' : profit >= 0 ? 'pos' : 'neg') + '">' + fmtW(profit) + '</td></tr>';
+  html += '<div class="card"><div class="card-head">유종별 판매 현황</div><div style="overflow-x:auto;"><table class="fuel-table"><thead><tr><th>유종</th><th>판매량</th><th>판매가</th><th>매입가</th><th>영업이익</th></tr></thead><tbody>' + salesRows + '</tbody></table></div>' + (etcAmt > 0 ? '<div style="padding:8px 12px;font-size:12px;color:#64748b;border-top:1px solid #334155;">세차+유외상품 ' + fmtW(etcAmt) + '</div>' : '') + '</div>';
+  let expH = '<div class="card"><div class="card-head">지출 Top 5</div>';
+  if (d.expenseTop5?.length) {
+    const maxA = d.expenseTop5[0].amount;
+    d.expenseTop5.forEach((e, i) => {
+      const bp = maxA > 0 ? (e.amount / maxA * 100).toFixed(0) : 0;
+      expH += '<div class="top5-row"><div class="top5-header"><span class="top5-name">' + (i+1) + '. ' + e.name + '</span><span class="top5-amt">' + e.amount.toLocaleString() + '원</span></div><div class="bar-bg"><div class="bar-fill" style="width:' + bp + '%;"></div></div></div>';
+    });
+  } else expH += '<div class="empty">지출 데이터 없음</div>';
+  expH += '</div>';
+  html += expH;
+  function top5Card(title, list) {
+    let h = '<div class="card"><div class="card-head">' + title + '</div>';
+    if (list?.length) {
+      list.forEach((c, i) => {
+        const cls = (c.profit ?? 0) >= 0 ? 'pos' : 'neg';
+        h += '<div class="cust-row"><div class="cust-header"><span class="cust-name">' + (i+1) + '. ' + c.name + '</span><span class="cust-amt">' + Math.round(c.amount).toLocaleString() + '원</span></div><div class="cust-detail"><span>' + (c.qty ? c.qty.toLocaleString() + 'L' : '-') + '</span><span>판매가 ' + (c.avgSellPrice ? c.avgSellPrice.toLocaleString() + '원' : '-') + '</span><span class="' + cls + '">이익 ' + (c.profit != null ? Math.round(c.profit).toLocaleString() + '원' : '-') + ' (' + (c.profitPct ?? '-') + '%)</span></div></div>';
+      });
+    } else h += '<div class="empty">데이터 없음</div>';
+    return h + '</div>';
+  }
+  html += top5Card('외상 고객 Top 5', d.customerTop5);
+  html += top5Card('카드 고객 Top 5', d.cardTop5);
+  document.getElementById('main').innerHTML = html;
+})();
+</script>
+</body>
+</html>`;
+
+    const filename = encodeURIComponent(`미소주유소_${yy}년${mm}월_보고서.html`);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${filename}`);
+    res.send(html);
+  } catch(e) {
+    res.status(500).send('보고서 생성 오류: ' + e.message);
+  }
+});
+
 // ── 서버 IP 조회 (모바일 공유용) ──────────────────────────────
 app.get('/api/server-info', (req, res) => {
   const os = require('os');

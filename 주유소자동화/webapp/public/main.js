@@ -1128,25 +1128,30 @@ function initDailyYearMonth() {
   selYear.addEventListener('change', () => { dailyState.year  = Number(selYear.value);  loadDailyMonth(); });
   selMonth.addEventListener('change', () => { dailyState.month = Number(selMonth.value); loadDailyMonth(); });
 
-  // 고객판매현황 탭 년월 선택기
+  // 고객판매현황 탭 — 연도 선택기 + 1~12월 탭
   const custY = document.getElementById('cust-year');
-  const custM = document.getElementById('cust-month');
   if (custY) {
     for (let y = now.getFullYear() - 1; y <= now.getFullYear() + 1; y++) {
       const o = document.createElement('option'); o.value = y; o.textContent = y;
       if (y === now.getFullYear()) o.selected = true;
       custY.appendChild(o);
     }
-    custY.addEventListener('change', loadCustomerSales);
+    custY.addEventListener('change', () => { custSalesState.month = custSalesState.month || now.getMonth()+1; renderCustMonthTabs(); loadCustomerSales(); });
   }
-  if (custM) {
+  // 월 탭 생성
+  const custMonthTabs = document.getElementById('cust-month-tabs');
+  if (custMonthTabs) {
     for (let m = 1; m <= 12; m++) {
-      const o = document.createElement('option'); o.value = m; o.textContent = m;
-      if (m === now.getMonth() + 1) o.selected = true;
-      custM.appendChild(o);
+      const btn = document.createElement('button');
+      btn.textContent = m + '월';
+      btn.dataset.month = m;
+      btn.className = 'btn-filter' + (m === now.getMonth()+1 ? ' active' : '');
+      btn.style.cssText = 'padding:3px 8px;font-size:12px;';
+      btn.onclick = () => { custSalesState.month = m; renderCustMonthTabs(); loadCustomerSales(); };
+      custMonthTabs.appendChild(btn);
     }
-    custM.addEventListener('change', loadCustomerSales);
   }
+  custSalesState.month = now.getMonth() + 1;
 
   // 고객관리 탭 연도 선택기 초기화
   const cSelYear = document.getElementById('customer-sales-year');
@@ -2137,7 +2142,7 @@ function initSummaryYearMonth() {
 }
 
 // ── 고객판매현황 ──────────────────────────────────────────────
-let custSalesState = { filter: '전체', data: [], avgBuy: {}, sortKey: 'totalAmount', sortDir: 'desc' };
+let custSalesState = { filter: '전체', data: [], avgBuy: {}, sortKey: 'totalAmount', sortDir: 'desc', month: 0 };
 
 function setCustFilter(payType, btn) {
   custSalesState.filter = payType;
@@ -2189,10 +2194,16 @@ function sortCustomers(list, avgBuy) {
   });
 }
 
+function renderCustMonthTabs() {
+  document.querySelectorAll('#cust-month-tabs .btn-filter').forEach(btn => {
+    btn.classList.toggle('active', Number(btn.dataset.month) === custSalesState.month);
+  });
+}
+
 async function loadCustomerSales() {
   const y = document.getElementById('cust-year')?.value;
-  const m = document.getElementById('cust-month')?.value;
-  if (!y || !m) return;
+  const m = custSalesState.month || (new Date().getMonth() + 1);
+  if (!y) return;
   const ym = `${y}-${String(m).padStart(2,'0')}`;
   const body = document.getElementById('cust-sales-body');
   if (body) body.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;">불러오는 중...</div>';
@@ -2221,113 +2232,76 @@ function renderCustomerSales(customers, avgBuy) {
     return;
   }
 
+  // 정렬
   filtered = sortCustomers(filtered, avgBuy);
 
-  const FUELS = ['경유','휘발유','등유'];
-  const w  = v => v != null && v !== 0 ? Math.round(v).toLocaleString()+'원' : '-';
-  const L  = v => v > 0 ? Math.floor(v).toLocaleString()+'L' : '-';
-
-  // 정렬 헤더 생성
   const sk = custSalesState.sortKey;
   const sd = custSalesState.sortDir;
   const arrow = (key) => sk === key ? (sd === 'desc' ? ' ▼' : ' ▲') : '';
-  const th = (label, key, align='right', extra='') =>
-    `<th class="cust-th" onclick="sortCustBy('${key}')" style="padding:7px 6px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;white-space:nowrap;font-size:11px;text-align:${align};cursor:pointer;${extra}">${label}${arrow(key)}</th>`;
+  const th = (label, key, align='right') =>
+    `<th class="cust-th" onclick="sortCustBy('${key}')" style="padding:8px 10px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;white-space:nowrap;font-size:12px;text-align:${align};cursor:pointer;">${label}${arrow(key)}</th>`;
 
-  // 유종 색상
-  const FUEL_COLOR = { '경유':'#3b82f6', '휘발유':'#f97316', '등유':'#22c55e' };
-
-  // 합계 계산
-  const totQty = {}, totAmt = {};
-  FUELS.forEach(f => { totQty[f] = 0; totAmt[f] = 0; });
-  let totRevenue = 0, totProfit = 0;
+  let totQty = 0, totAmt = 0, totProfit = 0;
 
   const rows = filtered.map((c, idx) => {
     const custProfit = calcCustProfit(c, avgBuy);
-    totRevenue += c.totalAmount;
-    totProfit  += custProfit;
-
-    const fuelCells = FUELS.map(fuel => {
-      const fd  = c.fuels?.[fuel] || {};
-      const qty = fd.qty || 0;
-      const buy = avgBuy[fuel] || 0;
-      const fp  = buy && qty > 0 ? Math.round(fd.amount - qty * buy) : null;
-      totQty[fuel] += qty;
-      totAmt[fuel] += fd.amount || 0;
-      const fpStyle = fp != null ? (fp >= 0 ? 'color:#16a34a' : 'color:#dc2626') : 'color:#94a3b8';
-      return `<td style="text-align:right;padding:6px 6px;">${buy ? buy.toLocaleString()+'원' : '-'}</td>
-              <td style="text-align:right;padding:6px 6px;${fpStyle};font-weight:600;">${fp != null ? Math.round(fp).toLocaleString()+'원' : '-'}</td>`;
-    });
+    const totalQty   = c.totalQty || 0;
+    const avgSell    = totalQty > 0 ? Math.round(c.totalAmount / totalQty) : null;
+    totQty    += totalQty;
+    totAmt    += c.totalAmount;
+    totProfit += custProfit;
 
     const pfColor = custProfit >= 0 ? '#16a34a' : '#dc2626';
     const pfPct   = c.totalAmount > 0 ? (custProfit/c.totalAmount*100).toFixed(1) : '-';
     const badge   = c.payType === '외상'
-      ? '<span style="background:#dbeafe;color:#1e40af;padding:2px 7px;border-radius:10px;font-size:11px;white-space:nowrap;font-weight:600;">외상</span>'
+      ? '<span style="background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:10px;font-size:11px;white-space:nowrap;font-weight:600;">외상</span>'
       : c.payType === '신용카드'
-      ? '<span style="background:#fce7f3;color:#9d174d;padding:2px 7px;border-radius:10px;font-size:11px;white-space:nowrap;font-weight:600;">카드</span>'
-      : '<span style="background:#f3f4f6;color:#374151;padding:2px 7px;border-radius:10px;font-size:11px;white-space:nowrap;font-weight:600;">현금</span>';
+      ? '<span style="background:#fce7f3;color:#9d174d;padding:2px 8px;border-radius:10px;font-size:11px;white-space:nowrap;font-weight:600;">카드</span>'
+      : '<span style="background:#f3f4f6;color:#374151;padding:2px 8px;border-radius:10px;font-size:11px;white-space:nowrap;font-weight:600;">현금</span>';
 
     return `<tr style="border-bottom:1px solid #f1f5f9;">
-      <td style="text-align:center;color:#94a3b8;font-size:11px;padding:6px 4px;">${idx+1}</td>
-      <td style="font-weight:600;white-space:nowrap;padding:6px 6px;font-size:12px;">${c.name}</td>
-      <td style="text-align:center;padding:6px 4px;">${badge}</td>
-      ${fuelCells.join('')}
-      <td style="text-align:right;font-weight:700;padding:6px 6px;border-left:1px solid #e2e8f0;">${Math.round(c.totalAmount).toLocaleString()}원</td>
-      <td style="text-align:right;font-weight:700;padding:6px 6px;color:${pfColor};">${Math.round(custProfit).toLocaleString()}원</td>
-      <td style="text-align:right;padding:6px 6px;font-size:11px;color:${pfColor};">${pfPct}%</td>
+      <td style="text-align:center;color:#94a3b8;font-size:11px;padding:7px 6px;">${idx+1}</td>
+      <td style="font-weight:600;white-space:nowrap;padding:7px 10px;font-size:13px;">${c.name}</td>
+      <td style="text-align:center;padding:7px 8px;">${badge}</td>
+      <td style="text-align:right;padding:7px 10px;">${totalQty > 0 ? Math.floor(totalQty).toLocaleString()+'L' : '-'}</td>
+      <td style="text-align:right;padding:7px 10px;">${avgSell ? avgSell.toLocaleString()+'원' : '-'}</td>
+      <td style="text-align:right;padding:7px 10px;font-weight:600;">${Math.round(c.totalAmount).toLocaleString()}원</td>
+      <td style="text-align:right;padding:7px 10px;font-weight:700;color:${pfColor};">${Math.round(custProfit).toLocaleString()}원</td>
+      <td style="text-align:right;padding:7px 10px;font-size:12px;color:${pfColor};">${pfPct}%</td>
     </tr>`;
   });
 
-  // 합계행 (유종별: 매입가 + 영업이익 각 2컬럼)
-  const totFuelCells = FUELS.map(fuel => {
-    const qty = totQty[fuel];
-    const amt = totAmt[fuel];
-    const buy = avgBuy[fuel] || 0;
-    const fp = buy && qty > 0 ? Math.round(amt - qty*buy) : null;
-    const fpStyle = fp != null ? (fp>=0?'color:#16a34a':'color:#dc2626') : '';
-    return `<td style="text-align:right;padding:7px 6px;font-weight:700;">${buy?buy.toLocaleString()+'원':'-'}</td>
-            <td style="text-align:right;padding:7px 6px;font-weight:700;${fpStyle}">${fp!=null?fp.toLocaleString()+'원':'-'}</td>`;
-  }).join('');
   const totPfColor = totProfit >= 0 ? '#16a34a' : '#dc2626';
-  const totPct = totRevenue > 0 ? (totProfit/totRevenue*100).toFixed(1) : '-';
-
-  // 유종 헤더 그룹 (colspan=2: 매입가+영업이익)
-  const fuelGroupTh = FUELS.map(f =>
-    `<th colspan="2" style="padding:6px;background:#f8fafc;border-bottom:1px solid #e2e8f0;text-align:center;font-size:11px;font-weight:700;color:${FUEL_COLOR[f]};border-left:1px solid #e2e8f0;">${f}</th>`
-  ).join('');
-  const fuelSubTh = FUELS.map(f => `
-    ${th('매입가', f+'_buy', 'right', 'border-left:1px solid #e2e8f0;')}
-    ${th('영업이익', f+'_profit')}`
-  ).join('');
+  const totPct = totAmt > 0 ? (totProfit/totAmt*100).toFixed(1) : '-';
+  const totAvgSell = totQty > 0 ? Math.round(totAmt/totQty) : null;
 
   body.innerHTML = `
-    <div style="font-size:12px;color:#64748b;padding:5px 12px 3px;">${filtered.length}개 업체</div>
-    <div style="overflow-x:auto;">
-    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <div style="font-size:12px;color:#64748b;padding:6px 14px 3px;">${filtered.length}개 업체</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead>
         <tr>
-          <th rowspan="2" style="padding:6px 4px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;font-size:11px;text-align:center;">#</th>
-          <th rowspan="2" class="cust-th" onclick="sortCustBy('name')" style="padding:7px 6px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;white-space:nowrap;font-size:11px;text-align:left;cursor:pointer;">업체명${arrow('name')}</th>
-          <th rowspan="2" class="cust-th" onclick="sortCustBy('payType')" style="padding:7px 6px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;white-space:nowrap;font-size:11px;text-align:center;cursor:pointer;">구분${arrow('payType')}</th>
-          ${fuelGroupTh}
-          <th rowspan="2" class="cust-th" onclick="sortCustBy('totalAmount')" style="padding:7px 6px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;white-space:nowrap;font-size:11px;text-align:right;cursor:pointer;border-left:1px solid #e2e8f0;">총 매출${arrow('totalAmount')}</th>
-          <th rowspan="2" class="cust-th" onclick="sortCustBy('totalProfit')" style="padding:7px 6px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;white-space:nowrap;font-size:11px;text-align:right;cursor:pointer;">영업이익${arrow('totalProfit')}</th>
-          <th rowspan="2" class="cust-th" onclick="sortCustBy('totalProfit')" style="padding:7px 6px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;white-space:nowrap;font-size:11px;text-align:right;cursor:pointer;">이익률${arrow('totalProfit')}</th>
+          <th style="padding:8px 6px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;font-size:11px;text-align:center;">#</th>
+          ${th('업체명','name','left')}
+          ${th('구분','payType','center')}
+          ${th('판매량(L)','totalQty')}
+          ${th('평균판매가','totalAmount')}
+          ${th('매출액','totalAmount')}
+          ${th('영업이익','totalProfit')}
+          ${th('이익률','totalProfit')}
         </tr>
-        <tr>${fuelSubTh}</tr>
       </thead>
       <tbody>${rows.join('')}</tbody>
       <tfoot>
-        <tr style="background:#f1f5f9;border-top:2px solid #94a3b8;">
-          <td colspan="3" style="padding:7px 8px;font-weight:700;font-size:12px;">합계</td>
-          ${totFuelCells}
-          <td style="text-align:right;padding:7px 6px;font-weight:700;border-left:1px solid #e2e8f0;">${Math.round(totRevenue).toLocaleString()}원</td>
-          <td style="text-align:right;padding:7px 6px;font-weight:700;color:${totPfColor};">${Math.round(totProfit).toLocaleString()}원</td>
-          <td style="text-align:right;padding:7px 6px;font-size:11px;color:${totPfColor};">${totPct}%</td>
+        <tr style="background:#f1f5f9;border-top:2px solid #94a3b8;font-weight:700;">
+          <td colspan="3" style="padding:8px 10px;">합계</td>
+          <td style="text-align:right;padding:8px 10px;">${totQty > 0 ? Math.floor(totQty).toLocaleString()+'L' : '-'}</td>
+          <td style="text-align:right;padding:8px 10px;">${totAvgSell ? totAvgSell.toLocaleString()+'원' : '-'}</td>
+          <td style="text-align:right;padding:8px 10px;">${Math.round(totAmt).toLocaleString()}원</td>
+          <td style="text-align:right;padding:8px 10px;color:${totPfColor};">${Math.round(totProfit).toLocaleString()}원</td>
+          <td style="text-align:right;padding:8px 10px;font-size:12px;color:${totPfColor};">${totPct}%</td>
         </tr>
       </tfoot>
-    </table>
-    </div>`;
+    </table>`;
 }
 
 async function rebuildCustomerSales() {
@@ -2715,6 +2689,32 @@ function copyMobileUrl() {
   }).catch(() => {
     prompt('아래 주소를 복사하세요:', _mobileUrl);
   });
+}
+
+async function exportMonthlyReport() {
+  const btn = document.getElementById('export-report-btn');
+  const year  = dailyState.year  || new Date().getFullYear();
+  const month = String(dailyState.month || (new Date().getMonth() + 1)).padStart(2, '0');
+  const ym    = `${year}-${month}`;
+  if (btn) btn.textContent = '⏳ 생성 중...';
+  try {
+    const response = await fetch(`/api/export-html/${ym}`);
+    if (!response.ok) throw new Error('서버 오류');
+    const blob = await response.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `미소주유소_${year}년${month}월_보고서.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast(`✅ ${year}년 ${month}월 보고서 저장 완료`, 'success');
+  } catch(e) {
+    toast('보고서 생성 실패: ' + e.message, 'error');
+  } finally {
+    if (btn) btn.textContent = '📤 보고서 저장 (카카오톡 공유용)';
+  }
 }
 
 // ── 고객매출현황 탭: 월별 업체별 매출 리스트 ───────────────────

@@ -201,10 +201,16 @@
         <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;font-size:15px;font-weight:700;color:#1e293b;letter-spacing:0.5px;" id="mobile-url-display">
           불러오는 중...
         </div>
-        <button onclick="copyMobileUrl()" style="margin-top:10px;padding:8px 16px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">
-          🔗 주소 복사
-        </button>
-        <p style="font-size:11px;color:#94a3b8;margin-top:10px;">※ 같은 와이파이 네트워크에서만 접속 가능합니다</p>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+          <button onclick="copyMobileUrl()" style="padding:8px 16px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">
+            🔗 주소 복사
+          </button>
+          <button onclick="exportMonthlyReport()" id="export-report-btn" style="padding:8px 16px;background:#0f766e;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">
+            📤 보고서 저장 (카카오톡 공유용)
+          </button>
+        </div>
+        <p style="font-size:11px;color:#94a3b8;margin-top:10px;">※ 주소 복사 → 같은 와이파이에서만 접속 가능</p>
+        <p style="font-size:11px;color:#0f766e;margin-top:4px;">✅ 보고서 저장 → 카카오톡으로 파일 전송 시 어디서든 열림</p>
       </div>
     </div>
 
@@ -389,23 +395,23 @@
 
     <!-- ── 고객판매현황 탭 ── -->
     <div id="tab-daily-customer" class="tab-content" style="display:none;">
-      <div class="toolbar" style="flex-wrap:wrap;gap:8px;">
-        <div class="toolbar-group">
-          <label class="label-sm">조회 월</label>
-          <select id="cust-year"></select><span>년</span>
-          <select id="cust-month"></select><span>월</span>
-        </div>
-        <div class="toolbar-group" style="gap:6px;">
-          <label class="label-sm">업체구분</label>
-          <button class="btn-filter active" data-pay="전체" onclick="setCustFilter('전체',this)">전체</button>
-          <button class="btn-filter" data-pay="외상" onclick="setCustFilter('외상',this)">외상</button>
-          <button class="btn-filter" data-pay="신용카드" onclick="setCustFilter('신용카드',this)">카드</button>
-          <button class="btn-filter" data-pay="현금" onclick="setCustFilter('현금',this)">현금</button>
-        </div>
-        <div class="toolbar-group" style="margin-left:auto;">
-          <button class="btn-upload btn-purple" id="rebuild-cust-btn" onclick="rebuildCustomerSales()" style="background:#7c3aed;border-color:#7c3aed;">
-            🔄 전체 재분석
-          </button>
+      <!-- 상단: 연도 + 월 탭 + 업체구분 필터 -->
+      <div style="padding:10px 12px 0;background:#fff;border-bottom:1px solid #e2e8f0;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
+          <select id="cust-year" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;"></select>
+          <span style="font-size:13px;color:#64748b;">년</span>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;" id="cust-month-tabs">
+            <!-- JS로 1~12월 탭 생성 -->
+          </div>
+          <div style="margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <button class="btn-filter active" data-pay="전체" onclick="setCustFilter('전체',this)">전체</button>
+            <button class="btn-filter" data-pay="외상" onclick="setCustFilter('외상',this)">외상</button>
+            <button class="btn-filter" data-pay="신용카드" onclick="setCustFilter('신용카드',this)">카드</button>
+            <button class="btn-filter" data-pay="현금" onclick="setCustFilter('현금',this)">현금</button>
+            <button class="btn-upload btn-purple" id="rebuild-cust-btn" onclick="rebuildCustomerSales()" style="background:#7c3aed;border-color:#7c3aed;padding:4px 10px;font-size:12px;">
+              🔄 재분석
+            </button>
+          </div>
         </div>
       </div>
       <div id="cust-sales-body" style="overflow-x:auto;">
