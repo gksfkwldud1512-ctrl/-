@@ -2675,7 +2675,7 @@ async function showMobileShare() {
   }
   const res = await api('GET', '/api/server-info');
   if (res.ok) {
-    _mobileUrl = `http://${res.ip}:${res.port}/mobile.html`;
+    _mobileUrl = `http://${res.ip}:${res.port}/mobile.html?v=${Date.now()}`;
     document.getElementById('mobile-url-display').textContent = _mobileUrl;
   } else {
     document.getElementById('mobile-url-display').textContent = 'IP 조회 실패';
