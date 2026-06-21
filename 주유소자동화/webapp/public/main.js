@@ -170,7 +170,7 @@ function switchDailySubTab(tab) {
   const gd = document.getElementById('group-daily');
   if (gd) { gd.style.display = 'block'; gd.classList.add('active'); }
   // 탭 콘텐츠: inline style로 확실하게 제어
-  ['daily-main', 'daily-expense'].forEach(t => {
+  ['daily-main', 'daily-expense', 'daily-customer'].forEach(t => {
     const el = document.getElementById(`tab-${t}`);
     if (!el) return;
     const show = t === tab;
@@ -178,6 +178,7 @@ function switchDailySubTab(tab) {
     el.classList.toggle('active', show);
   });
   if (tab === 'daily-expense') window.location.href = '/expenses.html';
+  if (tab === 'daily-customer') loadCustomerSales();
 }
 
 function switchSubTab(tab) {
@@ -1126,6 +1127,26 @@ function initDailyYearMonth() {
 
   selYear.addEventListener('change', () => { dailyState.year  = Number(selYear.value);  loadDailyMonth(); });
   selMonth.addEventListener('change', () => { dailyState.month = Number(selMonth.value); loadDailyMonth(); });
+
+  // 고객판매현황 탭 년월 선택기
+  const custY = document.getElementById('cust-year');
+  const custM = document.getElementById('cust-month');
+  if (custY) {
+    for (let y = now.getFullYear() - 1; y <= now.getFullYear() + 1; y++) {
+      const o = document.createElement('option'); o.value = y; o.textContent = y;
+      if (y === now.getFullYear()) o.selected = true;
+      custY.appendChild(o);
+    }
+    custY.addEventListener('change', loadCustomerSales);
+  }
+  if (custM) {
+    for (let m = 1; m <= 12; m++) {
+      const o = document.createElement('option'); o.value = m; o.textContent = m;
+      if (m === now.getMonth() + 1) o.selected = true;
+      custM.appendChild(o);
+    }
+    custM.addEventListener('change', loadCustomerSales);
+  }
 
   // 고객관리 탭 연도 선택기 초기화
   const cSelYear = document.getElementById('customer-sales-year');
@@ -2115,6 +2136,156 @@ function initSummaryYearMonth() {
   }
 }
 
+// ── 고객판매현황 ──────────────────────────────────────────────
+let custSalesState = { filter: '전체', data: [], avgBuy: {} };
+
+function setCustFilter(payType, btn) {
+  custSalesState.filter = payType;
+  document.querySelectorAll('.btn-filter').forEach(b => b.classList.toggle('active', b.dataset.pay === payType));
+  renderCustomerSales(custSalesState.data, custSalesState.avgBuy);
+}
+
+async function loadCustomerSales() {
+  const y = document.getElementById('cust-year')?.value;
+  const m = document.getElementById('cust-month')?.value;
+  if (!y || !m) return;
+  const ym = `${y}-${String(m).padStart(2,'0')}`;
+  const body = document.getElementById('cust-sales-body');
+  if (body) body.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;">불러오는 중...</div>';
+
+  const [custRes, sumRes] = await Promise.all([
+    api('GET', `/api/daily/customer-sales?month=${ym}`),
+    api('GET', `/api/summary/${ym}`),
+  ]);
+
+  const avgBuy = sumRes.ok ? (sumRes.avgBuyPriceByFuel || {}) : {};
+  custSalesState.data   = custRes.ok ? custRes.customers : [];
+  custSalesState.avgBuy = avgBuy;
+  renderCustomerSales(custSalesState.data, avgBuy);
+}
+
+function renderCustomerSales(customers, avgBuy) {
+  const body = document.getElementById('cust-sales-body');
+  if (!body) return;
+
+  const filter = custSalesState.filter;
+  const filtered = filter === '전체' ? customers
+    : customers.filter(c => c.payType === filter);
+
+  if (!filtered.length) {
+    body.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;">해당 월/업체구분 데이터 없음<br><small>BOS 상세거래내역을 업로드하거나 전체 재분석을 실행하세요.</small></div>';
+    return;
+  }
+
+  const FUELS = ['경유','휘발유','등유'];
+  const fmtL  = v => v > 0 ? Math.floor(v).toLocaleString() : '-';
+  const fmtW  = v => v > 0 ? Math.round(v).toLocaleString()+'원' : '-';
+  const fmtP  = v => v != null ? v.toLocaleString()+'원' : '-';
+
+  // 합계 행 계산
+  const totals = { qty: {}, amount: {}, revenue: 0, profit: 0 };
+  FUELS.forEach(f => { totals.qty[f] = 0; totals.amount[f] = 0; });
+
+  const rows = filtered.map((c, idx) => {
+    let custProfit = 0;
+    const fuelCells = FUELS.map(fuel => {
+      const fd = c.fuels?.[fuel] || {};
+      const qty = fd.qty || 0;
+      const amt = fd.amount || 0;
+      const avg = fd.avgPrice;
+      const buy = avgBuy[fuel] || null;
+      const fp  = buy && qty > 0 ? amt - qty * buy : null;
+      if (fp != null) custProfit += fp;
+      totals.qty[fuel]    += qty;
+      totals.amount[fuel] += amt;
+      return `<td style="text-align:right;">${fmtL(qty)}</td>
+              <td style="text-align:right;">${fmtL(Math.floor(qty/200))}</td>
+              <td style="text-align:right;">${fmtP(avg)}</td>
+              <td style="text-align:right;">${buy ? buy.toLocaleString()+'원' : '-'}</td>
+              <td style="text-align:right;${fp!=null?(fp>=0?'color:#16a34a':'color:#dc2626'):''};font-weight:600;">${fp!=null?fp.toLocaleString()+'원':'-'}</td>`;
+    });
+    totals.revenue += c.totalAmount;
+    totals.profit  += custProfit;
+
+    const pfColor = custProfit >= 0 ? '#16a34a' : '#dc2626';
+    const pfPct   = c.totalAmount > 0 ? (custProfit/c.totalAmount*100).toFixed(1)+'%' : '-';
+    const badge   = c.payType === '외상'    ? '<span style="background:#dbeafe;color:#1e40af;padding:1px 7px;border-radius:10px;font-size:11px;">외상</span>'
+                  : c.payType === '신용카드' ? '<span style="background:#fce7f3;color:#9d174d;padding:1px 7px;border-radius:10px;font-size:11px;">카드</span>'
+                  : '<span style="background:#f3f4f6;color:#374151;padding:1px 7px;border-radius:10px;font-size:11px;">현금</span>';
+    return `<tr>
+      <td style="text-align:center;color:#94a3b8;font-size:12px;">${idx+1}</td>
+      <td style="font-weight:600;white-space:nowrap;">${c.name}</td>
+      <td style="text-align:center;">${badge}</td>
+      ${fuelCells.join('')}
+      <td style="text-align:right;font-weight:700;">${c.totalAmount>0?c.totalAmount.toLocaleString()+'원':'-'}</td>
+      <td style="text-align:right;font-weight:700;color:${pfColor};">${custProfit?custProfit.toLocaleString()+'원':'-'}<br><small>${pfPct}</small></td>
+    </tr>`;
+  });
+
+  // 합계 행
+  const totPfColor = totals.profit >= 0 ? '#16a34a' : '#dc2626';
+  const totFuelCells = FUELS.map(fuel => {
+    const qty = totals.qty[fuel];
+    const amt = totals.amount[fuel];
+    const avgSell = qty > 0 ? Math.round(amt/qty) : null;
+    const buy = avgBuy[fuel] || null;
+    const fp  = buy && qty > 0 ? amt - qty * buy : null;
+    return `<td style="text-align:right;font-weight:700;">${fmtL(qty)}</td>
+            <td style="text-align:right;font-weight:700;">${fmtL(Math.floor(qty/200))}</td>
+            <td style="text-align:right;font-weight:700;">${avgSell?avgSell.toLocaleString()+'원':'-'}</td>
+            <td style="text-align:right;font-weight:700;">${buy?buy.toLocaleString()+'원':'-'}</td>
+            <td style="text-align:right;font-weight:700;color:${fp!=null?(fp>=0?'#16a34a':'#dc2626'):'inherit'};">${fp!=null?fp.toLocaleString()+'원':'-'}</td>`;
+  }).join('');
+
+  const thStyle = 'padding:7px 8px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;white-space:nowrap;font-size:12px;';
+  const fuelHeaders = FUELS.map(f => `
+    <th colspan="5" style="${thStyle}text-align:center;border-left:2px solid #e2e8f0;">${f}</th>`).join('');
+  const fuelSubHeaders = FUELS.map(f => `
+    <th style="${thStyle}text-align:right;">수량(L)</th>
+    <th style="${thStyle}text-align:right;">드럼</th>
+    <th style="${thStyle}text-align:right;">판매가</th>
+    <th style="${thStyle}text-align:right;">매입가</th>
+    <th style="${thStyle}text-align:right;">영업이익</th>`).join('');
+
+  body.innerHTML = `
+    <div style="font-size:12px;color:#94a3b8;padding:6px 12px;">${filtered.length}개 업체</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:1200px;">
+      <thead>
+        <tr>
+          <th style="${thStyle}text-align:center;" rowspan="2">#</th>
+          <th style="${thStyle}text-align:left;" rowspan="2">업체명</th>
+          <th style="${thStyle}text-align:center;" rowspan="2">구분</th>
+          ${fuelHeaders}
+          <th style="${thStyle}text-align:right;border-left:2px solid #e2e8f0;" rowspan="2">총 매출</th>
+          <th style="${thStyle}text-align:right;" rowspan="2">영업이익</th>
+        </tr>
+        <tr>${fuelSubHeaders}</tr>
+      </thead>
+      <tbody>${rows.join('')}</tbody>
+      <tfoot>
+        <tr style="background:#f1f5f9;border-top:2px solid #94a3b8;">
+          <td colspan="3" style="padding:7px 10px;font-weight:700;">합계</td>
+          ${totFuelCells}
+          <td style="text-align:right;font-weight:700;">${totals.revenue>0?totals.revenue.toLocaleString()+'원':'-'}</td>
+          <td style="text-align:right;font-weight:700;color:${totPfColor};">${totals.profit?totals.profit.toLocaleString()+'원':'-'}</td>
+        </tr>
+      </tfoot>
+    </table>`;
+}
+
+async function rebuildCustomerSales() {
+  const btn = document.getElementById('rebuild-cust-btn');
+  if (btn) btn.textContent = '재분석 중...';
+  const res = await api('POST', '/api/daily/rebuild-customer-sales');
+  if (btn) btn.textContent = '🔄 전체 재분석';
+  if (res.ok) {
+    toast(`✅ 재분석 완료 (${res.months?.join(', ')})`, 'success');
+    loadCustomerSales();
+  } else {
+    toast('재분석 실패', 'error');
+  }
+}
+
 async function loadSummary() {
   const ym = `${summaryState.year}-${String(summaryState.month).padStart(2,'0')}`;
   const res = await api('GET', `/api/summary/${ym}`);
@@ -2204,29 +2375,33 @@ function renderSummary(data) {
     }
   }
 
-  // 고객 매출 Top5
-  const custTop5El = document.getElementById('summary-customer-top5');
-  if (custTop5El) {
-    if (!data.customerTop5?.length) {
-      custTop5El.innerHTML = '<div style="padding:16px;text-align:center;color:#94a3b8;">거래 데이터 없음</div>';
-    } else {
-      const rows = data.customerTop5.map((c, i) => {
-        const profitColor = c.profit >= 0 ? '#16a34a' : '#dc2626';
-        return `<div style="padding:8px 14px;${i>0?'border-top:1px solid #f1f5f9;':''}">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
-            <span style="font-size:13px;font-weight:600;">${i+1}. ${c.name}</span>
-            <span style="font-size:13px;font-weight:700;">${c.amount.toLocaleString()}원</span>
-          </div>
-          <div style="display:flex;gap:12px;font-size:11px;color:#64748b;flex-wrap:wrap;">
-            <span>판매량 ${c.qty.toLocaleString()}L</span>
-            <span>평균판매가 ${c.avgSellPrice ? c.avgSellPrice.toLocaleString()+'원' : '-'}</span>
-            <span style="color:${profitColor};font-weight:600;">이익 ${c.profit.toLocaleString()}원 (${c.profitPct ?? '-'}%)</span>
-          </div>
-        </div>`;
-      });
-      custTop5El.innerHTML = rows.join('');
+  // 고객 Top5 렌더 공통 함수
+  function renderTop5(list, el) {
+    if (!list?.length) {
+      el.innerHTML = '<div style="padding:14px;text-align:center;color:#94a3b8;font-size:12px;">데이터 없음</div>';
+      return;
     }
+    el.innerHTML = list.map((c, i) => {
+      const pfColor = c.profit >= 0 ? '#16a34a' : '#dc2626';
+      return `<div style="padding:8px 14px;${i>0?'border-top:1px solid #f1f5f9;':''}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
+          <span style="font-size:13px;font-weight:600;">${i+1}. ${c.name}</span>
+          <span style="font-size:13px;font-weight:700;">${c.amount.toLocaleString()}원</span>
+        </div>
+        <div style="display:flex;gap:10px;font-size:11px;color:#64748b;flex-wrap:wrap;">
+          <span>${c.qty.toLocaleString()}L</span>
+          <span>${c.avgSellPrice ? c.avgSellPrice.toLocaleString()+'원/L' : '-'}</span>
+          <span style="color:${pfColor};font-weight:600;">${c.profit!=null?c.profit.toLocaleString()+'원 ('+c.profitPct+'%)':'-'}</span>
+        </div>
+      </div>`;
+    }).join('');
   }
+
+  const custTop5El = document.getElementById('summary-customer-top5');
+  if (custTop5El) renderTop5(data.customerTop5, custTop5El);
+
+  const cardTop5El = document.getElementById('summary-card-top5');
+  if (cardTop5El) renderTop5(data.cardTop5, cardTop5El);
 
 }
 

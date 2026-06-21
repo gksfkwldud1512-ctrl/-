@@ -739,6 +739,24 @@ th.sortable.sort-active .sort-icon { color: var(--primary); }
 }
 .input-other-cost:focus { outline: none; border-color: var(--primary); }
 
+/* 고객판매현황 필터 버튼 */
+.btn-filter {
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: white;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-filter:hover { background: #f1f5f9; }
+.btn-filter.active { background: var(--primary); border-color: var(--primary); color: white; font-weight: 600; }
+
+/* 고객판매현황 테이블 */
+#cust-sales-body table tbody tr:hover td { background: #f0f9ff; }
+#cust-sales-body table tfoot td { border-top: 2px solid #94a3b8; font-weight: 700; padding: 7px 8px; }
+
 .profit-pos { color: var(--success-fg); font-weight: 700; }
 .profit-neg { color: var(--error-fg);   font-weight: 700; }
 

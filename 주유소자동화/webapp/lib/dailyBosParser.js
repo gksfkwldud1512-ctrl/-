@@ -86,4 +86,108 @@ function bosCardNo(raw) {
   return m ? `****${m[1]}` : raw.slice(-8);
 }
 
-module.exports = { parseBosDaily };
+// BOS 판매전표 → 고객별 월별 판매 집계
+// 형식 감지:
+//   판매전표 상세조회: h2[4]='고객명', h2[8]='결제구분' → custCol=4, payCol=8, prodCol=11, qtyCol=12, priceCol=13, amtCol=14
+//   판매전표리스트:     h2[8]='고객명', h2[6]='결제구분' → custCol=8, payCol=6,  prodCol=11, qtyCol=12, priceCol=13, amtCol=14
+//   배달판매전표리스트: h2[8]='고객명', h2[6]='결제구분' → custCol=8, payCol=6,  prodCol=11, qtyCol=12, priceCol=13, amtCol=14
+function parseCustomerSales(filePath) {
+  const wb   = XLSX.readFile(filePath);
+  const ws   = wb.Sheets[wb.SheetNames[0]];
+  const raw  = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+  const h0 = String(raw[0]?.[0] || '').trim();
+  const h2 = raw[2] || [];
+
+  // 판매전표 계열만 처리
+  if (!h0.includes('판매전표') && !h0.includes('판매전표리스트')) return {};
+
+  // 컬럼 위치 결정
+  const h2_4 = String(h2[4] || '').trim();
+  const h2_8 = String(h2[8] || '').trim();
+  let custCol, payCol, prodCol, qtyCol, priceCol, amtCol, custNoCol;
+
+  if (h2_4 === '고객명') {
+    // 판매전표 상세조회
+    custCol = 4; custNoCol = 3; payCol = 8;
+    prodCol = 11; qtyCol = 12; priceCol = 13; amtCol = 14;
+  } else if (h2_8 === '고객명') {
+    // 판매전표리스트 / 배달판매전표리스트
+    custCol = 8; custNoCol = 7; payCol = 6;
+    prodCol = 11; qtyCol = 12; priceCol = 13; amtCol = 14;
+  } else {
+    return {}; // 알 수 없는 형식
+  }
+
+  const dataRows  = raw.slice(3).filter(r => r[1]);
+  const monthMap  = {};
+  const FUELS     = new Set(['휘발유', '경유', '등유']);
+
+  dataRows.forEach(r => {
+    const dateStr = String(r[1] || '').trim();
+    if (!dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) return;
+    const ym     = dateStr.slice(0, 7);
+
+    const custName  = String(r[custCol] || '').trim() || '알수없음';
+    const custNo    = String(r[custNoCol] || '').trim();
+    const payType   = String(r[payCol] || '').trim();
+    const product   = String(r[prodCol] || '').trim();
+    const qty       = Number(r[qtyCol]) || 0;
+    const unitPrice = Number(r[priceCol]) || 0;
+    const amount    = Number(r[amtCol]) || 0;
+
+    if (qty > 0 && amount === 0) return; // 무상공급 제외
+
+    if (!monthMap[ym]) monthMap[ym] = {};
+    const key = `${custName}||${payType}`;
+    if (!monthMap[ym][key]) {
+      monthMap[ym][key] = {
+        name: custName, custNo, payType,
+        fuels: {
+          '휘발유': { qty: 0, amount: 0, txCount: 0, priceSum: 0 },
+          '경유':   { qty: 0, amount: 0, txCount: 0, priceSum: 0 },
+          '등유':   { qty: 0, amount: 0, txCount: 0, priceSum: 0 },
+        },
+        carwash: 0, others: 0,
+        totalQty: 0, totalAmount: 0,
+      };
+    }
+    const c = monthMap[ym][key];
+
+    if (FUELS.has(product)) {
+      c.fuels[product].qty    += qty;
+      c.fuels[product].amount += amount;
+      if (unitPrice > 0) { c.fuels[product].priceSum += unitPrice * qty; c.fuels[product].txCount += qty; }
+      c.totalQty    += qty;
+      c.totalAmount += amount;
+    } else if (product === '세차') {
+      c.carwash += amount; c.totalAmount += amount;
+    } else if (product) {
+      c.others  += amount; c.totalAmount += amount;
+    }
+  });
+
+  // 집계 정리
+  const result = {};
+  for (const [ym, custMap] of Object.entries(monthMap)) {
+    result[ym] = Object.values(custMap).map(c => {
+      const fuels = {};
+      for (const [fuel, fd] of Object.entries(c.fuels)) {
+        fuels[fuel] = {
+          qty:      Math.round(fd.qty * 100) / 100,
+          amount:   Math.round(fd.amount),
+          avgPrice: fd.qty > 0 ? Math.round(fd.amount / fd.qty) : null,
+        };
+      }
+      return {
+        name: c.name, custNo: c.custNo, payType: c.payType,
+        fuels, carwash: Math.round(c.carwash), others: Math.round(c.others),
+        totalQty: Math.round(c.totalQty * 100) / 100,
+        totalAmount: Math.round(c.totalAmount),
+      };
+    }).sort((a, b) => b.totalAmount - a.totalAmount);
+  }
+  return result;
+}
+
+module.exports = { parseBosDaily, parseCustomerSales };

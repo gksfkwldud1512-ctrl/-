@@ -106,7 +106,7 @@ function recomputeFifoPrices() {
   writeJSON(PURCHASE_PRICES_FILE, priceChanges);
 }
 
-const { parseBosDaily }    = require('./lib/dailyBosParser');
+const { parseBosDaily, parseCustomerSales } = require('./lib/dailyBosParser');
 const { parseEasyshop }    = require('./lib/easyshopParser');
 const { matchCards }       = require('./lib/cardMatcher');
 const { parseBankDeposits } = require('./lib/bankParser');
@@ -568,6 +568,18 @@ function runMatching(daily) {
   }
 }
 
+function saveCustomerSales(monthMap) {
+  for (const [ym, customers] of Object.entries(monthMap)) {
+    const fpath = path.join(DATA_DIR, `customer_sales_${ym.replace('-','_')}.json`);
+    // 기존 데이터와 병합 (같은 key는 덮어쓰기)
+    const existing = readJSON(fpath, []);
+    const existMap = {};
+    existing.forEach(c => { existMap[`${c.name}||${c.payType}`] = c; });
+    customers.forEach(c => { existMap[`${c.name}||${c.payType}`] = c; });
+    writeJSON(fpath, Object.values(existMap).sort((a,b) => b.totalAmount - a.totalAmount));
+  }
+}
+
 // BOS 업로드 (단일 날짜 또는 월별 파일 모두 처리)
 app.post('/api/daily/upload-bos', upload.single('file'), (req, res) => {
   if (!req.file) return res.json({ ok: false, error: '파일 없음' });
@@ -581,8 +593,48 @@ app.post('/api/daily/upload-bos', upload.single('file'), (req, res) => {
       writeJSON(dailyFile(parsed.date), existing);
       lastDate = parsed.date;
     }
+    // 고객별 판매 집계도 함께 저장
+    try {
+      const monthMap = parseCustomerSales(req.file.path);
+      saveCustomerSales(monthMap);
+    } catch(_) {}
     res.json({ ok: true, count: days.length, date: lastDate });
   } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
+// ── 고객 판매 현황 ────────────────────────────────────────────
+// 월별 고객 판매 집계 조회
+app.get('/api/daily/customer-sales', (req, res) => {
+  const ym = req.query.month; // YYYY-MM
+  if (!ym) return res.json({ ok: false, error: 'month 파라미터 필요' });
+  const fpath = path.join(DATA_DIR, `customer_sales_${ym.replace('-','_')}.json`);
+  res.json({ ok: true, month: ym, customers: readJSON(fpath, []) });
+});
+
+// uploads/ 폴더의 BOS 상세조회 파일을 전부 재파싱하여 고객 판매 데이터 재구축
+app.post('/api/daily/rebuild-customer-sales', (req, res) => {
+  const UPLOADS_DIR = path.join(__dirname, 'uploads');
+  if (!fs.existsSync(UPLOADS_DIR)) return res.json({ ok: true, processed: 0 });
+
+  // 기존 customer_sales_*.json 초기화 (깨끗하게 재구축)
+  fs.readdirSync(DATA_DIR).filter(f => f.startsWith('customer_sales_') && f.endsWith('.json'))
+    .forEach(f => fs.unlinkSync(path.join(DATA_DIR, f)));
+
+  const files = fs.readdirSync(UPLOADS_DIR).filter(f => f.endsWith('.xlsx'));
+  const processedMonths = new Set();
+  let errors = 0;
+
+  for (const fname of files) {
+    try {
+      const monthMap = parseCustomerSales(path.join(UPLOADS_DIR, fname));
+      if (Object.keys(monthMap).length > 0) {
+        saveCustomerSales(monthMap);
+        Object.keys(monthMap).forEach(ym => processedMonths.add(ym));
+      }
+    } catch(_) { errors++; }
+  }
+
+  res.json({ ok: true, months: [...processedMonths].sort(), errors });
 });
 
 // 이지샵 카드 업로드 (단일 날짜 또는 월별 파일 모두 처리)
@@ -997,10 +1049,40 @@ app.get('/api/summary/:yearMonth', (req, res) => {
     .sort((a, b) => b[1] - a[1]).slice(0, 5)
     .map(([name, amount]) => ({ name, amount }));
 
-  // 고객 매출 Top5
-  const vendorFile = path.join(DATA_DIR, `vendors_${ym.replace('-','_')}.json`);
-  let customerTop5 = [];
-  if (fs.existsSync(vendorFile) && hasPrices) {
+  // 고객 매출 Top5 (외상/카드 구분)
+  const custSalesFile = path.join(DATA_DIR, `customer_sales_${ym.replace('-','_')}.json`);
+  let customerTop5 = [], cardTop5 = [];
+  if (fs.existsSync(custSalesFile) && hasPrices) {
+    const allCusts = readJSON(custSalesFile, []);
+    const avgBuyForTop = {};
+    for (const fuel of ['휘발유','경유','등유']) {
+      avgBuyForTop[fuel] = totalQty[fuel] > 0 ? costByFuel[fuel] / totalQty[fuel] : 0;
+    }
+    const computeProfit = (c) => {
+      let profit = 0;
+      for (const [fuel, fd] of Object.entries(c.fuels || {})) {
+        profit += (fd.amount || 0) - (fd.qty || 0) * (avgBuyForTop[fuel] || 0);
+      }
+      return profit;
+    };
+    const toTop5 = (list) => list.map(c => {
+      const profit = computeProfit(c);
+      return {
+        name: c.name, payType: c.payType,
+        qty: Math.round(c.totalQty),
+        amount: Math.round(c.totalAmount),
+        avgSellPrice: c.totalQty > 0 ? Math.round(c.totalAmount / c.totalQty) : null,
+        profit: Math.round(profit),
+        profitPct: c.totalAmount > 0 ? Math.round(profit / c.totalAmount * 1000) / 10 : null,
+      };
+    }).sort((a,b) => b.amount - a.amount).slice(0,5);
+
+    customerTop5 = toTop5(allCusts.filter(c => c.payType === '외상'));
+    cardTop5     = toTop5(allCusts.filter(c => c.payType === '신용카드'));
+  } else {
+    // fallback: vendors 파일
+    const vendorFile = path.join(DATA_DIR, `vendors_${ym.replace('-','_')}.json`);
+    if (fs.existsSync(vendorFile) && hasPrices) {
     const vendors = readJSON(vendorFile, []);
     const avgBuy = {};
     for (const fuel of ['휘발유','경유','등유']) {
@@ -1035,6 +1117,7 @@ app.get('/api/summary/:yearMonth', (req, res) => {
       })
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 5);
+    } // end fallback vendors
   }
 
   const totalRevenue = Object.values(totalSales).reduce((s,v)=>s+v, 0);
@@ -1053,6 +1136,7 @@ app.get('/api/summary/:yearMonth', (req, res) => {
     expByCategory,
     expenseTop5,
     customerTop5,
+    cardTop5,
     netProfit: hasPrices ? Math.round(totalProfit - totalExpense) : null,
   });
 });

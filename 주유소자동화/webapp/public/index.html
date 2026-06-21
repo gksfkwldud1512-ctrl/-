@@ -24,6 +24,7 @@
     <div class="subnav-inner" id="subnav-daily" style="display:none;">
       <button class="tab-btn active" data-tab="daily-main">일마감</button>
       <button class="tab-btn" data-tab="daily-expense">지출목록</button>
+      <button class="tab-btn" data-tab="daily-customer">고객판매현황</button>
     </div>
     <!-- 월마감 subnav -->
     <div class="subnav-inner" id="subnav-monthly">
@@ -109,10 +110,18 @@
         </div>
       </div>
 
-      <!-- 고객 매출 Top5 -->
+      <!-- 외상 고객 Top5 -->
       <div class="card" style="min-width:260px;">
-        <div class="card-header"><h2>고객 매출 Top 5</h2></div>
+        <div class="card-header"><h2>외상 고객 Top 5</h2></div>
         <div id="summary-customer-top5">
+          <div style="padding:16px;text-align:center;color:#94a3b8;">거래 데이터 없음</div>
+        </div>
+      </div>
+
+      <!-- 카드 고객 Top5 -->
+      <div class="card" style="min-width:260px;">
+        <div class="card-header"><h2>카드 고객 Top 5</h2></div>
+        <div id="summary-card-top5">
           <div style="padding:16px;text-align:center;color:#94a3b8;">거래 데이터 없음</div>
         </div>
       </div>
@@ -320,7 +329,8 @@
           </tbody>
         </table>
       </div>
-    </div><!-- /tab-daily-main -->
+    </div><!-- /daily-card -->
+  </div><!-- /tab-daily-main -->
 
     <!-- ── 입금 검증 탭 ── -->
     <!-- ── 지출목록 탭 ── -->
@@ -376,6 +386,32 @@
         </div>
       </div>
     </div>
+
+    <!-- ── 고객판매현황 탭 ── -->
+    <div id="tab-daily-customer" class="tab-content" style="display:none;">
+      <div class="toolbar" style="flex-wrap:wrap;gap:8px;">
+        <div class="toolbar-group">
+          <label class="label-sm">조회 월</label>
+          <select id="cust-year"></select><span>년</span>
+          <select id="cust-month"></select><span>월</span>
+        </div>
+        <div class="toolbar-group" style="gap:6px;">
+          <label class="label-sm">업체구분</label>
+          <button class="btn-filter active" data-pay="전체" onclick="setCustFilter('전체',this)">전체</button>
+          <button class="btn-filter" data-pay="외상" onclick="setCustFilter('외상',this)">외상</button>
+          <button class="btn-filter" data-pay="신용카드" onclick="setCustFilter('신용카드',this)">카드</button>
+          <button class="btn-filter" data-pay="현금" onclick="setCustFilter('현금',this)">현금</button>
+        </div>
+        <div class="toolbar-group" style="margin-left:auto;">
+          <button class="btn-upload btn-purple" id="rebuild-cust-btn" onclick="rebuildCustomerSales()" style="background:#7c3aed;border-color:#7c3aed;">
+            🔄 전체 재분석
+          </button>
+        </div>
+      </div>
+      <div id="cust-sales-body" style="overflow-x:auto;">
+        <div style="padding:24px;text-align:center;color:#94a3b8;">월을 선택하면 고객별 판매현황이 표시됩니다</div>
+      </div>
+    </div><!-- /tab-daily-customer -->
 
   </section>
 
