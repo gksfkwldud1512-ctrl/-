@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <title>미소주유소 일마감 현황</title>
+  <title>미소주유소 종합현황</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -28,7 +28,7 @@
     .version { font-size: 11px; color: #64748b; }
     .toolbar {
       background: #1e293b;
-      padding: 12px 16px;
+      padding: 10px 14px;
       display: flex;
       gap: 8px;
       align-items: center;
@@ -43,130 +43,54 @@
       color: #e2e8f0;
       font-size: 13px;
     }
-    .toolbar button {
-      background: #3b82f6;
-      border-color: #3b82f6;
-      cursor: pointer;
-      font-weight: 600;
-    }
+    .toolbar button { background: #3b82f6; border-color: #3b82f6; cursor: pointer; font-weight: 600; }
     .toolbar button:active { background: #2563eb; }
-    .refresh-btn {
-      background: #0f172a !important;
-      border-color: #475569 !important;
-      color: #94a3b8 !important;
-      font-size: 12px !important;
-    }
+    .refresh-btn { background: #0f172a !important; border-color: #475569 !important; color: #94a3b8 !important; font-size: 12px !important; }
     main { padding: 12px; }
 
     /* KPI 카드 */
-    .kpi-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-    .kpi-card {
-      background: #1e293b;
-      border-radius: 10px;
-      padding: 14px 12px;
-      border: 1px solid #334155;
-    }
-    .kpi-label { font-size: 11px; color: #94a3b8; margin-bottom: 4px; }
-    .kpi-value { font-size: 18px; font-weight: 700; color: #f8fafc; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
+    .kpi-card { background: #1e293b; border-radius: 10px; padding: 12px; border: 1px solid #334155; }
+    .kpi-label { font-size: 11px; color: #94a3b8; margin-bottom: 3px; }
+    .kpi-value { font-size: 16px; font-weight: 700; color: #f8fafc; word-break: keep-all; }
     .kpi-value.pos { color: #4ade80; }
     .kpi-value.neg { color: #f87171; }
-    .kpi-sub { font-size: 11px; color: #64748b; margin-top: 2px; }
 
-    /* 카드 */
-    .card {
-      background: #1e293b;
-      border-radius: 10px;
-      border: 1px solid #334155;
-      margin-bottom: 12px;
-      overflow: hidden;
-    }
-    .card-head {
-      padding: 12px 14px 8px;
-      font-size: 13px;
-      font-weight: 700;
-      color: #94a3b8;
-      border-bottom: 1px solid #334155;
-    }
+    /* 섹션 카드 */
+    .card { background: #1e293b; border-radius: 10px; border: 1px solid #334155; margin-bottom: 12px; overflow: hidden; }
+    .card-head { padding: 11px 14px 9px; font-size: 13px; font-weight: 700; color: #94a3b8; border-bottom: 1px solid #334155; }
 
-    /* 일별 테이블 */
-    .day-list { }
-    .day-row {
-      padding: 10px 14px;
-      border-bottom: 1px solid #1e293b;
-      background: #0f172a;
-    }
-    .day-row:last-child { border-bottom: none; }
-    .day-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 6px;
-    }
-    .day-date { font-size: 13px; font-weight: 700; color: #f8fafc; }
-    .day-profit { font-size: 14px; font-weight: 700; }
-    .day-profit.pos { color: #4ade80; }
-    .day-profit.neg { color: #f87171; }
-    .day-profit.none { color: #64748b; font-size: 12px; }
-    .fuel-tags {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-    .fuel-tag {
-      background: #334155;
-      border-radius: 4px;
-      padding: 3px 7px;
-      font-size: 11px;
-      color: #cbd5e1;
-    }
-    .fuel-tag span { color: #f8fafc; font-weight: 600; }
+    /* 유종별 판매 테이블 */
+    .fuel-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .fuel-table th { padding: 7px 10px; text-align: right; color: #94a3b8; font-weight: 600; border-bottom: 1px solid #334155; white-space: nowrap; }
+    .fuel-table th:first-child { text-align: left; }
+    .fuel-table td { padding: 8px 10px; text-align: right; border-bottom: 1px solid #1e3a5f22; color: #cbd5e1; }
+    .fuel-table td:first-child { text-align: left; font-weight: 600; color: #f8fafc; }
+    .fuel-table tr.total-row td { background: #334155; font-weight: 700; border-top: 1px solid #475569; border-bottom: none; }
+    .pos { color: #4ade80; }
+    .neg { color: #f87171; }
 
-    /* 합계 행 */
-    .total-row {
-      background: #1e293b !important;
-      border-top: 2px solid #475569 !important;
-    }
-    .total-row .day-date { color: #94a3b8; font-size: 12px; }
+    /* 지출 Top5 */
+    .top5-row { padding: 9px 14px; border-bottom: 1px solid #0f172a; }
+    .top5-row:last-child { border-bottom: none; }
+    .top5-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .top5-name { font-size: 13px; font-weight: 600; color: #e2e8f0; }
+    .top5-amt { font-size: 13px; font-weight: 700; color: #60a5fa; }
+    .bar-bg { background: #334155; border-radius: 3px; height: 4px; }
+    .bar-fill { background: #3b82f6; border-radius: 3px; height: 4px; }
 
-    /* 빈 상태 */
-    .empty { padding: 32px; text-align: center; color: #475569; font-size: 13px; }
+    /* 고객 Top5 */
+    .cust-row { padding: 9px 14px; border-bottom: 1px solid #0f172a; }
+    .cust-row:last-child { border-bottom: none; }
+    .cust-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
+    .cust-name { font-size: 13px; font-weight: 600; color: #e2e8f0; }
+    .cust-amt  { font-size: 13px; font-weight: 700; color: #f8fafc; }
+    .cust-detail { font-size: 11px; color: #64748b; display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
 
-    /* 로딩 */
+    .empty { padding: 24px; text-align: center; color: #475569; font-size: 13px; }
     .loading { padding: 24px; text-align: center; color: #64748b; }
 
-    /* 월 선택 레이블 */
-    .month-label {
-      padding: 10px 14px;
-      font-size: 13px;
-      color: #64748b;
-      background: #1e293b;
-      text-align: center;
-    }
-
-    /* 유종별 요약 */
-    .fuel-summary {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 0;
-    }
-    .fuel-summary-item {
-      padding: 10px 10px;
-      border-right: 1px solid #334155;
-      text-align: center;
-    }
-    .fuel-summary-item:last-child { border-right: none; }
-    .fuel-name { font-size: 11px; color: #94a3b8; margin-bottom: 4px; }
-    .fuel-qty  { font-size: 13px; font-weight: 700; color: #f8fafc; }
-    .fuel-amt  { font-size: 11px; color: #64748b; margin-top: 2px; }
-
-    @media (max-width: 360px) {
-      .kpi-value { font-size: 15px; }
-    }
+    @media (max-width: 360px) { .kpi-value { font-size: 14px; } }
   </style>
 </head>
 <body>
@@ -192,7 +116,6 @@
 <script>
 const $ = id => document.getElementById(id);
 
-// 년월 초기화
 (function init() {
   const now = new Date();
   const selY = $('m-year'), selM = $('m-month');
@@ -208,112 +131,141 @@ const $ = id => document.getElementById(id);
     if (m === now.getMonth() + 1) o.selected = true;
     selM.appendChild(o);
   }
-  // 버전
   fetch('/api/version').then(r=>r.json()).then(d => { $('ver').textContent = 'v' + d.version; }).catch(()=>{});
   loadData();
 })();
 
-function fmt(n) { return n == null ? '-' : Math.round(n).toLocaleString(); }
 function fmtW(n) { return n == null ? '-' : Math.round(n).toLocaleString() + '원'; }
+function fmtL(n) { return n == null ? '-' : Math.floor(n).toLocaleString() + 'L'; }
 
 async function loadData() {
   const year  = $('m-year').value;
-  const month = $('m-month').value;
+  const month = String($('m-month').value).padStart(2, '0');
+  const ym    = `${year}-${month}`;
   $('main').innerHTML = '<div class="loading">불러오는 중…</div>';
   try {
-    const res = await fetch(`/api/daily-summary?year=${year}&month=${month}`);
+    const res  = await fetch(`/api/summary/${ym}`);
     const data = await res.json();
     if (!data.ok) { $('main').innerHTML = '<div class="empty">데이터 오류</div>'; return; }
-    render(data);
+    render(data, year, $('m-month').value);
   } catch(e) {
     $('main').innerHTML = '<div class="empty">서버에 연결할 수 없습니다</div>';
   }
 }
 
-function render({ year, month, days }) {
-  if (!days.length) {
-    $('main').innerHTML = '<div class="empty">BOS 데이터가 없습니다</div>';
-    return;
+function render(d, year, month) {
+  const revenue   = d.revenue   || 0;
+  const profit    = d.profit;
+  const expense   = d.expense   || 0;
+  const netProfit = d.netProfit;
+  const cost      = profit != null ? revenue - profit : null;
+  const margin    = netProfit != null && revenue > 0 ? (netProfit / revenue * 100).toFixed(1) + '%' : '-';
+
+  // KPI 6개
+  const kpiRows = [
+    { label: '총 매출',   value: fmtW(revenue),   cls: '' },
+    { label: '매입원가',  value: fmtW(cost),       cls: '' },
+    { label: '영업이익',  value: fmtW(profit),     cls: profit == null ? '' : profit >= 0 ? 'pos' : 'neg' },
+    { label: '지출',      value: fmtW(expense),    cls: '' },
+    { label: '순이익',    value: fmtW(netProfit),  cls: netProfit == null ? '' : netProfit >= 0 ? 'pos' : 'neg' },
+    { label: '순이익률',  value: margin,            cls: netProfit == null ? '' : netProfit >= 0 ? 'pos' : 'neg' },
+  ];
+  let kpiHtml = '<div class="kpi-grid">';
+  kpiRows.forEach(k => {
+    kpiHtml += `<div class="kpi-card"><div class="kpi-label">${k.label}</div><div class="kpi-value ${k.cls}">${k.value}</div></div>`;
+  });
+  kpiHtml += '</div>';
+
+  // 유종별 판매 테이블
+  const FUELS = [
+    { key: '경유',   color: '#60a5fa' },
+    { key: '휘발유', color: '#fb923c' },
+    { key: '등유',   color: '#4ade80' },
+  ];
+  let salesRows = '';
+  FUELS.forEach(({ key, color }) => {
+    const amt    = d.sales?.[key]  || 0;
+    const qty    = d.qty?.[key]    || 0;
+    const drums  = Math.floor(qty / 200);
+    const avgSell = qty > 0 ? Math.round(amt / qty) : null;
+    const avgBuy  = d.avgBuyPriceByFuel?.[key] || null;
+    const fp      = d.profitByFuel?.[key] ?? null;
+    const fpPct   = fp != null && amt > 0 ? (fp / amt * 100).toFixed(1) + '%' : '-';
+    const fpClass = fp == null ? '' : fp >= 0 ? 'pos' : 'neg';
+    salesRows += `<tr>
+      <td style="color:${color};">${key}</td>
+      <td>${qty > 0 ? `${Math.floor(qty).toLocaleString()}L<br><span style="color:#64748b;font-size:10px;">(${drums}드럼)</span>` : '-'}</td>
+      <td>${avgSell ? avgSell.toLocaleString()+'원' : '-'}</td>
+      <td>${avgBuy  ? avgBuy.toLocaleString()+'원'  : '-'}</td>
+      <td class="${fpClass}">${fp != null ? `${fp.toLocaleString()}원<br><span style="font-size:10px;">(${fpPct})</span>` : '-'}</td>
+    </tr>`;
+  });
+  const etcAmt = (d.sales?.carwash || 0) + (d.sales?.others || 0);
+  salesRows += `<tr class="total-row">
+    <td>합계</td><td>-</td><td>-</td><td>-</td>
+    <td class="${profit == null ? '' : profit >= 0 ? 'pos' : 'neg'}">${fmtW(profit)}</td>
+  </tr>`;
+  const salesHtml = `<div class="card">
+    <div class="card-head">유종별 판매 현황</div>
+    <div style="overflow-x:auto;">
+      <table class="fuel-table">
+        <thead><tr>
+          <th>유종</th><th>판매량</th><th>판매가</th><th>매입가</th><th>영업이익</th>
+        </tr></thead>
+        <tbody>${salesRows}</tbody>
+      </table>
+    </div>
+    ${etcAmt > 0 ? `<div style="padding:8px 12px;font-size:12px;color:#64748b;border-top:1px solid #334155;">세차+유외상품 ${fmtW(etcAmt)}</div>` : ''}
+  </div>`;
+
+  // 지출 Top5
+  let expHtml = '<div class="card"><div class="card-head">지출 Top 5</div>';
+  if (d.expenseTop5?.length) {
+    const maxAmt = d.expenseTop5[0].amount;
+    d.expenseTop5.forEach((e, i) => {
+      const barPct = maxAmt > 0 ? (e.amount / maxAmt * 100).toFixed(0) : 0;
+      expHtml += `<div class="top5-row">
+        <div class="top5-header">
+          <span class="top5-name">${i+1}. ${e.name}</span>
+          <span class="top5-amt">${e.amount.toLocaleString()}원</span>
+        </div>
+        <div class="bar-bg"><div class="bar-fill" style="width:${barPct}%;"></div></div>
+      </div>`;
+    });
+  } else {
+    expHtml += '<div class="empty">지출 데이터 없음</div>';
   }
+  expHtml += '</div>';
 
-  // 월 합계
-  let totGas = 0, totDiesel = 0, totKero = 0, totAmt = 0, totProfit = 0;
-  let hasProfit = false;
-  days.forEach(d => {
-    totGas    += d.fuels?.['휘발유']?.qty    || 0;
-    totDiesel += d.fuels?.['경유']?.qty      || 0;
-    totKero   += d.fuels?.['등유']?.qty      || 0;
-    totAmt    += (d.fuels?.['휘발유']?.amount || 0)
-               + (d.fuels?.['경유']?.amount   || 0)
-               + (d.fuels?.['등유']?.amount   || 0)
-               + (d.carwash?.amount           || 0)
-               + (d.others?.amount            || 0);
-    if (d.profit != null) { totProfit += d.profit; hasProfit = true; }
-  });
+  // 고객 Top5
+  let custHtml = '<div class="card"><div class="card-head">고객 매출 Top 5</div>';
+  if (d.customerTop5?.length) {
+    d.customerTop5.forEach((c, i) => {
+      const fpClass = c.profit >= 0 ? 'pos' : 'neg';
+      custHtml += `<div class="cust-row">
+        <div class="cust-header">
+          <span class="cust-name">${i+1}. ${c.name}</span>
+          <span class="cust-amt">${c.amount.toLocaleString()}원</span>
+        </div>
+        <div class="cust-detail">
+          <span>${fmtL(c.qty)}</span>
+          <span>판매가 ${c.avgSellPrice ? c.avgSellPrice.toLocaleString()+'원' : '-'}</span>
+          <span class="${fpClass}">이익 ${c.profit.toLocaleString()}원 (${c.profitPct ?? '-'}%)</span>
+        </div>
+      </div>`;
+    });
+  } else {
+    custHtml += '<div class="empty">거래 데이터 없음</div>';
+  }
+  custHtml += '</div>';
 
-  const profitColor = totProfit >= 0 ? 'pos' : 'neg';
-
-  let html = `
-  <div class="month-label">${year}년 ${month}월 (${days.length}일치)</div>
-
-  <div class="kpi-grid">
-    <div class="kpi-card">
-      <div class="kpi-label">총 매출</div>
-      <div class="kpi-value">${fmtW(totAmt)}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">총 영업이익</div>
-      <div class="kpi-value ${hasProfit ? profitColor : ''}">${hasProfit ? fmtW(totProfit) : '단가 미입력'}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">경유 (L)</div>
-      <div class="kpi-value">${fmt(totDiesel)} L</div>
-      <div class="kpi-sub">${Math.floor(totDiesel/200)} 드럼</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">휘발유 (L)</div>
-      <div class="kpi-value">${fmt(totGas)} L</div>
-      <div class="kpi-sub">${Math.floor(totGas/200)} 드럼</div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-head">일별 판매 현황</div>
-    <div class="day-list">`;
-
-  days.slice().reverse().forEach(d => {
-    const gasAmt    = d.fuels?.['휘발유']?.amount || 0;
-    const dieselAmt = d.fuels?.['경유']?.amount   || 0;
-    const keroAmt   = d.fuels?.['등유']?.amount   || 0;
-    const gasQty    = d.fuels?.['휘발유']?.qty     || 0;
-    const dieselQty = d.fuels?.['경유']?.qty       || 0;
-    const keroQty   = d.fuels?.['등유']?.qty       || 0;
-    const dayAmt    = gasAmt + dieselAmt + keroAmt + (d.carwash?.amount || 0) + (d.others?.amount || 0);
-
-    const profitHtml = d.profit != null
-      ? `<span class="day-profit ${d.profit >= 0 ? 'pos' : 'neg'}">${fmtW(d.profit)}</span>`
-      : `<span class="day-profit none">이익 미계산</span>`;
-
-    const tags = [];
-    if (gasQty   > 0) tags.push(`<span class="fuel-tag">휘발유 <span>${fmt(gasQty)}L</span></span>`);
-    if (dieselQty > 0) tags.push(`<span class="fuel-tag">경유 <span>${fmt(dieselQty)}L</span></span>`);
-    if (keroQty  > 0) tags.push(`<span class="fuel-tag">등유 <span>${fmt(keroQty)}L</span></span>`);
-    if (d.carwash?.amount > 0) tags.push(`<span class="fuel-tag">세차 <span>${fmtW(d.carwash.amount)}</span></span>`);
-    if (d.others?.amount  > 0) tags.push(`<span class="fuel-tag">유외 <span>${fmtW(d.others.amount)}</span></span>`);
-
-    html += `
-    <div class="day-row">
-      <div class="day-header">
-        <span class="day-date">${d.date}</span>
-        ${profitHtml}
-      </div>
-      <div style="font-size:12px;color:#94a3b8;margin-bottom:5px;">매출 ${fmtW(dayAmt)}</div>
-      <div class="fuel-tags">${tags.join('')}</div>
-    </div>`;
-  });
-
-  html += `</div></div>`;
-  $('main').innerHTML = html;
+  $('main').innerHTML = `
+    <div style="padding:8px 0 4px;font-size:12px;color:#475569;text-align:center;">${year}년 ${month}월 종합현황</div>
+    ${kpiHtml}
+    ${salesHtml}
+    ${expHtml}
+    ${custHtml}
+  `;
 }
 </script>
 </body>

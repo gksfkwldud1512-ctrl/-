@@ -942,6 +942,8 @@ app.get('/api/summary/:yearMonth', (req, res) => {
 
   let totalProfit = 0;
   let hasPrices = prices.length > 0;
+  const profitByFuel = { 휘발유: 0, 경유: 0, 등유: 0 };
+  const costByFuel   = { 휘발유: 0, 경유: 0, 등유: 0 };
 
   for (const f of dailyFiles) {
     const d = readJSON(path.join(DAILY_DIR, f), {});
@@ -953,7 +955,12 @@ app.get('/api/summary/:yearMonth', (req, res) => {
       totalSales[fuel] += fuelData.amount || 0;
       totalQty[fuel]   += fuelData.qty    || 0;
       const buyPrice = getFifoPrice(date, fuel);
-      if (buyPrice) totalProfit += (fuelData.amount || 0) - (fuelData.qty || 0) * buyPrice;
+      if (buyPrice) {
+        const fp = (fuelData.amount || 0) - (fuelData.qty || 0) * buyPrice;
+        totalProfit    += fp;
+        profitByFuel[fuel] += fp;
+        costByFuel[fuel]   += (fuelData.qty || 0) * buyPrice;
+      }
     }
     totalSales.carwash += d.bos.carwash?.amount || 0;
     totalSales.others  += d.bos.others?.amount  || 0;
@@ -962,6 +969,13 @@ app.get('/api/summary/:yearMonth', (req, res) => {
     totalProfit += (d.bos.others?.amount  || 0) - otC;
     totalCardFee += d.card?.totalFee || 0;
     totalProfit -= d.card?.totalFee || 0;
+  }
+
+  // 유종별 평균매입단가
+  const avgBuyPriceByFuel = {};
+  for (const fuel of ['휘발유','경유','등유']) {
+    avgBuyPriceByFuel[fuel] = totalQty[fuel] > 0
+      ? Math.round(costByFuel[fuel] / totalQty[fuel]) : null;
   }
 
   // 지출 합산
@@ -973,6 +987,56 @@ app.get('/api/summary/:yearMonth', (req, res) => {
     expByCategory[e.category] += e.amount;
   }
 
+  // 지출 Top5 (계정과목별)
+  const expBySubCat = {};
+  for (const e of expenses) {
+    const key = e.subCategory || e.category || '기타';
+    expBySubCat[key] = (expBySubCat[key] || 0) + (e.amount || 0);
+  }
+  const expenseTop5 = Object.entries(expBySubCat)
+    .sort((a, b) => b[1] - a[1]).slice(0, 5)
+    .map(([name, amount]) => ({ name, amount }));
+
+  // 고객 매출 Top5
+  const vendorFile = path.join(DATA_DIR, `vendors_${ym.replace('-','_')}.json`);
+  let customerTop5 = [];
+  if (fs.existsSync(vendorFile) && hasPrices) {
+    const vendors = readJSON(vendorFile, []);
+    const avgBuy = {};
+    for (const fuel of ['휘발유','경유','등유']) {
+      avgBuy[fuel] = totalQty[fuel] > 0 ? costByFuel[fuel] / totalQty[fuel] : 0;
+    }
+    customerTop5 = vendors
+      .filter(v => v.hasCredit && (v.txs?.length || 0) > 0)
+      .map(v => {
+        let totalAmt = 0, totalQtyC = 0, profitC = 0;
+        const byFuel = {};
+        for (const tx of (v.txs || [])) {
+          const fuel = ['휘발유','경유','등유'].includes(tx.product) ? tx.product : null;
+          totalAmt += tx.amount || 0;
+          if (fuel) {
+            if (!byFuel[fuel]) byFuel[fuel] = { qty: 0, amount: 0 };
+            byFuel[fuel].qty    += tx.qty    || 0;
+            byFuel[fuel].amount += tx.amount || 0;
+            totalQtyC += tx.qty || 0;
+          }
+        }
+        for (const [fuel, fd] of Object.entries(byFuel)) {
+          profitC += fd.amount - fd.qty * (avgBuy[fuel] || 0);
+        }
+        return {
+          name: v.name,
+          qty: Math.round(totalQtyC),
+          amount: Math.round(totalAmt),
+          avgSellPrice: totalQtyC > 0 ? Math.round(totalAmt / totalQtyC) : null,
+          profit: Math.round(profitC),
+          profitPct: totalAmt > 0 ? Math.round(profitC / totalAmt * 1000) / 10 : null,
+        };
+      })
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5);
+  }
+
   const totalRevenue = Object.values(totalSales).reduce((s,v)=>s+v, 0);
 
   res.json({
@@ -982,9 +1046,13 @@ app.get('/api/summary/:yearMonth', (req, res) => {
     qty: totalQty,
     revenue: totalRevenue,
     profit: hasPrices ? Math.round(totalProfit) : null,
+    profitByFuel: hasPrices ? { 휘발유: Math.round(profitByFuel.휘발유), 경유: Math.round(profitByFuel.경유), 등유: Math.round(profitByFuel.등유) } : null,
+    avgBuyPriceByFuel: hasPrices ? avgBuyPriceByFuel : null,
     cardFee: totalCardFee,
     expense: totalExpense,
     expByCategory,
+    expenseTop5,
+    customerTop5,
     netProfit: hasPrices ? Math.round(totalProfit - totalExpense) : null,
   });
 });

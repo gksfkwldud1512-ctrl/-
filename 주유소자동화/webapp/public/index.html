@@ -90,14 +90,30 @@
       </div>
     </div>
 
-    <!-- 판매/지출 상세 -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;flex-wrap:wrap;">
+    <!-- 유종별 판매 현황 (전폭) -->
+    <div class="card" style="margin-bottom:16px;overflow-x:auto;">
+      <div class="card-header"><h2>유종별 판매 현황</h2></div>
+      <div id="summary-sales-body">
+        <div style="padding:16px;text-align:center;color:#94a3b8;">일마감 BOS 데이터 업로드 후 표시됩니다.</div>
+      </div>
+    </div>
 
-      <!-- 유종별 판매 현황 -->
-      <div class="card" style="min-width:280px;">
-        <div class="card-header"><h2>유종별 판매 현황</h2></div>
-        <div id="summary-sales-body">
-          <div style="padding:16px;text-align:center;color:#94a3b8;">일마감 BOS 데이터 업로드 후 표시됩니다.</div>
+    <!-- 지출 Top5 + 고객 Top5 -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
+
+      <!-- 지출 Top5 -->
+      <div class="card" style="min-width:260px;">
+        <div class="card-header"><h2>지출 Top 5</h2></div>
+        <div id="summary-expense-top5">
+          <div style="padding:16px;text-align:center;color:#94a3b8;">지출 데이터 없음</div>
+        </div>
+      </div>
+
+      <!-- 고객 매출 Top5 -->
+      <div class="card" style="min-width:260px;">
+        <div class="card-header"><h2>고객 매출 Top 5</h2></div>
+        <div id="summary-customer-top5">
+          <div style="padding:16px;text-align:center;color:#94a3b8;">거래 데이터 없음</div>
         </div>
       </div>
 

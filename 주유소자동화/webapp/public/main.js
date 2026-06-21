@@ -2144,37 +2144,88 @@ function renderSummary(data) {
   const salesBody = document.getElementById('summary-sales-body');
   if (salesBody) {
     const FUELS = ['경유','휘발유','등유'];
+    const th = (t, right) => `<th style="padding:7px 10px;text-align:${right?'right':'left'};white-space:nowrap;">${t}</th>`;
+    const td = (v, right, bold) => `<td style="padding:6px 10px;text-align:${right?'right':'left'};${bold?'font-weight:700;':''}">${v}</td>`;
     const rows = FUELS.map(fuel => {
-      const amt = data.sales?.[fuel] || 0;
-      const qty = data.qty?.[fuel]   || 0;
-      const drums = Math.floor(qty / 200);
-      const avgPrice = qty > 0 ? Math.round(amt / qty) : 0;
+      const amt    = data.sales?.[fuel] || 0;
+      const qty    = data.qty?.[fuel]   || 0;
+      const drums  = Math.floor(qty / 200);
+      const avgSell = qty > 0 ? Math.round(amt / qty) : null;
+      const avgBuy  = data.avgBuyPriceByFuel?.[fuel] || null;
+      const profit  = data.profitByFuel?.[fuel] ?? null;
+      const pct     = amt > 0 && profit != null ? (profit/amt*100).toFixed(1)+'%' : '-';
       return `<tr>
-        <td><strong>${fuel}</strong></td>
-        <td style="text-align:right;">${Math.floor(qty).toLocaleString()}L (${drums}드럼)</td>
-        <td style="text-align:right;">${avgPrice > 0 ? avgPrice.toLocaleString()+'원' : '-'}</td>
-        <td style="text-align:right;">${amt > 0 ? amt.toLocaleString()+'원' : '-'}</td>
+        ${td(`<strong>${fuel}</strong>`)}
+        ${td(qty > 0 ? Math.floor(qty).toLocaleString()+'L ('+drums+'드럼)' : '-', true)}
+        ${td(avgSell ? avgSell.toLocaleString()+'원' : '-', true)}
+        ${td(avgBuy  ? avgBuy.toLocaleString()+'원'  : '-', true)}
+        ${td(profit != null ? `<span style="color:${profit>=0?'#16a34a':'#dc2626'};font-weight:700;">${profit.toLocaleString()}원 (${pct})</span>` : '-', true)}
+        ${td(amt > 0 ? amt.toLocaleString()+'원' : '-', true)}
       </tr>`;
     });
-    rows.push(`<tr style="background:#f8fafc;font-weight:700;">
-      <td>세차+유외</td>
-      <td>-</td><td>-</td>
-      <td style="text-align:right;">${((data.sales?.carwash||0)+(data.sales?.others||0)).toLocaleString()}원</td>
+    const etcAmt = (data.sales?.carwash||0) + (data.sales?.others||0);
+    rows.push(`<tr style="background:#f8fafc;">
+      ${td('세차+유외')} ${td('-',true)} ${td('-',true)} ${td('-',true)} ${td('-',true)}
+      ${td(etcAmt > 0 ? etcAmt.toLocaleString()+'원' : '-', true)}
     </tr>`);
-    rows.push(`<tr style="background:#f1f5f9;font-weight:700;border-top:2px solid #e2e8f0;">
-      <td>합계</td>
-      <td>-</td><td>-</td>
-      <td style="text-align:right;">${(data.revenue||0).toLocaleString()}원</td>
+    rows.push(`<tr style="background:#f1f5f9;border-top:2px solid #e2e8f0;">
+      ${td('합계',false,true)} ${td('-',true,true)} ${td('-',true,true)} ${td('-',true,true)}
+      ${td(data.profit!=null?`<span style="color:${data.profit>=0?'#16a34a':'#dc2626'};font-weight:700;">${data.profit.toLocaleString()}원</span>`:'-',true,true)}
+      ${td((data.revenue||0).toLocaleString()+'원',true,true)}
     </tr>`);
     salesBody.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
-        <th style="padding:7px 10px;text-align:left;">유종</th>
-        <th style="padding:7px 10px;text-align:right;">판매량</th>
-        <th style="padding:7px 10px;text-align:right;">평균단가</th>
-        <th style="padding:7px 10px;text-align:right;">매출액</th>
+        ${th('유종')}${th('판매량',true)}${th('평균판매가',true)}${th('평균매입가',true)}${th('영업이익',true)}${th('매출액',true)}
       </tr></thead>
       <tbody>${rows.join('')}</tbody>
     </table>`;
+  }
+
+  // 지출 Top5
+  const expTop5El = document.getElementById('summary-expense-top5');
+  if (expTop5El) {
+    if (!data.expenseTop5?.length) {
+      expTop5El.innerHTML = '<div style="padding:16px;text-align:center;color:#94a3b8;">지출 데이터 없음</div>';
+    } else {
+      const maxAmt = data.expenseTop5[0].amount;
+      const rows = data.expenseTop5.map((e, i) => {
+        const barPct = maxAmt > 0 ? (e.amount / maxAmt * 100).toFixed(0) : 0;
+        return `<div style="padding:8px 14px;${i>0?'border-top:1px solid #f1f5f9;':''}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+            <span style="font-size:13px;font-weight:600;">${i+1}. ${e.name}</span>
+            <span style="font-size:13px;color:#1e40af;font-weight:700;">${e.amount.toLocaleString()}원</span>
+          </div>
+          <div style="background:#e2e8f0;border-radius:4px;height:5px;">
+            <div style="background:#3b82f6;border-radius:4px;height:5px;width:${barPct}%;"></div>
+          </div>
+        </div>`;
+      });
+      expTop5El.innerHTML = rows.join('');
+    }
+  }
+
+  // 고객 매출 Top5
+  const custTop5El = document.getElementById('summary-customer-top5');
+  if (custTop5El) {
+    if (!data.customerTop5?.length) {
+      custTop5El.innerHTML = '<div style="padding:16px;text-align:center;color:#94a3b8;">거래 데이터 없음</div>';
+    } else {
+      const rows = data.customerTop5.map((c, i) => {
+        const profitColor = c.profit >= 0 ? '#16a34a' : '#dc2626';
+        return `<div style="padding:8px 14px;${i>0?'border-top:1px solid #f1f5f9;':''}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
+            <span style="font-size:13px;font-weight:600;">${i+1}. ${c.name}</span>
+            <span style="font-size:13px;font-weight:700;">${c.amount.toLocaleString()}원</span>
+          </div>
+          <div style="display:flex;gap:12px;font-size:11px;color:#64748b;flex-wrap:wrap;">
+            <span>판매량 ${c.qty.toLocaleString()}L</span>
+            <span>평균판매가 ${c.avgSellPrice ? c.avgSellPrice.toLocaleString()+'원' : '-'}</span>
+            <span style="color:${profitColor};font-weight:600;">이익 ${c.profit.toLocaleString()}원 (${c.profitPct ?? '-'}%)</span>
+          </div>
+        </div>`;
+      });
+      custTop5El.innerHTML = rows.join('');
+    }
   }
 
 }
