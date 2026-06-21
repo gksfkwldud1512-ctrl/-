@@ -739,6 +739,10 @@ th.sortable.sort-active .sort-icon { color: var(--primary); }
 }
 .input-other-cost:focus { outline: none; border-color: var(--primary); }
 
+/* 고객판매현황 정렬 헤더 */
+.cust-th:hover { background: #e2e8f0 !important; }
+#cust-sales-body table tbody tr:hover td { background: #f0f9ff; }
+
 /* 고객판매현황 필터 버튼 */
 .btn-filter {
   padding: 4px 12px;

@@ -2137,12 +2137,56 @@ function initSummaryYearMonth() {
 }
 
 // ── 고객판매현황 ──────────────────────────────────────────────
-let custSalesState = { filter: '전체', data: [], avgBuy: {} };
+let custSalesState = { filter: '전체', data: [], avgBuy: {}, sortKey: 'totalAmount', sortDir: 'desc' };
 
 function setCustFilter(payType, btn) {
   custSalesState.filter = payType;
   document.querySelectorAll('.btn-filter').forEach(b => b.classList.toggle('active', b.dataset.pay === payType));
   renderCustomerSales(custSalesState.data, custSalesState.avgBuy);
+}
+
+function sortCustBy(key) {
+  if (custSalesState.sortKey === key) {
+    custSalesState.sortDir = custSalesState.sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    custSalesState.sortKey = key;
+    custSalesState.sortDir = 'desc';
+  }
+  renderCustomerSales(custSalesState.data, custSalesState.avgBuy);
+}
+
+function calcCustProfit(c, avgBuy) {
+  let profit = 0;
+  for (const [fuel, fd] of Object.entries(c.fuels || {})) {
+    const buy = avgBuy[fuel] || 0;
+    if (buy && fd.qty > 0) profit += fd.amount - fd.qty * buy;
+  }
+  return Math.round(profit);
+}
+
+function sortCustomers(list, avgBuy) {
+  const key = custSalesState.sortKey;
+  const dir = custSalesState.sortDir === 'asc' ? 1 : -1;
+  return [...list].sort((a, b) => {
+    if (key === 'name')    return dir * a.name.localeCompare(b.name);
+    if (key === 'payType') return dir * a.payType.localeCompare(b.payType);
+    if (key === 'totalAmount') return dir * ((a.totalAmount||0) - (b.totalAmount||0));
+    if (key === 'totalQty')    return dir * ((a.totalQty||0) - (b.totalQty||0));
+    if (key === 'totalProfit') return dir * (calcCustProfit(a,avgBuy) - calcCustProfit(b,avgBuy));
+    // 유종별: '경유_qty', '경유_profit', '경유_price' 형식
+    const [fuel, field] = key.split('_');
+    const af = a.fuels?.[fuel] || {};
+    const bf = b.fuels?.[fuel] || {};
+    if (field === 'qty')    return dir * ((af.qty||0) - (bf.qty||0));
+    if (field === 'price')  return dir * ((af.avgPrice||0) - (bf.avgPrice||0));
+    if (field === 'profit') {
+      const buy = avgBuy[fuel] || 0;
+      const ap = buy ? Math.round((af.amount||0) - (af.qty||0)*buy) : 0;
+      const bp = buy ? Math.round((bf.amount||0) - (bf.qty||0)*buy) : 0;
+      return dir * (ap - bp);
+    }
+    return 0;
+  });
 }
 
 async function loadCustomerSales() {
@@ -2169,7 +2213,7 @@ function renderCustomerSales(customers, avgBuy) {
   if (!body) return;
 
   const filter = custSalesState.filter;
-  const filtered = filter === '전체' ? customers
+  let filtered = filter === '전체' ? customers
     : customers.filter(c => c.payType === filter);
 
   if (!filtered.length) {
@@ -2177,100 +2221,121 @@ function renderCustomerSales(customers, avgBuy) {
     return;
   }
 
-  const FUELS = ['경유','휘발유','등유'];
-  const fmtL  = v => v > 0 ? Math.floor(v).toLocaleString() : '-';
-  const fmtW  = v => v > 0 ? Math.round(v).toLocaleString()+'원' : '-';
-  const fmtP  = v => v != null ? v.toLocaleString()+'원' : '-';
+  filtered = sortCustomers(filtered, avgBuy);
 
-  // 합계 행 계산
-  const totals = { qty: {}, amount: {}, revenue: 0, profit: 0 };
-  FUELS.forEach(f => { totals.qty[f] = 0; totals.amount[f] = 0; });
+  const FUELS = ['경유','휘발유','등유'];
+  const w  = v => v != null && v !== 0 ? Math.round(v).toLocaleString()+'원' : '-';
+  const L  = v => v > 0 ? Math.floor(v).toLocaleString()+'L' : '-';
+
+  // 정렬 헤더 생성
+  const sk = custSalesState.sortKey;
+  const sd = custSalesState.sortDir;
+  const arrow = (key) => sk === key ? (sd === 'desc' ? ' ▼' : ' ▲') : '';
+  const th = (label, key, align='right', extra='') =>
+    `<th class="cust-th" onclick="sortCustBy('${key}')" style="padding:7px 6px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;white-space:nowrap;font-size:11px;text-align:${align};cursor:pointer;${extra}">${label}${arrow(key)}</th>`;
+
+  // 유종 색상
+  const FUEL_COLOR = { '경유':'#3b82f6', '휘발유':'#f97316', '등유':'#22c55e' };
+
+  // 합계 계산
+  const totQty = {}, totAmt = {};
+  FUELS.forEach(f => { totQty[f] = 0; totAmt[f] = 0; });
+  let totRevenue = 0, totProfit = 0;
 
   const rows = filtered.map((c, idx) => {
-    let custProfit = 0;
+    const custProfit = calcCustProfit(c, avgBuy);
+    totRevenue += c.totalAmount;
+    totProfit  += custProfit;
+
     const fuelCells = FUELS.map(fuel => {
-      const fd = c.fuels?.[fuel] || {};
+      const fd  = c.fuels?.[fuel] || {};
       const qty = fd.qty || 0;
-      const amt = fd.amount || 0;
-      const avg = fd.avgPrice;
-      const buy = avgBuy[fuel] || null;
-      const fp  = buy && qty > 0 ? amt - qty * buy : null;
-      if (fp != null) custProfit += fp;
-      totals.qty[fuel]    += qty;
-      totals.amount[fuel] += amt;
-      return `<td style="text-align:right;">${fmtL(qty)}</td>
-              <td style="text-align:right;">${fmtL(Math.floor(qty/200))}</td>
-              <td style="text-align:right;">${fmtP(avg)}</td>
-              <td style="text-align:right;">${buy ? buy.toLocaleString()+'원' : '-'}</td>
-              <td style="text-align:right;${fp!=null?(fp>=0?'color:#16a34a':'color:#dc2626'):''};font-weight:600;">${fp!=null?fp.toLocaleString()+'원':'-'}</td>`;
+      const buy = avgBuy[fuel] || 0;
+      const fp  = buy && qty > 0 ? Math.round(fd.amount - qty * buy) : null;
+      const sellP = fd.avgPrice;
+      totQty[fuel] += qty;
+      totAmt[fuel] += fd.amount || 0;
+      const fpStyle = fp != null ? (fp >= 0 ? 'color:#16a34a' : 'color:#dc2626') : 'color:#94a3b8';
+      return `<td style="text-align:right;padding:6px 5px;">${L(qty)}</td>
+              <td style="text-align:right;padding:6px 5px;">${w(sellP)}</td>
+              <td style="text-align:right;padding:6px 5px;">${buy ? buy.toLocaleString()+'원' : '-'}</td>
+              <td style="text-align:right;padding:6px 5px;${fpStyle};font-weight:600;">${fp != null ? Math.round(fp).toLocaleString()+'원' : '-'}</td>`;
     });
-    totals.revenue += c.totalAmount;
-    totals.profit  += custProfit;
 
     const pfColor = custProfit >= 0 ? '#16a34a' : '#dc2626';
-    const pfPct   = c.totalAmount > 0 ? (custProfit/c.totalAmount*100).toFixed(1)+'%' : '-';
-    const badge   = c.payType === '외상'    ? '<span style="background:#dbeafe;color:#1e40af;padding:1px 7px;border-radius:10px;font-size:11px;">외상</span>'
-                  : c.payType === '신용카드' ? '<span style="background:#fce7f3;color:#9d174d;padding:1px 7px;border-radius:10px;font-size:11px;">카드</span>'
-                  : '<span style="background:#f3f4f6;color:#374151;padding:1px 7px;border-radius:10px;font-size:11px;">현금</span>';
-    return `<tr>
-      <td style="text-align:center;color:#94a3b8;font-size:12px;">${idx+1}</td>
-      <td style="font-weight:600;white-space:nowrap;">${c.name}</td>
-      <td style="text-align:center;">${badge}</td>
+    const pfPct   = c.totalAmount > 0 ? (custProfit/c.totalAmount*100).toFixed(1) : '-';
+    const badge   = c.payType === '외상'
+      ? '<span style="background:#dbeafe;color:#1e40af;padding:2px 7px;border-radius:10px;font-size:11px;white-space:nowrap;font-weight:600;">외상</span>'
+      : c.payType === '신용카드'
+      ? '<span style="background:#fce7f3;color:#9d174d;padding:2px 7px;border-radius:10px;font-size:11px;white-space:nowrap;font-weight:600;">카드</span>'
+      : '<span style="background:#f3f4f6;color:#374151;padding:2px 7px;border-radius:10px;font-size:11px;white-space:nowrap;font-weight:600;">현금</span>';
+
+    return `<tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="text-align:center;color:#94a3b8;font-size:11px;padding:6px 4px;">${idx+1}</td>
+      <td style="font-weight:600;white-space:nowrap;padding:6px 6px;font-size:12px;">${c.name}</td>
+      <td style="text-align:center;padding:6px 4px;">${badge}</td>
       ${fuelCells.join('')}
-      <td style="text-align:right;font-weight:700;">${c.totalAmount>0?c.totalAmount.toLocaleString()+'원':'-'}</td>
-      <td style="text-align:right;font-weight:700;color:${pfColor};">${custProfit?custProfit.toLocaleString()+'원':'-'}<br><small>${pfPct}</small></td>
+      <td style="text-align:right;font-weight:700;padding:6px 6px;border-left:1px solid #e2e8f0;">${Math.round(c.totalAmount).toLocaleString()}원</td>
+      <td style="text-align:right;font-weight:700;padding:6px 6px;color:${pfColor};">${Math.round(custProfit).toLocaleString()}원</td>
+      <td style="text-align:right;padding:6px 6px;font-size:11px;color:${pfColor};">${pfPct}%</td>
     </tr>`;
   });
 
-  // 합계 행
-  const totPfColor = totals.profit >= 0 ? '#16a34a' : '#dc2626';
+  // 합계행
   const totFuelCells = FUELS.map(fuel => {
-    const qty = totals.qty[fuel];
-    const amt = totals.amount[fuel];
+    const qty = totQty[fuel];
+    const amt = totAmt[fuel];
+    const buy = avgBuy[fuel] || 0;
     const avgSell = qty > 0 ? Math.round(amt/qty) : null;
-    const buy = avgBuy[fuel] || null;
-    const fp  = buy && qty > 0 ? amt - qty * buy : null;
-    return `<td style="text-align:right;font-weight:700;">${fmtL(qty)}</td>
-            <td style="text-align:right;font-weight:700;">${fmtL(Math.floor(qty/200))}</td>
-            <td style="text-align:right;font-weight:700;">${avgSell?avgSell.toLocaleString()+'원':'-'}</td>
-            <td style="text-align:right;font-weight:700;">${buy?buy.toLocaleString()+'원':'-'}</td>
-            <td style="text-align:right;font-weight:700;color:${fp!=null?(fp>=0?'#16a34a':'#dc2626'):'inherit'};">${fp!=null?fp.toLocaleString()+'원':'-'}</td>`;
+    const fp = buy && qty > 0 ? Math.round(amt - qty*buy) : null;
+    const fpStyle = fp != null ? (fp>=0?'color:#16a34a':'color:#dc2626') : '';
+    return `<td style="text-align:right;padding:7px 5px;font-weight:700;">${L(qty)}</td>
+            <td style="text-align:right;padding:7px 5px;font-weight:700;">${avgSell?avgSell.toLocaleString()+'원':'-'}</td>
+            <td style="text-align:right;padding:7px 5px;font-weight:700;">${buy?buy.toLocaleString()+'원':'-'}</td>
+            <td style="text-align:right;padding:7px 5px;font-weight:700;${fpStyle}">${fp!=null?fp.toLocaleString()+'원':'-'}</td>`;
   }).join('');
+  const totPfColor = totProfit >= 0 ? '#16a34a' : '#dc2626';
+  const totPct = totRevenue > 0 ? (totProfit/totRevenue*100).toFixed(1) : '-';
 
-  const thStyle = 'padding:7px 8px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;white-space:nowrap;font-size:12px;';
-  const fuelHeaders = FUELS.map(f => `
-    <th colspan="5" style="${thStyle}text-align:center;border-left:2px solid #e2e8f0;">${f}</th>`).join('');
-  const fuelSubHeaders = FUELS.map(f => `
-    <th style="${thStyle}text-align:right;">수량(L)</th>
-    <th style="${thStyle}text-align:right;">드럼</th>
-    <th style="${thStyle}text-align:right;">판매가</th>
-    <th style="${thStyle}text-align:right;">매입가</th>
-    <th style="${thStyle}text-align:right;">영업이익</th>`).join('');
+  // 유종 헤더 그룹
+  const fuelGroupTh = FUELS.map(f =>
+    `<th colspan="4" style="padding:6px;background:#f8fafc;border-bottom:1px solid #e2e8f0;text-align:center;font-size:11px;font-weight:700;color:${FUEL_COLOR[f]};border-left:1px solid #e2e8f0;">${f}</th>`
+  ).join('');
+  const fuelSubTh = FUELS.map(f => `
+    ${th('수량(L)', f+'_qty','right','border-left:1px solid #e2e8f0;')}
+    ${th('판매가', f+'_price')}
+    ${th('매입가', f+'_buy')}
+    ${th('영업이익', f+'_profit')}`
+  ).join('');
 
   body.innerHTML = `
-    <div style="font-size:12px;color:#94a3b8;padding:6px 12px;">${filtered.length}개 업체</div>
-    <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:1200px;">
+    <div style="font-size:12px;color:#64748b;padding:5px 12px 3px;">${filtered.length}개 업체</div>
+    <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
       <thead>
         <tr>
-          <th style="${thStyle}text-align:center;" rowspan="2">#</th>
-          <th style="${thStyle}text-align:left;" rowspan="2">업체명</th>
-          <th style="${thStyle}text-align:center;" rowspan="2">구분</th>
-          ${fuelHeaders}
-          <th style="${thStyle}text-align:right;border-left:2px solid #e2e8f0;" rowspan="2">총 매출</th>
-          <th style="${thStyle}text-align:right;" rowspan="2">영업이익</th>
+          <th rowspan="2" style="padding:6px 4px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;font-size:11px;text-align:center;">#</th>
+          ${th('업체명','name','left','rowspan:2;')}
+          ${th('구분','payType','center','rowspan:2;')}
+          ${fuelGroupTh}
+          <th rowspan="2" style="padding:6px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;font-size:11px;text-align:right;border-left:1px solid #e2e8f0;">총 매출</th>
+          ${th('영업이익','totalProfit','right')}
+          ${th('이익률','totalProfit','right')}
         </tr>
-        <tr>${fuelSubHeaders}</tr>
+        <tr>${fuelSubTh}</tr>
       </thead>
       <tbody>${rows.join('')}</tbody>
       <tfoot>
         <tr style="background:#f1f5f9;border-top:2px solid #94a3b8;">
-          <td colspan="3" style="padding:7px 10px;font-weight:700;">합계</td>
+          <td colspan="3" style="padding:7px 8px;font-weight:700;font-size:12px;">합계</td>
           ${totFuelCells}
-          <td style="text-align:right;font-weight:700;">${totals.revenue>0?totals.revenue.toLocaleString()+'원':'-'}</td>
-          <td style="text-align:right;font-weight:700;color:${totPfColor};">${totals.profit?totals.profit.toLocaleString()+'원':'-'}</td>
+          <td style="text-align:right;padding:7px 6px;font-weight:700;border-left:1px solid #e2e8f0;">${Math.round(totRevenue).toLocaleString()}원</td>
+          <td style="text-align:right;padding:7px 6px;font-weight:700;color:${totPfColor};">${Math.round(totProfit).toLocaleString()}원</td>
+          <td style="text-align:right;padding:7px 6px;font-size:11px;color:${totPfColor};">${totPct}%</td>
         </tr>
       </tfoot>
-    </table>`;
+    </table>
+    </div>`;
 }
 
 async function rebuildCustomerSales() {
