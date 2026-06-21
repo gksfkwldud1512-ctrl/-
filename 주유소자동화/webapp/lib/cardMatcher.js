@@ -48,6 +48,7 @@ function matchCards(bosCards, easyCards) {
         cardCompany: easyTx.cardCompany,
         cardNo:      easyTx.cardNo,
         product:     easyTx.fuel,
+        transTime:   easyTx.transTime || '',
         bosAmount:   null,
         easyAmount:  easyTx.amount,
         diff:        -easyTx.amount,

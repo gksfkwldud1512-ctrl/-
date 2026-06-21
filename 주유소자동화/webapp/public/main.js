@@ -1861,6 +1861,7 @@ function buildMatchingModal(date) {
       <table class="error-table">
         <thead><tr>
           <th>승인번호</th><th>카드사</th><th>카드번호</th><th>유종</th>
+          ${type === 'easy_only' ? '<th>결제시간</th>' : ''}
           ${type === 'amount_mismatch'
             ? '<th>BOS 금액</th><th>이지샵 금액</th><th>차액</th>'
             : `<th>${type === 'bos_only' ? 'BOS' : '이지샵'} 금액</th>`}
@@ -1870,6 +1871,7 @@ function buildMatchingModal(date) {
           <td>${esc(e.cardCompany)}</td>
           <td><code>${esc(e.cardNo)}</code></td>
           <td>${esc(e.product || e.fuel || '')}</td>
+          ${type === 'easy_only' ? `<td style="color:#64748b;font-size:12px;">${esc(e.transTime || '-')}</td>` : ''}
           ${type === 'amount_mismatch'
             ? `<td>${e.bosAmount.toLocaleString()}원</td>
                <td>${e.easyAmount.toLocaleString()}원</td>
