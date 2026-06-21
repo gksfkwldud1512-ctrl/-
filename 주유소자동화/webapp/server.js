@@ -1296,15 +1296,14 @@ app.post('/api/daily/upload-bank', upload.single('file'), (req, res) => {
 
 // ── 월간 보고서 HTML 내보내기 (카카오톡 파일 공유용) ─────────────
 app.get('/api/export-html/:yearMonth', async (req, res) => {
-  const ym = req.params.yearMonth; // "2026-05"
+  const ym = req.params.yearMonth;
   const [yy, mm] = ym.split('-');
 
-  // 로컬 API 호출 헬퍼
-  function fetchLocal(path) {
+  function fetchLocal(p) {
     return new Promise((resolve, reject) => {
       const http = require('http');
       let data = '';
-      http.get(`http://127.0.0.1:${PORT}${path}`, r => {
+      http.get(`http://127.0.0.1:${PORT}${p}`, r => {
         r.on('data', c => { data += c; });
         r.on('end', () => { try { resolve(JSON.parse(data)); } catch(e) { resolve({}); } });
       }).on('error', reject);
@@ -1312,17 +1311,18 @@ app.get('/api/export-html/:yearMonth', async (req, res) => {
   }
 
   try {
-    const [summary, custRes] = await Promise.all([
+    const [summary, expRes, custRes] = await Promise.all([
       fetchLocal(`/api/summary/${ym}`),
+      fetchLocal(`/api/expenses?month=${ym}`),
       fetchLocal(`/api/daily/customer-sales?month=${ym}`),
     ]);
     if (!summary.ok) return res.status(500).send('데이터 조회 실패');
 
-    // custTop5를 summary에 병합
-    summary.custAll = custRes.customers || [];
-
     const generatedAt = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-    const dataJson = JSON.stringify(summary).replace(/<\/script>/g, '<\\/script>');
+    const esc = s => JSON.stringify(s).replace(/<\/script>/g, '<\\/script>');
+    const DS  = esc(summary);
+    const DE  = esc(expRes.expenses || []);
+    const DC  = esc(custRes.customers || []);
 
     const html = `<!DOCTYPE html>
 <html lang="ko">
@@ -1331,114 +1331,193 @@ app.get('/api/export-html/:yearMonth', async (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>미소주유소 ${yy}년 ${mm}월 월간 보고서</title>
   <meta property="og:title" content="미소주유소 ${yy}년 ${mm}월 월간 보고서">
-  <meta property="og:description" content="유종별 매출, 영업이익, 고객현황 종합보고">
+  <meta property="og:description" content="유종별 매출 · 지출내역 · 고객현황 종합보고">
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; font-size: 14px; }
-    header { background: #1e293b; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; position: sticky; top: 0; z-index: 10; }
-    .logo { font-size: 16px; font-weight: 700; color: #f8fafc; }
-    .sub  { font-size: 11px; color: #64748b; text-align: right; }
-    main  { padding: 12px; }
-    .kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
-    .kpi-card { background: #1e293b; border-radius: 10px; padding: 12px; border: 1px solid #334155; }
-    .kpi-label { font-size: 11px; color: #94a3b8; margin-bottom: 3px; }
-    .kpi-value { font-size: 16px; font-weight: 700; color: #f8fafc; word-break: keep-all; }
-    .kpi-value.pos { color: #4ade80; } .kpi-value.neg { color: #f87171; }
-    .card { background: #1e293b; border-radius: 10px; border: 1px solid #334155; margin-bottom: 12px; overflow: hidden; }
-    .card-head { padding: 11px 14px 9px; font-size: 13px; font-weight: 700; color: #94a3b8; border-bottom: 1px solid #334155; }
-    .fuel-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    .fuel-table th { padding: 7px 10px; text-align: right; color: #94a3b8; font-weight: 600; border-bottom: 1px solid #334155; white-space: nowrap; }
-    .fuel-table th:first-child { text-align: left; }
-    .fuel-table td { padding: 8px 8px; text-align: right; border-bottom: 1px solid #1e3a5f22; color: #cbd5e1; white-space: nowrap; font-size: 12px; }
-    .fuel-table td:first-child { text-align: left; font-weight: 600; color: #f8fafc; }
-    .fuel-table tr.total-row td { background: #334155; font-weight: 700; border-top: 1px solid #475569; border-bottom: none; }
-    .pos { color: #4ade80; } .neg { color: #f87171; }
-    .top5-row { padding: 9px 14px; border-bottom: 1px solid #0f172a; }
-    .top5-row:last-child { border-bottom: none; }
-    .top5-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-    .top5-name { font-size: 13px; font-weight: 600; color: #e2e8f0; }
-    .top5-amt  { font-size: 13px; font-weight: 700; color: #60a5fa; }
-    .bar-bg { background: #334155; border-radius: 3px; height: 4px; }
-    .bar-fill { background: #3b82f6; border-radius: 3px; height: 4px; }
-    .cust-row { padding: 9px 14px; border-bottom: 1px solid #0f172a; }
-    .cust-row:last-child { border-bottom: none; }
-    .cust-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
-    .cust-name { font-size: 13px; font-weight: 600; color: #e2e8f0; }
-    .cust-amt  { font-size: 13px; font-weight: 700; color: #f8fafc; }
-    .cust-detail { font-size: 11px; color: #64748b; display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
-    .empty { padding: 24px; text-align: center; color: #475569; font-size: 13px; }
-    @media (max-width: 360px) { .kpi-value { font-size: 14px; } }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;font-size:14px;padding-bottom:60px}
+    header{background:#1e293b;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #334155;position:sticky;top:0;z-index:20}
+    .logo{font-size:15px;font-weight:700;color:#f8fafc}
+    .sub{font-size:11px;color:#64748b;text-align:right;line-height:1.4}
+    .panel{display:none;padding:12px}
+    .panel.active{display:block}
+    .tab-nav{position:fixed;bottom:0;left:0;right:0;background:#1e293b;border-top:1px solid #334155;display:flex;z-index:30}
+    .tab-nav-btn{flex:1;padding:10px 6px 8px;background:none;border:none;color:#64748b;font-size:11px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:inherit}
+    .tab-nav-btn .ic{font-size:18px}
+    .tab-nav-btn.active{color:#3b82f6;border-top:2px solid #3b82f6}
+    .kpi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px}
+    .kpi-card{background:#1e293b;border-radius:10px;padding:12px;border:1px solid #334155}
+    .kpi-label{font-size:11px;color:#94a3b8;margin-bottom:3px}
+    .kpi-value{font-size:16px;font-weight:700;color:#f8fafc;word-break:keep-all}
+    .kpi-value.pos{color:#4ade80}.kpi-value.neg{color:#f87171}
+    .card{background:#1e293b;border-radius:10px;border:1px solid #334155;margin-bottom:12px;overflow:hidden}
+    .card-head{padding:11px 14px 9px;font-size:13px;font-weight:700;color:#94a3b8;border-bottom:1px solid #334155;display:flex;justify-content:space-between;align-items:center}
+    .card-head-link{font-size:11px;color:#475569;cursor:pointer;text-decoration:underline}
+    .fuel-table{width:100%;border-collapse:collapse;font-size:12px}
+    .fuel-table th{padding:7px 8px;text-align:right;color:#94a3b8;font-weight:600;border-bottom:1px solid #334155;white-space:nowrap}
+    .fuel-table th:first-child{text-align:left}
+    .fuel-table td{padding:8px 8px;text-align:right;border-bottom:1px solid #1e3a5f22;color:#cbd5e1;white-space:nowrap;font-size:12px}
+    .fuel-table td:first-child{text-align:left;font-weight:600;color:#f8fafc}
+    .fuel-table tr.total-row td{background:#334155;font-weight:700;border-top:1px solid #475569;border-bottom:none}
+    .pos{color:#4ade80}.neg{color:#f87171}
+    .top5-row{padding:9px 14px;border-bottom:1px solid #0f172a}
+    .top5-row:last-child{border-bottom:none}
+    .top5-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+    .top5-nm{font-size:13px;font-weight:600;color:#e2e8f0}
+    .top5-am{font-size:13px;font-weight:700;color:#60a5fa}
+    .bar-bg{background:#334155;border-radius:3px;height:4px}
+    .bar-fill{background:#3b82f6;border-radius:3px;height:4px}
+    .cust-row{padding:9px 14px;border-bottom:1px solid #0f172a}
+    .cust-row:last-child{border-bottom:none}
+    .cust-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+    .cust-nm{font-size:13px;font-weight:600;color:#e2e8f0}
+    .cust-am{font-size:13px;font-weight:700;color:#f8fafc}
+    .cust-dt{font-size:11px;color:#64748b;display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}
+    .exp-cat-hd{padding:10px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+    .exp-cat-nm{font-size:13px;font-weight:700;color:#e2e8f0}
+    .exp-cat-am{font-size:13px;font-weight:700;color:#f87171}
+    .exp-items{display:none;background:#0f172a}
+    .exp-items.open{display:block}
+    .exp-item{padding:7px 14px 7px 24px;display:flex;justify-content:space-between;border-top:1px solid #1e293b}
+    .exp-item-l{font-size:12px;color:#94a3b8}
+    .exp-item-d{font-size:10px;color:#475569}
+    .exp-item-a{font-size:12px;color:#fca5a5;font-weight:600;white-space:nowrap}
+    .filter-bar{padding:8px 12px;display:flex;gap:6px;border-bottom:1px solid #334155;background:#1e293b;flex-wrap:wrap}
+    .m-filter{padding:4px 12px;border-radius:16px;border:1px solid #475569;background:transparent;color:#94a3b8;font-size:12px;cursor:pointer}
+    .m-filter.active{background:#3b82f6;border-color:#3b82f6;color:#fff;font-weight:600}
+    .cust-table{width:100%;border-collapse:collapse;font-size:12px}
+    .cust-table th{padding:7px 8px;text-align:right;color:#94a3b8;font-weight:600;border-bottom:1px solid #334155;white-space:nowrap;background:#0f172a}
+    .cust-table th:nth-child(1),.cust-table th:nth-child(2){text-align:center}
+    .cust-table td{padding:8px 8px;text-align:right;border-bottom:1px solid #1e293b;color:#cbd5e1;white-space:nowrap;font-size:12px}
+    .cust-table td:nth-child(1){text-align:center;color:#475569;font-size:11px}
+    .cust-table td:nth-child(2){text-align:left;font-weight:600;color:#f8fafc;max-width:120px;overflow:hidden;text-overflow:ellipsis}
+    .badge-c{background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:600}
+    .badge-k{background:#fce7f3;color:#9d174d;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:600}
+    .badge-h{background:#f3f4f6;color:#374151;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:600}
+    .empty{padding:24px;text-align:center;color:#475569;font-size:13px}
+    .sec-lbl{padding:6px 12px 2px;font-size:11px;color:#475569}
+    @media(max-width:360px){.kpi-value{font-size:14px}}
   </style>
 </head>
 <body>
 <header>
   <div class="logo">⛽ 미소주유소</div>
-  <div class="sub">${yy}년 ${mm}월 보고서<br>${generatedAt}</div>
+  <div class="sub">${yy}년 ${mm}월 보고서<br><span style="font-size:10px;">${generatedAt}</span></div>
 </header>
-<main id="main"></main>
+<div id="panel-summary" class="panel active"></div>
+<div id="panel-expense"  class="panel"></div>
+<div id="panel-customer" class="panel"></div>
+<nav class="tab-nav">
+  <button class="tab-nav-btn active" onclick="sw('summary',this)"><span class="ic">📊</span>종합</button>
+  <button class="tab-nav-btn"        onclick="sw('expense',this)"><span class="ic">💰</span>지출내역</button>
+  <button class="tab-nav-btn"        onclick="sw('customer',this)"><span class="ic">👥</span>고객현황</button>
+</nav>
 <script>
-(function() {
-  const d = ${dataJson};
-  const year = '${yy}', month = '${mm}';
-  function fmtW(n) { return n == null ? '-' : Math.round(n).toLocaleString() + '원'; }
-  function fmtL(n) { return n == null ? '-' : Math.floor(n).toLocaleString() + 'L'; }
-  const revenue = d.revenue || 0, profit = d.profit, expense = d.expense || 0, netProfit = d.netProfit;
-  const cost = profit != null ? revenue - profit : null;
-  const margin = netProfit != null && revenue > 0 ? (netProfit / revenue * 100).toFixed(1) + '%' : '-';
-  const kpiItems = [
-    ['총 매출', fmtW(revenue), ''],
-    ['매입원가', fmtW(cost), ''],
-    ['영업이익', fmtW(profit), profit == null ? '' : profit >= 0 ? 'pos' : 'neg'],
-    ['지출', fmtW(expense), ''],
-    ['순이익', fmtW(netProfit), netProfit == null ? '' : netProfit >= 0 ? 'pos' : 'neg'],
-    ['순이익률', margin, netProfit == null ? '' : netProfit >= 0 ? 'pos' : 'neg'],
-  ];
-  let html = '<div class="kpi-grid">';
-  kpiItems.forEach(([label, value, cls]) => {
-    html += '<div class="kpi-card"><div class="kpi-label">' + label + '</div><div class="kpi-value ' + cls + '">' + value + '</div></div>';
+var D=${DS}, EX=${DE}, CU=${DC};
+var AVGBUY=D.avgBuyPriceByFuel||{};
+var CUF='전체';
+
+function sw(tab,btn){
+  ['summary','expense','customer'].forEach(function(t){
+    document.getElementById('panel-'+t).classList.toggle('active',t===tab);
   });
-  html += '</div>';
-  const FUELS = [['경유','#60a5fa'],['휘발유','#fb923c'],['등유','#4ade80']];
-  let salesRows = '', totalFuelQty = 0;
-  FUELS.forEach(([key, color]) => {
-    const amt = d.sales?.[key] || 0, qty = d.qty?.[key] || 0;
-    const drums = Math.floor(qty / 200);
-    totalFuelQty += qty;
-    const avgSell = qty > 0 ? Math.round(amt / qty) : null;
-    const avgBuy = d.avgBuyPriceByFuel?.[key] || null;
-    const fp = d.profitByFuel?.[key] ?? null;
-    const fpPct = fp != null && amt > 0 ? (fp / amt * 100).toFixed(1) + '%' : '-';
-    const fpCls = fp == null ? '' : fp >= 0 ? 'pos' : 'neg';
-    salesRows += '<tr><td style="color:' + color + ';">' + key + '</td><td>' + (qty > 0 ? Math.floor(qty).toLocaleString() + 'L <span style="color:#64748b;font-size:10px;">(' + drums + '드럼)</span>' : '-') + '</td><td>' + (avgSell ? avgSell.toLocaleString() + '원' : '-') + '</td><td>' + (avgBuy ? avgBuy.toLocaleString() + '원' : '-') + '</td><td class="' + fpCls + '">' + (fp != null ? Math.round(fp).toLocaleString() + '원 <span style="font-size:10px;">(' + fpPct + ')</span>' : '-') + '</td></tr>';
+  document.querySelectorAll('.tab-nav-btn').forEach(function(b){b.classList.remove('active')});
+  if(btn)btn.classList.add('active');
+}
+function fmtW(n){return n==null?'-':Math.round(n).toLocaleString()+'원'}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+/* ── 종합 ── */
+(function(){
+  var d=D, revenue=d.revenue||0, profit=d.profit, expense=d.expense||0, netProfit=d.netProfit;
+  var cost=profit!=null?revenue-profit:null;
+  var margin=netProfit!=null&&revenue>0?(netProfit/revenue*100).toFixed(1)+'%':'-';
+  var kpi=[['총 매출',fmtW(revenue),''],['매입원가',fmtW(cost),''],['영업이익',fmtW(profit),profit==null?'':profit>=0?'pos':'neg'],['지출',fmtW(expense),''],['순이익',fmtW(netProfit),netProfit==null?'':netProfit>=0?'pos':'neg'],['순이익률',margin,netProfit==null?'':netProfit>=0?'pos':'neg']];
+  var h='<div class="kpi-grid">';
+  kpi.forEach(function(k){h+='<div class="kpi-card"><div class="kpi-label">'+k[0]+'</div><div class="kpi-value '+k[2]+'">'+k[1]+'</div></div>';});
+  h+='</div>';
+  var FUELS=[['경유','#60a5fa'],['휘발유','#fb923c'],['등유','#4ade80']];
+  var sr='',tq=0;
+  FUELS.forEach(function(f){
+    var key=f[0],color=f[1];
+    var amt=d.sales[key]||0,qty=d.qty[key]||0,drums=Math.floor(qty/200);
+    tq+=qty;
+    var avgS=qty>0?Math.round(amt/qty):null,avgB=AVGBUY[key]||null;
+    var fp=d.profitByFuel?d.profitByFuel[key]:null;
+    var fpP=fp!=null&&amt>0?(fp/amt*100).toFixed(1)+'%':'-';
+    var fc=fp==null?'':fp>=0?'pos':'neg';
+    sr+='<tr><td style="color:'+color+';">'+key+'</td><td>'+(qty>0?Math.floor(qty).toLocaleString()+'L <span style="color:#64748b;font-size:10px;">('+drums+'드럼)</span>':'-')+'</td><td>'+(avgS?avgS.toLocaleString()+'원':'-')+'</td><td>'+(avgB?avgB.toLocaleString()+'원':'-')+'</td><td class="'+fc+'">'+(fp!=null?Math.round(fp).toLocaleString()+'원 <span style="font-size:10px;">('+fpP+')</span>':'-')+'</td></tr>';
   });
-  const etcAmt = (d.sales?.carwash || 0) + (d.sales?.others || 0);
-  const totDrums = Math.floor(totalFuelQty / 200);
-  salesRows += '<tr class="total-row"><td>합계</td><td>' + Math.floor(totalFuelQty).toLocaleString() + 'L <span style="font-size:10px;color:#94a3b8;">(' + totDrums + '드럼)</span></td><td>-</td><td>-</td><td class="' + (profit == null ? '' : profit >= 0 ? 'pos' : 'neg') + '">' + fmtW(profit) + '</td></tr>';
-  html += '<div class="card"><div class="card-head">유종별 판매 현황</div><div style="overflow-x:auto;"><table class="fuel-table"><thead><tr><th>유종</th><th>판매량</th><th>판매가</th><th>매입가</th><th>영업이익</th></tr></thead><tbody>' + salesRows + '</tbody></table></div>' + (etcAmt > 0 ? '<div style="padding:8px 12px;font-size:12px;color:#64748b;border-top:1px solid #334155;">세차+유외상품 ' + fmtW(etcAmt) + '</div>' : '') + '</div>';
-  let expH = '<div class="card"><div class="card-head">지출 Top 5</div>';
-  if (d.expenseTop5?.length) {
-    const maxA = d.expenseTop5[0].amount;
-    d.expenseTop5.forEach((e, i) => {
-      const bp = maxA > 0 ? (e.amount / maxA * 100).toFixed(0) : 0;
-      expH += '<div class="top5-row"><div class="top5-header"><span class="top5-name">' + (i+1) + '. ' + e.name + '</span><span class="top5-amt">' + e.amount.toLocaleString() + '원</span></div><div class="bar-bg"><div class="bar-fill" style="width:' + bp + '%;"></div></div></div>';
-    });
-  } else expH += '<div class="empty">지출 데이터 없음</div>';
-  expH += '</div>';
-  html += expH;
-  function top5Card(title, list) {
-    let h = '<div class="card"><div class="card-head">' + title + '</div>';
-    if (list?.length) {
-      list.forEach((c, i) => {
-        const cls = (c.profit ?? 0) >= 0 ? 'pos' : 'neg';
-        h += '<div class="cust-row"><div class="cust-header"><span class="cust-name">' + (i+1) + '. ' + c.name + '</span><span class="cust-amt">' + Math.round(c.amount).toLocaleString() + '원</span></div><div class="cust-detail"><span>' + (c.qty ? c.qty.toLocaleString() + 'L' : '-') + '</span><span>판매가 ' + (c.avgSellPrice ? c.avgSellPrice.toLocaleString() + '원' : '-') + '</span><span class="' + cls + '">이익 ' + (c.profit != null ? Math.round(c.profit).toLocaleString() + '원' : '-') + ' (' + (c.profitPct ?? '-') + '%)</span></div></div>';
-      });
-    } else h += '<div class="empty">데이터 없음</div>';
-    return h + '</div>';
+  var td=Math.floor(tq/200);
+  var pc=profit==null?'':profit>=0?'pos':'neg';
+  sr+='<tr class="total-row"><td>합계</td><td>'+Math.floor(tq).toLocaleString()+'L <span style="font-size:10px;color:#94a3b8;">('+td+'드럼)</span></td><td>-</td><td>-</td><td class="'+pc+'">'+fmtW(profit)+'</td></tr>';
+  var ea=(d.sales.carwash||0)+(d.sales.others||0);
+  h+='<div class="card"><div class="card-head">유종별 판매 현황</div><div style="overflow-x:auto;"><table class="fuel-table"><thead><tr><th>유종</th><th>판매량</th><th>판매가</th><th>매입가</th><th>영업이익</th></tr></thead><tbody>'+sr+'</tbody></table></div>'+(ea>0?'<div style="padding:8px 12px;font-size:12px;color:#64748b;border-top:1px solid #334155;">세차+유외상품 '+fmtW(ea)+'</div>':'')+'</div>';
+  /* 지출 Top5 */
+  var eh='<div class="card"><div class="card-head">지출 Top 5 <span class="card-head-link" onclick="sw(\'expense\',document.querySelectorAll(\'.tab-nav-btn\')[1])">전체보기 →</span></div>';
+  if(d.expenseTop5&&d.expenseTop5.length){
+    var maxA=d.expenseTop5[0].amount;
+    d.expenseTop5.forEach(function(e,i){var bp=maxA>0?(e.amount/maxA*100).toFixed(0):0;eh+='<div class="top5-row"><div class="top5-hd"><span class="top5-nm">'+(i+1)+'. '+esc(e.name)+'</span><span class="top5-am">'+e.amount.toLocaleString()+'원</span></div><div class="bar-bg"><div class="bar-fill" style="width:'+bp+'%;"></div></div></div>';});
+  }else eh+='<div class="empty">지출 데이터 없음</div>';
+  eh+='</div>';h+=eh;
+  /* 고객 Top5 */
+  function t5c(title,list,tabIdx){
+    var s='<div class="card"><div class="card-head">'+title+' <span class="card-head-link" onclick="sw(\'customer\',document.querySelectorAll(\'.tab-nav-btn\')['+tabIdx+'])">전체보기 →</span></div>';
+    if(list&&list.length){list.forEach(function(c,i){var cls=(c.profit||0)>=0?'pos':'neg';s+='<div class="cust-row"><div class="cust-hd"><span class="cust-nm">'+(i+1)+'. '+esc(c.name)+'</span><span class="cust-am">'+Math.round(c.amount).toLocaleString()+'원</span></div><div class="cust-dt"><span>'+(c.qty?c.qty.toLocaleString()+'L':'-')+'</span><span>판매가 '+(c.avgSellPrice?c.avgSellPrice.toLocaleString()+'원':'-')+'</span><span class="'+cls+'">이익 '+(c.profit!=null?Math.round(c.profit).toLocaleString()+'원':'-')+' ('+(c.profitPct||'-')+'%)</span></div></div>';});}
+    else s+='<div class="empty">데이터 없음</div>';
+    return s+'</div>';
   }
-  html += top5Card('외상 고객 Top 5', d.customerTop5);
-  html += top5Card('카드 고객 Top 5', d.cardTop5);
-  document.getElementById('main').innerHTML = html;
+  h+=t5c('외상 고객 Top 5',d.customerTop5,2);
+  h+=t5c('카드 고객 Top 5',d.cardTop5,2);
+  document.getElementById('panel-summary').innerHTML=h;
 })();
+
+/* ── 지출내역 ── */
+(function(){
+  var list=EX;
+  if(!list||!list.length){document.getElementById('panel-expense').innerHTML='<div class="empty">지출 데이터 없음</div>';return;}
+  var total=list.reduce(function(s,e){return s+(e.amount||0);},0);
+  var groups={};
+  list.forEach(function(e){var k=e.subCategory||e.category||'기타';if(!groups[k])groups[k]={amount:0,items:[]};groups[k].amount+=e.amount||0;groups[k].items.push(e);});
+  var sorted=Object.entries(groups).sort(function(a,b){return b[1].amount-a[1].amount;});
+  var maxA=sorted[0][1].amount;
+  var h='<div class="sec-lbl">${yy}년 ${mm}월 · 총 '+list.length+'건</div><div class="card"><div class="card-head">총 지출 <span style="color:#f87171;font-weight:700;">'+total.toLocaleString()+'원</span></div>';
+  sorted.forEach(function(entry,idx){
+    var catName=entry[0],catData=entry[1];
+    var bp=maxA>0?(catData.amount/maxA*100).toFixed(0):0;
+    var cid='ec_'+idx;
+    h+='<div style="border-bottom:1px solid #0f172a;"><div class="exp-cat-hd" onclick="tgl(\''+cid+'\',this)"><span class="exp-cat-nm">▶ '+esc(catName)+' <span style="font-size:11px;color:#64748b;">('+catData.items.length+'건)</span></span><span class="exp-cat-am">'+catData.amount.toLocaleString()+'원</span></div><div style="padding:0 14px 6px;"><div class="bar-bg"><div class="bar-fill" style="width:'+bp+'%;background:#ef4444;"></div></div></div><div class="exp-items" id="'+cid+'">';
+    catData.items.sort(function(a,b){return b.date.localeCompare(a.date);}).forEach(function(e){h+='<div class="exp-item"><div class="exp-item-l"><div>'+esc(e.vendor||'-')+'</div><div class="exp-item-d">'+e.date+'</div></div><div class="exp-item-a">'+((e.amount||0).toLocaleString())+'원</div></div>';});
+    h+='</div></div>';
+  });
+  h+='</div>';
+  document.getElementById('panel-expense').innerHTML=h;
+})();
+function tgl(id,btn){var el=document.getElementById(id);var op=el.classList.toggle('open');var nm=btn.querySelector('.exp-cat-nm');nm.textContent=(op?'▼':'▶')+nm.textContent.slice(1);}
+
+/* ── 고객현황 ── */
+function renderCust(){
+  var list=CU;
+  if(!list||!list.length){document.getElementById('panel-customer').innerHTML='<div class="empty">고객 데이터 없음</div>';return;}
+  var filtered=CUF==='전체'?list:CUF==='외상'?list.filter(function(c){return c.payType==='외상';}):CUF==='카드'?list.filter(function(c){return c.payType==='신용카드';}):list.filter(function(c){return c.payType==='현금';});
+  var tot={qty:0,amt:0,profit:0};
+  var rows=filtered.map(function(c,i){
+    var cp=0;
+    Object.entries(c.fuels||{}).forEach(function(f){var buy=AVGBUY[f[0]]||0;if(buy&&f[1].qty>0)cp+=f[1].amount-f[1].qty*buy;});
+    cp=Math.round(cp);
+    var qty=c.totalQty||0,avgS=qty>0?Math.round(c.totalAmount/qty):null;
+    var pct=c.totalAmount>0?(cp/c.totalAmount*100).toFixed(1):'-';
+    var pc=cp>=0?'pos':'neg';
+    tot.qty+=qty;tot.amt+=c.totalAmount;tot.profit+=cp;
+    var badge=c.payType==='외상'?'<span class="badge-c">외상</span>':c.payType==='신용카드'?'<span class="badge-k">카드</span>':'<span class="badge-h">현금</span>';
+    return '<tr><td>'+(i+1)+'</td><td title="'+esc(c.name)+'">'+esc(c.name)+'</td><td style="text-align:center;">'+badge+'</td><td>'+(qty>0?Math.floor(qty).toLocaleString()+'L':'-')+'</td><td>'+(avgS?avgS.toLocaleString()+'원':'-')+'</td><td style="font-weight:600;">'+Math.round(c.totalAmount).toLocaleString()+'원</td><td class="'+pc+'" style="font-weight:700;">'+cp.toLocaleString()+'원</td><td class="'+pc+'" style="font-size:11px;">'+pct+'%</td></tr>';
+  });
+  var tp=tot.profit>=0?'pos':'neg';
+  var tpct=tot.amt>0?(tot.profit/tot.amt*100).toFixed(1):'-';
+  var fb=['전체','외상','카드','현금'];
+  var fl=fb.map(function(f){return '<button class="m-filter'+(CUF===f?' active':'')+'" onclick="CUF=\''+f+'\';renderCust()">'+f+'</button>';}).join('');
+  document.getElementById('panel-customer').innerHTML='<div class="filter-bar">'+fl+'<span style="margin-left:auto;font-size:11px;color:#475569;align-self:center;">'+filtered.length+'개 업체</span></div><div style="overflow-x:auto;"><table class="cust-table"><thead><tr><th>#</th><th>업체명</th><th>구분</th><th>판매량</th><th>판매가</th><th>매출</th><th>영업이익</th><th>이익률</th></tr></thead><tbody>'+rows.join('')+'</tbody><tfoot><tr style="background:#1e293b;font-weight:700;border-top:1px solid #475569;"><td colspan="3" style="padding:8px;color:#94a3b8;text-align:left;">합계</td><td>'+(tot.qty>0?Math.floor(tot.qty).toLocaleString()+'L':'-')+'</td><td>-</td><td>'+Math.round(tot.amt).toLocaleString()+'원</td><td class="'+tp+'" style="font-weight:700;">'+Math.round(tot.profit).toLocaleString()+'원</td><td class="'+tp+'" style="font-size:11px;">'+tpct+'%</td></tr></tfoot></table></div>';
+}
+renderCust();
 </script>
 </body>
 </html>`;
