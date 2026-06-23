@@ -41,12 +41,173 @@
 
   <!-- ───── 대분류: 사용방법 ───── -->
   <section id="group-usage" class="group-content">
-    <div class="card placeholder-card">
-      <div class="placeholder-icon">📖</div>
-      <h2>사용방법</h2>
-      <p>이 앱의 사용 방법 안내가 이곳에 표시됩니다.</p>
-      <p class="placeholder-sub">준비 중입니다.</p>
+
+    <!-- 전체 흐름 -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header"><h2>📋 전체 업무 흐름</h2></div>
+      <div style="padding:16px;line-height:2;font-size:14px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px;">
+            <div style="font-weight:700;color:#15803d;margin-bottom:8px;">① 일마감 (매일)</div>
+            <ol style="margin:0;padding-left:18px;font-size:13px;color:#374151;line-height:1.8;">
+              <li>BOS 데이터 업로드</li>
+              <li>이지샵 카드내역 업로드</li>
+              <li>매입단가·입고이력 확인/수정</li>
+              <li>카드 대사 확인</li>
+            </ol>
+          </div>
+          <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px;">
+            <div style="font-weight:700;color:#1d4ed8;margin-bottom:8px;">② 월마감 (월 1회)</div>
+            <ol style="margin:0;padding-left:18px;font-size:13px;color:#374151;line-height:1.8;">
+              <li>BOS 월별 파일 업로드</li>
+              <li>거래명세서 발행 &amp; 이메일 발송</li>
+              <li>세금계산서 일괄발행 Excel 생성</li>
+              <li>홈택스 일괄발행 업로드</li>
+            </ol>
+          </div>
+          <div style="background:#fdf4ff;border:1px solid #e9d5ff;border-radius:8px;padding:14px;">
+            <div style="font-weight:700;color:#7e22ce;margin-bottom:8px;">③ 종합 분석 (수시)</div>
+            <ol style="margin:0;padding-left:18px;font-size:13px;color:#374151;line-height:1.8;">
+              <li>종합 탭 → 년월 선택 → 조회</li>
+              <li>탱크 실재고 업로드 (오차 확인)</li>
+              <li>연간 결과보고서 조회</li>
+              <li>모바일 공유 (카카오톡 전송)</li>
+            </ol>
+          </div>
+        </div>
+      </div>
     </div>
+
+    <!-- 업로드 파일 양식 안내 -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header"><h2>📂 업로드 파일 종류 및 양식</h2></div>
+      <div style="overflow-x:auto;padding:8px 0;">
+        <table style="font-size:13px;min-width:600px;">
+          <thead>
+            <tr style="background:#f8fafc;">
+              <th style="padding:10px 14px;text-align:left;border-bottom:2px solid #e2e8f0;min-width:140px;">파일 종류</th>
+              <th style="padding:10px 14px;text-align:left;border-bottom:2px solid #e2e8f0;">어디서 받나요?</th>
+              <th style="padding:10px 14px;text-align:left;border-bottom:2px solid #e2e8f0;">업로드 위치</th>
+              <th style="padding:10px 14px;text-align:left;border-bottom:2px solid #e2e8f0;">형식</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid #f1f5f9;">
+              <td style="padding:10px 14px;font-weight:600;">BOS 일별 판매내역</td>
+              <td style="padding:10px 14px;color:#64748b;">BOS 시스템 → 판매전표 상세조회</td>
+              <td style="padding:10px 14px;">일마감 탭 → 📂 BOS 데이터 업로드</td>
+              <td style="padding:10px 14px;"><span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 6px;font-size:11px;">.xlsx/.xls</span></td>
+            </tr>
+            <tr style="border-bottom:1px solid #f1f5f9;background:#f8fafc;">
+              <td style="padding:10px 14px;font-weight:600;">이지샵 카드내역</td>
+              <td style="padding:10px 14px;color:#64748b;">이지샵(VAN) → 승인내역 조회 → Excel</td>
+              <td style="padding:10px 14px;">일마감 탭 → 💳 이지샵 카드내역 업로드</td>
+              <td style="padding:10px 14px;"><span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 6px;font-size:11px;">.xlsx/.xls</span></td>
+            </tr>
+            <tr style="border-bottom:1px solid #f1f5f9;">
+              <td style="padding:10px 14px;font-weight:600;">수시입출예금 내역</td>
+              <td style="padding:10px 14px;color:#64748b;">국민은행 → 수시입출예금 입출금내역</td>
+              <td style="padding:10px 14px;">일마감 → 지출목록 탭 → 📥 수시입출예금 업로드</td>
+              <td style="padding:10px 14px;"><span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 6px;font-size:11px;">.xls</span></td>
+            </tr>
+            <tr style="border-bottom:1px solid #f1f5f9;background:#f8fafc;">
+              <td style="padding:10px 14px;font-weight:600;">마감자료 (판매관리)</td>
+              <td style="padding:10px 14px;color:#64748b;">주유소 마감자료.xlsx → 월 업데이트</td>
+              <td style="padding:10px 14px;">일마감 탭 → 매입단가·입고이력 → 마감자료 업로드</td>
+              <td style="padding:10px 14px;"><span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 6px;font-size:11px;">.xlsx</span></td>
+            </tr>
+            <tr style="border-bottom:1px solid #f1f5f9;">
+              <td style="padding:10px 14px;font-weight:600;">탱크 실재고량</td>
+              <td style="padding:10px 14px;color:#64748b;">BOS ATG 시스템 → 탱크 실재고량.xlsx</td>
+              <td style="padding:10px 14px;">종합 탭 → 재고 오차 현황 → 📊 탱크 실재고 업로드</td>
+              <td style="padding:10px 14px;"><span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 6px;font-size:11px;">.xlsx/.xls</span></td>
+            </tr>
+            <tr style="background:#f8fafc;">
+              <td style="padding:10px 14px;font-weight:600;">고객정보 일괄등록</td>
+              <td style="padding:10px 14px;color:#64748b;">월마감 → 고객관리 → 양식 다운로드 후 작성</td>
+              <td style="padding:10px 14px;">월마감 → 고객 관리 → ⬆ 고객정보 업로드</td>
+              <td style="padding:10px 14px;"><span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 6px;font-size:11px;">.xlsx</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 탱크 실재고 파일 양식 -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header"><h2>📊 탱크 실재고량 파일 양식 안내</h2></div>
+      <div style="padding:16px;font-size:13px;line-height:1.8;color:#374151;">
+        <p style="margin-bottom:12px;">BOS ATG(자동탱크측정) 시스템에서 출력한 <strong>탱크 실재고량.xlsx</strong> 파일을 그대로 업로드합니다.</p>
+        <div style="background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;margin-bottom:12px;">
+          <div style="font-weight:700;color:#92400e;margin-bottom:6px;">📌 파일 컬럼 구조 (자동 인식)</div>
+          <ul style="margin:0;padding-left:20px;color:#78350f;">
+            <li><strong>M열 (13번째)</strong> — 휘발유 합계(L): 모든 휘발유 탱크 ATG 합산</li>
+            <li><strong>N열 (14번째)</strong> — 경유 합계(L): 모든 경유 탱크 ATG 합산</li>
+            <li><strong>O열 (15번째)</strong> — 등유 합계(L): 등유 탱크 ATG 값</li>
+            <li><strong>A열 (1번째)</strong> — 날짜 (YYYY-MM-DD 형식 또는 Excel 날짜)</li>
+          </ul>
+        </div>
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 16px;">
+          <div style="font-weight:700;color:#15803d;margin-bottom:6px;">📐 재고 오차 계산 방법</div>
+          <div style="font-family:monospace;background:#fff;border-radius:4px;padding:10px;color:#1e293b;font-size:12px;line-height:1.8;">
+            재고차(D일) = 전일ATG(D-1) − 당일ATG(D) + D일 입고량<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;※ 입고량은 새벽 배송으로 당일 ATG에 이미 포함 → 빼서 순소비 산출<br>
+            오차(D일)   = 재고차 − BOS판매량(D일)<br>
+            손익금액    = 오차(L) × FIFO 매입단가<br>
+            <span style="color:#16a34a;">양수(+) = 탱크&gt;BOS (온도팽창·증발손실)</span> /
+            <span style="color:#dc2626;">음수(-) = BOS&gt;탱크 (온도수축·ATG오차·미기록입고)</span>
+          </div>
+          <p style="margin:8px 0 0;font-size:12px;color:#64748b;">※ 영업이익에 반영되지 않는 참고 지표입니다. 예) 6/20: 전일ATG 74,327 − 당일ATG 68,716 = 재고차 5,611L / BOS 5,704L / 오차 −93L</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 영업이익 계산 방식 -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header"><h2>💰 영업이익 계산 방식</h2></div>
+      <div style="padding:16px;font-size:13px;line-height:2;color:#374151;">
+        <div style="background:#f8fafc;border-radius:8px;padding:14px;font-family:monospace;font-size:12px;line-height:1.9;color:#1e293b;">
+          영업이익 = (휘발유 매출 − 휘발유 판매량 × FIFO 매입단가)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ (경유 매출 − 경유 판매량 × FIFO 매입단가)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ (등유 매출 − 등유 판매량 × FIFO 매입단가)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ 세차 매출<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ 유외상품 매출 − 유외상품 원가<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;− 카드 수수료
+        </div>
+        <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px;">
+          <div style="background:#eff6ff;border-radius:6px;padding:10px;">
+            <strong style="color:#1d4ed8;">FIFO 매입단가 결정 순서</strong>
+            <ol style="margin:6px 0 0;padding-left:16px;line-height:1.9;">
+              <li>마감자료 판매관리 시트 일별 단가 (우선)</li>
+              <li>입고이력(정산단가) 기반 FIFO 계산 (fallback)</li>
+            </ol>
+          </div>
+          <div style="background:#fdf4ff;border-radius:6px;padding:10px;">
+            <strong style="color:#7e22ce;">정산단가 기간 구분</strong>
+            <table style="width:100%;margin-top:6px;font-size:11px;">
+              <tr><td>~3/12</td><td>휘발유 1,754 / 경유 1,742</td></tr>
+              <tr><td>3/13~3/26</td><td>휘발유 1,724 / 경유 1,713</td></tr>
+              <tr><td>3/27~</td><td>휘발유 1,934 / 경유 1,923</td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 카드 대사 안내 -->
+    <div class="card">
+      <div class="card-header"><h2>💳 카드 대사 방법</h2></div>
+      <div style="padding:16px;font-size:13px;line-height:1.8;color:#374151;">
+        <ol style="padding-left:20px;line-height:2.2;">
+          <li><strong>BOS 업로드</strong> → 일마감에서 당일 카드 승인내역 파싱</li>
+          <li><strong>이지샵 업로드</strong> → VAN사 실제 승인내역 파싱</li>
+          <li><strong>승인번호 기준 매칭</strong> → BOS ↔ 이지샵 자동 대사</li>
+          <li><strong>불일치 확인</strong>: <span style="background:#fee2e2;color:#dc2626;border-radius:4px;padding:1px 6px;">BOS만</span> <span style="background:#fef9c3;color:#ca8a04;border-radius:4px;padding:1px 6px;">이지샵만</span> <span style="background:#fce7f3;color:#be185d;border-radius:4px;padding:1px 6px;">금액 불일치</span></li>
+          <li>분할결제(동일 승인번호 복수건)는 합산 후 비교</li>
+        </ol>
+      </div>
+    </div>
+
   </section>
 
   <!-- ───── 대분류: 종합 ───── -->
@@ -126,6 +287,28 @@
         </div>
       </div>
 
+    </div>
+
+    <!-- ── 탱크 재고 오차 현황 (참고용, 영업이익 무관) ── -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header" style="flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <h2>📊 재고 오차 현황</h2>
+          <span style="font-size:11px;background:#fef9c3;color:#92400e;border-radius:4px;padding:2px 8px;font-weight:600;">영업이익 미반영 · 참고용</span>
+        </div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+          <input type="file" id="tank-actual-input" accept=".xlsx,.xls" hidden>
+          <button class="btn-upload btn-purple" style="padding:5px 12px;font-size:12px;"
+                  onclick="document.getElementById('tank-actual-input').click()">
+            📂 탱크 실재고 업로드
+          </button>
+        </div>
+      </div>
+      <div id="stock-variance-body">
+        <div style="padding:16px;text-align:center;color:#94a3b8;font-size:13px;">
+          탱크 실재고 파일을 업로드하거나 조회 버튼을 눌러주세요
+        </div>
+      </div>
     </div>
 
     <!-- ── 연간 결과보고서 ── -->
@@ -781,6 +964,6 @@
 </main>
 
 <div id="toast" class="toast"></div>
-<script src="main.js?v=2.29.0"></script>
+<script src="main.js?v=2.41.0"></script>
 </body>
 </html>

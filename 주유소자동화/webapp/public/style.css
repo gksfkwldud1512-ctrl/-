@@ -673,6 +673,8 @@ th.sortable.sort-active .sort-icon { color: var(--primary); }
   background: #7c3aed;
 }
 .btn-purple:hover { background: #6d28d9; }
+.variance-loss { color: #dc2626; font-weight: 600; }
+.variance-gain { color: #16a34a; font-weight: 600; }
 .btn-orange {
   background: #ea580c;
 }

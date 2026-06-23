@@ -2323,6 +2323,146 @@ async function loadSummary() {
   const ym = `${summaryState.year}-${String(summaryState.month).padStart(2,'0')}`;
   const res = await api('GET', `/api/summary/${ym}`);
   if (res.ok) renderSummary(res);
+  loadStockVariance();
+}
+
+// ── 탱크 실재고 업로드 ────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const tankInput = document.getElementById('tank-actual-input');
+  if (tankInput) {
+    tankInput.addEventListener('change', async e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const fd = new FormData();
+      fd.append('file', file);
+      try {
+        showToast('탱크 실재고 업로드 중...');
+        const r = await fetch('/api/upload-tank-actuals', { method: 'POST', body: fd });
+        const d = await r.json();
+        if (d.ok) {
+          showToast(`탱크 실재고 ${d.count}일치 업로드 완료 (${d.from} ~ ${d.to})`);
+          loadStockVariance();
+        } else {
+          showToast('업로드 실패: ' + d.error, 'error');
+        }
+      } catch (err) { showToast('업로드 오류: ' + err.message, 'error'); }
+      e.target.value = '';
+    });
+  }
+});
+
+// ── 재고 오차 조회 및 렌더링 ─────────────────────────────────
+async function loadStockVariance() {
+  const body = document.getElementById('stock-variance-body');
+  if (!body) return;
+  try {
+    const r = await api('GET', '/api/tank-variance');
+    if (!r.ok || !r.rows || !r.rows.length) {
+      body.innerHTML = '<div style="padding:16px;text-align:center;color:#94a3b8;font-size:13px;">탱크 실재고 데이터 없음 — 파일을 업로드해 주세요</div>';
+      return;
+    }
+    renderStockVariance(r.rows, r.monthTotal, r.byMonth);
+  } catch (e) {
+    body.innerHTML = '<div style="padding:12px;text-align:center;color:#ef4444;font-size:13px;">오차 데이터 로드 오류: ' + e.message + '</div>';
+  }
+}
+
+function renderStockVariance(rows, totalAll, byMonth) {
+  const body = document.getElementById('stock-variance-body');
+  if (!rows || !rows.length) {
+    body.innerHTML = '<div style="padding:16px;text-align:center;color:#94a3b8;font-size:13px;">탱크 실재고 데이터 없음 — 파일을 업로드해 주세요</div>';
+    return;
+  }
+
+  const fmt  = v => v != null ? Math.round(v).toLocaleString() : '-';
+  const fmtL = v => v != null ? (Math.round(v * 10) / 10).toLocaleString() : '-';
+  const amtStyle = v => v < 0 ? 'color:#dc2626;font-weight:600;' : (v > 0 ? 'color:#16a34a;font-weight:600;' : 'color:#64748b;');
+  const FUELS = ['경유', '휘발유', '등유'];
+
+  // 역순 표시 (최신→과거)
+  const revRows = [...rows].reverse();
+  const from = rows[0]?.date || '';
+  const to   = rows[rows.length - 1]?.date || '';
+
+  let html = `<div style="padding:8px 16px 4px;font-size:12px;color:#64748b;">📅 기간: ${from} ~ ${to} · ${rows.length}일 · BOS있는날만 집계</div>`;
+  html += '<div style="overflow-x:auto;max-height:520px;overflow-y:auto;">';
+  html += '<table style="font-size:11.5px;min-width:900px;border-collapse:collapse;">';
+
+  // 헤더
+  html += '<thead style="position:sticky;top:0;z-index:1;">';
+  html += '<tr style="background:#1e293b;color:#f8fafc;">';
+  html += '<th rowspan="2" style="padding:8px 10px;text-align:center;border-right:1px solid #334155;">날짜</th>';
+  for (const f of FUELS) {
+    html += `<th colspan="5" style="padding:6px 8px;text-align:center;border-right:1px solid #334155;border-bottom:1px solid #334155;">${f}</th>`;
+  }
+  html += '</tr><tr style="background:#334155;color:#cbd5e1;font-size:11px;">';
+  for (let i = 0; i < 3; i++) {
+    html += '<th style="padding:5px 6px;text-align:right;white-space:nowrap;">전일ATG</th>';
+    html += '<th style="padding:5px 6px;text-align:right;white-space:nowrap;">당일ATG</th>';
+    html += '<th style="padding:5px 6px;text-align:right;white-space:nowrap;">당일입고</th>';
+    html += '<th style="padding:5px 6px;text-align:right;white-space:nowrap;background:#0f172a;">오차(L)</th>';
+    html += '<th style="padding:5px 6px;text-align:right;white-space:nowrap;border-right:1px solid #334155;background:#0f172a;">금액(원)</th>';
+  }
+  html += '</tr></thead><tbody>';
+
+  let currentMonth = '';
+  for (const row of revRows) {
+    const rowMonth = row.date.substr(0, 7);
+    // 월 소계 구분선
+    if (rowMonth !== currentMonth) {
+      currentMonth = rowMonth;
+      const [y, m] = rowMonth.split('-');
+      const mSub = byMonth?.[rowMonth] || {};
+      const mTot = mSub.total || 0;
+      html += `<tr style="background:#dbeafe;">`;
+      html += `<td style="padding:6px 10px;font-weight:700;font-size:12px;color:#1d4ed8;" colspan="16">`;
+      html += `▸ ${y}년 ${parseInt(m)}월 소계&nbsp;&nbsp;`;
+      html += `경유: <span style="${amtStyle(mSub.경유||0)}">${fmt(mSub.경유||0)}원</span>&nbsp;&nbsp;`;
+      html += `휘발유: <span style="${amtStyle(mSub.휘발유||0)}">${fmt(mSub.휘발유||0)}원</span>&nbsp;&nbsp;`;
+      html += `등유: <span style="${amtStyle(mSub.등유||0)}">${fmt(mSub.등유||0)}원</span>&nbsp;&nbsp;`;
+      html += `합계: <span style="${amtStyle(mTot)};font-size:13px;">${fmt(mTot)}원</span>`;
+      html += '</td></tr>';
+    }
+
+    const noBos = !row.hasBos;
+    const rowBg = noBos ? 'background:#fef3c7;' : (revRows.indexOf(row) % 2 === 0 ? '' : 'background:#f8fafc;');
+    html += `<tr style="${rowBg}border-bottom:1px solid #f1f5f9;">`;
+    html += `<td style="padding:5px 8px;white-space:nowrap;color:${noBos?'#92400e':'#475569'};font-size:11px;">`;
+    html += `${row.date}${noBos ? ' <span style="font-size:10px;color:#d97706;">⚠BOS없음</span>' : ''}</td>`;
+
+    for (const f of FUELS) {
+      const fd = row.fuels[f] || {};
+      const vs = amtStyle(fd.variance || 0);
+      html += `<td style="padding:5px 6px;text-align:right;color:#64748b;">${fmt(fd.atgPrev)}</td>`;
+      html += `<td style="padding:5px 6px;text-align:right;color:#64748b;">${fmt(fd.atgCurr)}</td>`;
+      html += `<td style="padding:5px 6px;text-align:right;color:#0369a1;">${fd.receipts > 0 ? '+'+fmt(fd.receipts) : '-'}</td>`;
+      html += `<td style="padding:5px 6px;text-align:right;${vs}background:${(fd.variance||0)<0?'#fff1f2':((fd.variance||0)>0?'#f0fdf4':'')}">${fmtL(fd.variance)}</td>`;
+      html += `<td style="padding:5px 6px;text-align:right;${vs}border-right:1px solid #e2e8f0;background:${(fd.variance||0)<0?'#fff1f2':((fd.variance||0)>0?'#f0fdf4':'')}">${fmt(fd.amount)}</td>`;
+    }
+    html += '</tr>';
+  }
+
+  // 전체 합계
+  if (totalAll) {
+    const tStyle = amtStyle(totalAll.total);
+    html += '<tr style="background:#fef9c3;border-top:2px solid #e2e8f0;font-weight:700;">';
+    html += '<td style="padding:7px 10px;color:#92400e;">전체합계</td>';
+    for (const f of FUELS) {
+      const tot = totalAll[f] || 0;
+      html += `<td colspan="3" style="padding:7px 6px;text-align:center;color:#64748b;font-size:11px;">${f}</td>`;
+      html += `<td colspan="2" style="padding:7px 6px;text-align:right;${amtStyle(tot)};border-right:1px solid #e2e8f0;">${fmt(tot)}원</td>`;
+    }
+    html += '</tr>';
+    html += `<tr style="background:#fef9c3;"><td colspan="16" style="padding:7px 14px;font-size:12px;color:#78350f;">`;
+    html += `재고 손익 합계: <strong style="${tStyle}font-size:14px;">${fmt(totalAll.total)}원</strong>`;
+    html += `&nbsp;&nbsp;<span style="color:#94a3b8;font-weight:400;">(영업이익 미반영 · 온도·증발·ATG오차 모니터링용)</span>`;
+    html += `&nbsp;&nbsp;오차해석: <span style="color:#dc2626;">음수(-)</span>=BOS>탱크감소(온도수축·미기록입고) `;
+    html += `<span style="color:#16a34a;">양수(+)</span>=탱크>BOS(온도팽창·증발)`;
+    html += '</td></tr>';
+  }
+
+  html += '</tbody></table></div>';
+  body.innerHTML = html;
 }
 
 function renderSummary(data) {

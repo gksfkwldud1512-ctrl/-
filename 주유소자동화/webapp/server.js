@@ -43,6 +43,7 @@ const SETTINGS_FILE        = path.join(DATA_DIR, 'settings.json');
 const PURCHASE_PRICES_FILE = path.join(DATA_DIR, 'purchase_prices.json');
 const PURCHASE_LOTS_FILE    = path.join(DATA_DIR, 'purchase_lots.json');
 const FIFO_DAILY_FILE       = path.join(DATA_DIR, 'fifo_daily_prices.json');
+const TANK_ACTUALS_FILE     = path.join(DATA_DIR, 'tank_actuals.json');
 const EXPENSES_FILE         = path.join(DATA_DIR, 'expenses.json');
 const DAILY_DIR            = path.join(DATA_DIR, 'daily');
 const BANK_DEPOSITS_FILE   = path.join(DATA_DIR, 'bank_deposits.json');
@@ -689,6 +690,129 @@ app.delete('/api/daily/purchase-prices', (req, res) => {
 // ── 일별 FIFO 단가 조회 ───────────────────────────────────────
 app.get('/api/daily/fifo-prices', (req, res) => {
   res.json({ ok: true, prices: readJSON(FIFO_DAILY_FILE, []) });
+});
+
+// ── 탱크 실재고 업로드 (오차 계산용, 영업이익 무관) ──────────────
+app.post('/api/upload-tank-actuals', upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) return res.json({ ok: false, error: '파일이 없습니다.' });
+    const { parseTankStock } = require('./lib/tankStockParser');
+    const data = parseTankStock(req.file.path);
+    if (!data.length) return res.json({ ok: false, error: '파싱 결과가 없습니다. 파일 형식을 확인하세요.' });
+    writeJSON(TANK_ACTUALS_FILE, data);
+    const from = data[0].date;
+    const to   = data[data.length - 1].date;
+    res.json({ ok: true, count: data.length, from, to });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
+// ── 탱크 재고 오차 조회 (종합 탭 전용, 참고용) ────────────────────
+// year/month 미전달 시 전체 기간 반환
+app.get('/api/tank-variance', (req, res) => {
+  try {
+    const tankActuals = readJSON(TANK_ACTUALS_FILE, []);
+    if (!tankActuals.length) return res.json({ ok: true, rows: [], monthTotal: null });
+
+    // 날짜 → 실재고 맵
+    const actualMap = {};
+    for (const a of tankActuals) actualMap[a.date] = a;
+
+    // 일별 BOS 판매량 로드 (전체)
+    const dailySales = {};
+    if (fs.existsSync(DAILY_DIR)) {
+      fs.readdirSync(DAILY_DIR).filter(f => f.endsWith('.json')).forEach(f => {
+        const d = readJSON(path.join(DAILY_DIR, f), {});
+        if (!d.bos?.date) return;
+        const dt = d.bos.date;
+        dailySales[dt] = { 휘발유: d.bos.fuels?.휘발유?.qty || 0, 경유: d.bos.fuels?.경유?.qty || 0, 등유: d.bos.fuels?.등유?.qty || 0 };
+      });
+    }
+
+    // 입고량 맵 (purchase_lots)
+    const lots = readJSON(PURCHASE_LOTS_FILE, []);
+    const receiptMap = {};
+    for (const l of lots) {
+      if (!receiptMap[l.date]) receiptMap[l.date] = {};
+      receiptMap[l.date][l.fuel] = (receiptMap[l.date][l.fuel] || 0) + (l.qty || 0);
+    }
+
+    // FIFO 단가 참조 (영업이익 계산과 동일 기존 로직 그대로)
+    const prices    = readJSON(PURCHASE_PRICES_FILE, []);
+    const fifoDaily = readJSON(FIFO_DAILY_FILE, []);
+    const fifoMap   = {};
+    for (const e of fifoDaily) { if (!fifoMap[e.date]) fifoMap[e.date] = e; }
+
+    function getFifoPrice(date, fuel) {
+      const fe = fifoMap[date];
+      if (fe && fe[fuel]?.price) return fe[fuel].price;
+      const list = prices.filter(p => p.fuel === fuel && p.date <= date);
+      return list.length ? list[list.length - 1].price : 0;
+    }
+
+    // 전체 기간 오차 계산 (날짜 오름차순 정렬)
+    // 공식: 재고차(D) = ATG(D-1) - ATG(D) + D일 입고량
+    //       오차(D)   = 재고차 - BOS판매량(D)
+    const sorted = [...tankActuals].sort((a, b) => a.date.localeCompare(b.date));
+    if (!sorted.length) return res.json({ ok: true, rows: [], monthTotal: null });
+
+    // 날짜 → ATG 맵 (전일 조회용)
+    const atgMap = {};
+    for (const a of sorted) atgMap[a.date] = a;
+
+    const rows = [];
+    const FUELS = ['휘발유', '경유', '등유'];
+
+    for (let i = 0; i < sorted.length; i++) {
+      const today = sorted[i];
+
+      // 전일 ATG — 같은 배열 안에 없으면 맵에서 조회 (월 경계 처리)
+      const prev = i > 0 ? sorted[i - 1] : null;
+      if (!prev) continue; // 첫날은 전일 없으므로 스킵
+
+      const hasBos = !!dailySales[today.date];
+      const row = { date: today.date, hasBos, fuels: {} };
+
+      for (const fuel of FUELS) {
+        const atgPrev  = prev[fuel]  || 0;   // 전일 ATG
+        const atgCurr  = today[fuel] || 0;   // 당일 ATG
+        const receipts = receiptMap[today.date]?.[fuel] || 0; // 당일 새벽 입고 (ATG에 이미 포함)
+        // 탱크 실소비 = 전일ATG - 당일ATG + 당일입고 (입고량을 빼서 순수 소비 산출)
+        const tankDiff = atgPrev - atgCurr + receipts;
+        const bosSales = dailySales[today.date]?.[fuel] || 0;
+        const variance = tankDiff - bosSales; // 양수=탱크 더 소비, 음수=BOS가 더 기록
+        const price    = getFifoPrice(today.date, fuel);
+        row.fuels[fuel] = {
+          atgPrev:  Math.round(atgPrev),
+          atgCurr:  Math.round(atgCurr),
+          receipts: Math.round(receipts),
+          tankDiff: Math.round(tankDiff * 10) / 10,
+          bosSales: Math.round(bosSales * 10) / 10,
+          variance: Math.round(variance * 10) / 10,
+          price,
+          amount:   Math.round(variance * price),
+        };
+      }
+      rows.push(row);
+    }
+
+    // 전체 합계 + 월별 소계 (BOS 있는 날만 집계)
+    const monthTotal = { 휘발유: 0, 경유: 0, 등유: 0, total: 0 };
+    const byMonth = {};
+    for (const row of rows) {
+      if (!row.hasBos) continue; // BOS 없는 날 제외
+      const ym = row.date.substr(0, 7);
+      if (!byMonth[ym]) byMonth[ym] = { 휘발유: 0, 경유: 0, 등유: 0, total: 0 };
+      for (const fuel of FUELS) {
+        const amt = row.fuels[fuel]?.amount || 0;
+        monthTotal[fuel] += amt;
+        monthTotal.total += amt;
+        byMonth[ym][fuel] += amt;
+        byMonth[ym].total += amt;
+      }
+    }
+
+    res.json({ ok: true, rows, monthTotal, byMonth });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
 // ── 탱크 현황 조회 (FIFO 기준 현재고 + 전달단가 잔여량) ────────
