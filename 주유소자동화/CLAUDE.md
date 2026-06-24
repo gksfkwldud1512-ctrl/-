@@ -342,11 +342,37 @@ C:\Users\82108\Desktop\주유소자동화\
 
 ---
 
+## 완료된 작업 전체 목록 (추가 - 2026-06-24) — v2.42.0
+
+### 재고 오차 현황 개선
+- [x] 재고차(L) · BOS판매(L) 컬럼 추가 (전일ATG→당일ATG→재고차→BOS판매→오차 흐름 가시화)
+- [x] 오차 부호 수정: 음수(-)=BOS>탱크=초록(이익), 양수(+)=탱크>BOS=빨강(손실)
+  - fmtGain/fmtGainL: + 접두사 표시, 색상·배경 반전
+  - 월 소계·전체 합계도 동일 기준 적용
+- [x] 서버 주석 수정: "입고량을 빼서" → "입고로 인한 탱크 상승분 상쇄"
+
+### 탱크 실재고 바탕화면 자동 동기화
+- [x] server.js: os 모듈 추가, TANK_DESKTOP_FILE = ~/Desktop/탱크 실재고량.xlsx
+- [x] POST /api/sync-tank-actuals: 바탕화면 파일 직접 읽어 tank_actuals.json 갱신
+- [x] index.html: 🔄 바탕화면 파일 자동 반영 버튼 (기존 직접 업로드 버튼 옆)
+- [x] main.js: syncTankActuals() 함수 추가
+
+### BOS DB 연결 테스트 (준비 단계)
+- [x] npm install pg (node-postgres 패키지)
+- [x] POST /api/test-bos-db: 자격증명 다중 조합 자동 시도
+- [x] POST /api/inspect-bos-db: 스키마·샘플 데이터 조회
+- [x] index.html: 🔌 DB 연결 테스트 버튼 (일마감 탭)
+- [x] main.js: testBosDb() 함수
+- **현황**: BOS PostgreSQL DB(192.168.0.11:5432) 포트 접속 확인됨
+  BOS 로그인 계정(9999/9999)은 DB 계정이 아님 → 납품업체 확인 필요
+
+---
+
 ## 다음 세션에서 할 작업
 
 ### 우선순위 1
 - [ ] 업체별 업태(bizType) 입력
-- [ ] 네이버 SMTP 메일 발송 테스트
+- [ ] BOS DB 계정 확인 후 /api/sync-bos-db 동기화 엔드포인트 구현
 
 ---
 

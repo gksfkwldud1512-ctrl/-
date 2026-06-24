@@ -297,10 +297,14 @@
           <span style="font-size:11px;background:#fef9c3;color:#92400e;border-radius:4px;padding:2px 8px;font-weight:600;">영업이익 미반영 · 참고용</span>
         </div>
         <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+          <button class="btn-upload" style="padding:5px 14px;font-size:12px;background:#0f766e;"
+                  id="btn-sync-tank" onclick="syncTankActuals()">
+            🔄 바탕화면 파일 자동 반영
+          </button>
           <input type="file" id="tank-actual-input" accept=".xlsx,.xls" hidden>
           <button class="btn-upload btn-purple" style="padding:5px 12px;font-size:12px;"
                   onclick="document.getElementById('tank-actual-input').click()">
-            📂 탱크 실재고 업로드
+            📂 직접 업로드
           </button>
         </div>
       </div>
@@ -361,6 +365,10 @@
       <div class="toolbar-group" style="margin-left:auto; gap:8px;">
         <button class="btn-upload btn-purple" onclick="showMobileShare()" style="background:#7c3aed;border-color:#7c3aed;">
           📱 모바일 공유
+        </button>
+        <button class="btn-upload" style="background:#0369a1;border-color:#0369a1;"
+                id="btn-test-bos-db" onclick="testBosDb()">
+          🔌 DB 연결 테스트
         </button>
         <input type="file" id="bos-file-input" accept=".xlsx,.xls" hidden>
         <button class="btn-upload" onclick="document.getElementById('bos-file-input').click()">

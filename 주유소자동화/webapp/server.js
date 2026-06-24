@@ -3,7 +3,11 @@ const express = require('express');
 const multer  = require('multer');
 const path    = require('path');
 const fs      = require('fs');
+const os      = require('os');
 const { version } = require('./package.json');
+
+// 바탕화면 탱크 실재고량 파일 고정 경로
+const TANK_DESKTOP_FILE = path.join(os.homedir(), 'Desktop', '탱크 실재고량.xlsx');
 
 const app  = express();
 const PORT = 3000;
@@ -706,6 +710,87 @@ app.post('/api/upload-tank-actuals', upload.single('file'), (req, res) => {
   } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
+// ── 바탕화면 탱크 실재고량 파일 자동 동기화 ─────────────────────
+app.post('/api/sync-tank-actuals', (req, res) => {
+  try {
+    if (!fs.existsSync(TANK_DESKTOP_FILE)) {
+      return res.json({ ok: false, error: `파일을 찾을 수 없습니다: ${TANK_DESKTOP_FILE}` });
+    }
+    const { parseTankStock } = require('./lib/tankStockParser');
+    const data = parseTankStock(TANK_DESKTOP_FILE);
+    if (!data.length) return res.json({ ok: false, error: '파싱 결과가 없습니다. 파일 형식을 확인하세요.' });
+    writeJSON(TANK_ACTUALS_FILE, data);
+    const from = data[0].date;
+    const to   = data[data.length - 1].date;
+    res.json({ ok: true, count: data.length, from, to });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
+// ── BOS PostgreSQL 연결 테스트 ────────────────────────────────────
+app.post('/api/test-bos-db', async (req, res) => {
+  const { Client } = require('pg');
+  const HOST = '192.168.0.11';
+  const PORT = 5432;
+  const USERS     = ['M3038164391', 'postgres', 'bos', 'hbos'];
+  const PASSWORDS = ['sjj11055*99', 'postgres'];
+  const DATABASES = ['bos', 'hbos', 'hbos320', 'postgres'];
+
+  for (const user of USERS) {
+    for (const password of PASSWORDS) {
+      for (const database of DATABASES) {
+        const client = new Client({ host: HOST, port: PORT, user, password, database, connectionTimeoutMillis: 3000 });
+        try {
+          await client.connect();
+          const { rows } = await client.query(
+            `SELECT table_name FROM information_schema.tables
+             WHERE table_schema='public' ORDER BY table_name`
+          );
+          await client.end();
+          return res.json({ ok: true, user, password, database, tables: rows.map(r => r.table_name) });
+        } catch (_) {
+          try { await client.end(); } catch (_2) {}
+        }
+      }
+    }
+  }
+  res.json({ ok: false, error: '모든 자격증명 조합 실패. BOS 납품업체에 DB 계정 문의 필요.' });
+});
+
+// ── BOS DB 테이블 컬럼 인스펙트 (스키마 파악용, 일회성) ────────────
+app.post('/api/inspect-bos-db', async (req, res) => {
+  const { Client } = require('pg');
+  const { user, password, database, table } = req.body;
+  if (!user || !password || !database) return res.json({ ok: false, error: 'user/password/database 필요' });
+  const client = new Client({ host: '192.168.0.11', port: 5432, user, password, database, connectionTimeoutMillis: 5000 });
+  try {
+    await client.connect();
+    // 테이블 목록 (table 미지정 시)
+    if (!table) {
+      const { rows } = await client.query(
+        `SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name`
+      );
+      await client.end();
+      return res.json({ ok: true, tables: rows.map(r => r.table_name) });
+    }
+    // 컬럼 목록
+    const cols = await client.query(
+      `SELECT column_name, data_type FROM information_schema.columns
+       WHERE table_schema='public' AND table_name=$1 ORDER BY ordinal_position`, [table]
+    );
+    // 최근 3행 샘플
+    let sample = [];
+    try {
+      const s = await client.query(`SELECT * FROM ${table} ORDER BY 1 DESC LIMIT 3`);
+      sample = s.rows;
+    } catch (_) {}
+    await client.end();
+    res.json({ ok: true, columns: cols.rows, sample });
+  } catch (e) {
+    try { await client.end(); } catch (_) {}
+    res.json({ ok: false, error: e.message });
+  }
+});
+
 // ── 탱크 재고 오차 조회 (종합 탭 전용, 참고용) ────────────────────
 // year/month 미전달 시 전체 기간 반환
 app.get('/api/tank-variance', (req, res) => {
@@ -775,8 +860,8 @@ app.get('/api/tank-variance', (req, res) => {
       for (const fuel of FUELS) {
         const atgPrev  = prev[fuel]  || 0;   // 전일 ATG
         const atgCurr  = today[fuel] || 0;   // 당일 ATG
-        const receipts = receiptMap[today.date]?.[fuel] || 0; // 당일 새벽 입고 (ATG에 이미 포함)
-        // 탱크 실소비 = 전일ATG - 당일ATG + 당일입고 (입고량을 빼서 순수 소비 산출)
+        const receipts = receiptMap[today.date]?.[fuel] || 0;
+        // 재고차 = 전일ATG - 당일ATG + 당일입고량 (입고로 인한 탱크 상승분 상쇄 → 순수 소비량 산출)
         const tankDiff = atgPrev - atgCurr + receipts;
         const bosSales = dailySales[today.date]?.[fuel] || 0;
         const variance = tankDiff - bosSales; // 양수=탱크 더 소비, 음수=BOS가 더 기록

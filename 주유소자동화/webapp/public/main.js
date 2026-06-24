@@ -2326,6 +2326,49 @@ async function loadSummary() {
   loadStockVariance();
 }
 
+// ── BOS PostgreSQL 연결 테스트 ──────────────────────────────────
+async function testBosDb() {
+  const btn = document.getElementById('btn-test-bos-db');
+  if (btn) { btn.disabled = true; btn.textContent = '접속 시도 중...'; }
+  try {
+    showToast('BOS DB 접속 조합을 시도 중입니다 (최대 30초)...');
+    const r = await fetch('/api/test-bos-db', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      const tbl = d.tables.join(', ') || '(없음)';
+      showToast(`✅ DB 접속 성공! user=${d.user} db=${d.database}\n테이블: ${tbl}`, 'success');
+      console.log('[BOS DB 접속 성공]', d);
+      alert(`✅ BOS DB 접속 성공!\n\n접속 정보:\n  user: ${d.user}\n  password: ${d.password}\n  database: ${d.database}\n\n테이블 목록:\n  ${d.tables.join('\n  ')}\n\n이 정보를 개발자에게 전달하면 DB 동기화 기능을 완성할 수 있습니다.`);
+    } else {
+      showToast('❌ ' + d.error, 'error');
+    }
+  } catch (err) {
+    showToast('❌ 테스트 오류: ' + err.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔌 DB 연결 테스트'; }
+  }
+}
+
+// ── 바탕화면 탱크 파일 자동 동기화 ──────────────────────────────
+async function syncTankActuals() {
+  const btn = document.getElementById('btn-sync-tank');
+  if (btn) { btn.disabled = true; btn.textContent = '동기화 중...'; }
+  try {
+    const r = await fetch('/api/sync-tank-actuals', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      showToast(`✅ 탱크 실재고 반영 완료 — ${d.count}일치 (${d.from} ~ ${d.to})`);
+      loadStockVariance();
+    } else {
+      showToast('❌ ' + d.error, 'error');
+    }
+  } catch (err) {
+    showToast('❌ 동기화 오류: ' + err.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 바탕화면 파일 자동 반영'; }
+  }
+}
+
 // ── 탱크 실재고 업로드 ────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   const tankInput = document.getElementById('tank-actual-input');
@@ -2376,7 +2419,11 @@ function renderStockVariance(rows, totalAll, byMonth) {
 
   const fmt  = v => v != null ? Math.round(v).toLocaleString() : '-';
   const fmtL = v => v != null ? (Math.round(v * 10) / 10).toLocaleString() : '-';
-  const amtStyle = v => v < 0 ? 'color:#dc2626;font-weight:600;' : (v > 0 ? 'color:#16a34a;font-weight:600;' : 'color:#64748b;');
+  // 표시용: 이익(+) = 초록, 손실(-) = 빨강
+  const gainStyle = v => v > 0 ? 'color:#16a34a;font-weight:600;' : (v < 0 ? 'color:#dc2626;font-weight:600;' : 'color:#64748b;');
+  const gainBg    = v => v > 0 ? '#f0fdf4' : (v < 0 ? '#fff1f2' : '');
+  const fmtGain   = v => { const r = Math.round(v); return (r > 0 ? '+' : '') + r.toLocaleString(); };
+  const fmtGainL  = v => { const r = Math.round(v * 10) / 10; return (r > 0 ? '+' : '') + r.toLocaleString(); };
   const FUELS = ['경유', '휘발유', '등유'];
 
   // 역순 표시 (최신→과거)
@@ -2393,13 +2440,15 @@ function renderStockVariance(rows, totalAll, byMonth) {
   html += '<tr style="background:#1e293b;color:#f8fafc;">';
   html += '<th rowspan="2" style="padding:8px 10px;text-align:center;border-right:1px solid #334155;">날짜</th>';
   for (const f of FUELS) {
-    html += `<th colspan="5" style="padding:6px 8px;text-align:center;border-right:1px solid #334155;border-bottom:1px solid #334155;">${f}</th>`;
+    html += `<th colspan="7" style="padding:6px 8px;text-align:center;border-right:1px solid #334155;border-bottom:1px solid #334155;">${f}</th>`;
   }
   html += '</tr><tr style="background:#334155;color:#cbd5e1;font-size:11px;">';
   for (let i = 0; i < 3; i++) {
     html += '<th style="padding:5px 6px;text-align:right;white-space:nowrap;">전일ATG</th>';
     html += '<th style="padding:5px 6px;text-align:right;white-space:nowrap;">당일ATG</th>';
     html += '<th style="padding:5px 6px;text-align:right;white-space:nowrap;">당일입고</th>';
+    html += '<th style="padding:5px 6px;text-align:right;white-space:nowrap;background:#1e3a5f;">재고차(L)</th>';
+    html += '<th style="padding:5px 6px;text-align:right;white-space:nowrap;background:#1e3a5f;">BOS판매</th>';
     html += '<th style="padding:5px 6px;text-align:right;white-space:nowrap;background:#0f172a;">오차(L)</th>';
     html += '<th style="padding:5px 6px;text-align:right;white-space:nowrap;border-right:1px solid #334155;background:#0f172a;">금액(원)</th>';
   }
@@ -2415,12 +2464,12 @@ function renderStockVariance(rows, totalAll, byMonth) {
       const mSub = byMonth?.[rowMonth] || {};
       const mTot = mSub.total || 0;
       html += `<tr style="background:#dbeafe;">`;
-      html += `<td style="padding:6px 10px;font-weight:700;font-size:12px;color:#1d4ed8;" colspan="16">`;
+      html += `<td style="padding:6px 10px;font-weight:700;font-size:12px;color:#1d4ed8;" colspan="22">`;
       html += `▸ ${y}년 ${parseInt(m)}월 소계&nbsp;&nbsp;`;
-      html += `경유: <span style="${amtStyle(mSub.경유||0)}">${fmt(mSub.경유||0)}원</span>&nbsp;&nbsp;`;
-      html += `휘발유: <span style="${amtStyle(mSub.휘발유||0)}">${fmt(mSub.휘발유||0)}원</span>&nbsp;&nbsp;`;
-      html += `등유: <span style="${amtStyle(mSub.등유||0)}">${fmt(mSub.등유||0)}원</span>&nbsp;&nbsp;`;
-      html += `합계: <span style="${amtStyle(mTot)};font-size:13px;">${fmt(mTot)}원</span>`;
+      html += `경유: <span style="${gainStyle(-(mSub.경유||0))}">${fmtGain(-(mSub.경유||0))}원</span>&nbsp;&nbsp;`;
+      html += `휘발유: <span style="${gainStyle(-(mSub.휘발유||0))}">${fmtGain(-(mSub.휘발유||0))}원</span>&nbsp;&nbsp;`;
+      html += `등유: <span style="${gainStyle(-(mSub.등유||0))}">${fmtGain(-(mSub.등유||0))}원</span>&nbsp;&nbsp;`;
+      html += `합계: <span style="${gainStyle(-mTot)};font-size:13px;">${fmtGain(-mTot)}원</span>`;
       html += '</td></tr>';
     }
 
@@ -2432,32 +2481,38 @@ function renderStockVariance(rows, totalAll, byMonth) {
 
     for (const f of FUELS) {
       const fd = row.fuels[f] || {};
-      const vs = amtStyle(fd.variance || 0);
+      // 이익/손실 = BOS판매 - 재고차 = -(오차) → 양수=이익(초록), 음수=손실(빨강)
+      const dispV = -(fd.variance || 0);
+      const dispA = -(fd.amount   || 0);
+      const vs  = gainStyle(dispV);
+      const bg  = gainBg(dispV);
       html += `<td style="padding:5px 6px;text-align:right;color:#64748b;">${fmt(fd.atgPrev)}</td>`;
       html += `<td style="padding:5px 6px;text-align:right;color:#64748b;">${fmt(fd.atgCurr)}</td>`;
       html += `<td style="padding:5px 6px;text-align:right;color:#0369a1;">${fd.receipts > 0 ? '+'+fmt(fd.receipts) : '-'}</td>`;
-      html += `<td style="padding:5px 6px;text-align:right;${vs}background:${(fd.variance||0)<0?'#fff1f2':((fd.variance||0)>0?'#f0fdf4':'')}">${fmtL(fd.variance)}</td>`;
-      html += `<td style="padding:5px 6px;text-align:right;${vs}border-right:1px solid #e2e8f0;background:${(fd.variance||0)<0?'#fff1f2':((fd.variance||0)>0?'#f0fdf4':'')}">${fmt(fd.amount)}</td>`;
+      html += `<td style="padding:5px 6px;text-align:right;color:#1e40af;background:#eff6ff;">${fmtL(fd.tankDiff)}</td>`;
+      html += `<td style="padding:5px 6px;text-align:right;color:#475569;background:#f8fafc;">${fmtL(fd.bosSales)}</td>`;
+      html += `<td style="padding:5px 6px;text-align:right;${vs}background:${bg}">${fmtGainL(dispV)}</td>`;
+      html += `<td style="padding:5px 6px;text-align:right;${vs}border-right:1px solid #e2e8f0;background:${bg}">${fmtGain(dispA)}원</td>`;
     }
     html += '</tr>';
   }
 
   // 전체 합계
   if (totalAll) {
-    const tStyle = amtStyle(totalAll.total);
+    const dispTotal = -(totalAll.total || 0);
     html += '<tr style="background:#fef9c3;border-top:2px solid #e2e8f0;font-weight:700;">';
     html += '<td style="padding:7px 10px;color:#92400e;">전체합계</td>';
     for (const f of FUELS) {
-      const tot = totalAll[f] || 0;
-      html += `<td colspan="3" style="padding:7px 6px;text-align:center;color:#64748b;font-size:11px;">${f}</td>`;
-      html += `<td colspan="2" style="padding:7px 6px;text-align:right;${amtStyle(tot)};border-right:1px solid #e2e8f0;">${fmt(tot)}원</td>`;
+      const dv = -(totalAll[f] || 0);
+      html += `<td colspan="5" style="padding:7px 6px;text-align:center;color:#64748b;font-size:11px;">${f}</td>`;
+      html += `<td colspan="2" style="padding:7px 6px;text-align:right;${gainStyle(dv)};border-right:1px solid #e2e8f0;">${fmtGain(dv)}원</td>`;
     }
     html += '</tr>';
-    html += `<tr style="background:#fef9c3;"><td colspan="16" style="padding:7px 14px;font-size:12px;color:#78350f;">`;
-    html += `재고 손익 합계: <strong style="${tStyle}font-size:14px;">${fmt(totalAll.total)}원</strong>`;
+    html += `<tr style="background:#fef9c3;"><td colspan="22" style="padding:7px 14px;font-size:12px;color:#78350f;">`;
+    html += `재고 손익 합계: <strong style="${gainStyle(dispTotal)};font-size:14px;">${fmtGain(dispTotal)}원</strong>`;
     html += `&nbsp;&nbsp;<span style="color:#94a3b8;font-weight:400;">(영업이익 미반영 · 온도·증발·ATG오차 모니터링용)</span>`;
-    html += `&nbsp;&nbsp;오차해석: <span style="color:#dc2626;">음수(-)</span>=BOS>탱크감소(온도수축·미기록입고) `;
-    html += `<span style="color:#16a34a;">양수(+)</span>=탱크>BOS(온도팽창·증발)`;
+    html += `&nbsp;&nbsp;오차해석: <span style="color:#16a34a;">+(초록)</span>=BOS판매>탱크소모(이익) `;
+    html += `<span style="color:#dc2626;">-(빨강)</span>=탱크소모>BOS판매(손실·증발·누출)`;
     html += '</td></tr>';
   }
 
