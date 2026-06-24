@@ -936,8 +936,11 @@ app.get('/api/daily/tank-status', (req, res) => {
     let prevPrice = null;
 
     if (stockCorrection) {
-      // stock 기준점 이후 판매량 재계산
-      const stockDate = stockCorrection.date;
+      const stockDate  = stockCorrection.date;
+      const baseQty    = stockCorrection.stock;
+      const basePrice  = stockCorrection.price;
+
+      // 기준점 이후 BOS 판매량
       let soldAfterStock = 0;
       if (fs.existsSync(DAILY_DIR)) {
         fs.readdirSync(DAILY_DIR).filter(f => f.endsWith('.json')).forEach(f => {
@@ -946,22 +949,46 @@ app.get('/api/daily/tank-status', (req, res) => {
           soldAfterStock += (day.bos.fuels?.[fuel]?.qty || 0);
         });
       }
-      // stock 기준점 이후 입고량
+
+      // FIFO 큐: 기초재고 + 이후 입고 lot (날짜 순)
       const lotsAfterStock = fuelLots.filter(l => l.date > stockDate);
-      const receivedAfterStock = lotsAfterStock.reduce((s, l) => s + l.qty, 0);
-      // 현재 재고 = 실재고 + 이후 입고 - 이후 판매
-      const totalRemaining = Math.max(0, stockCorrection.stock + receivedAfterStock - soldAfterStock);
-      // 현재 소비 중인 lot의 남은 양 (stock 기준점의 단가 lot이 얼마나 남았는지)
-      const currentLotRemaining = Math.max(0, stockCorrection.stock - soldAfterStock);
-      const nextQty = receivedAfterStock;
+      const queue = [
+        { qty: baseQty, price: basePrice },
+        ...lotsAfterStock.map(l => ({ qty: l.qty, price: l.price })),
+      ];
+
+      // FIFO 소비
+      let toConsume = soldAfterStock;
+      for (const q of queue) {
+        if (toConsume <= 0) break;
+        const take = Math.min(toConsume, q.qty);
+        q.qty   -= take;
+        toConsume -= take;
+      }
+
+      // 잔여 큐에서 단가별 집계
+      const active = queue.filter(q => q.qty > 0);
+      const totalRem = active.reduce((s, q) => s + q.qty, 0);
+      const curP = active[0]?.price ?? basePrice;
+      let sameQ = 0, nxtP = null, nxtQ = 0;
+      for (const q of active) {
+        if (q.price === curP)  { sameQ += q.qty; }
+        else {
+          if (nxtP === null) nxtP = q.price;
+          if (q.price === nxtP) nxtQ += q.qty;
+        }
+      }
+
       tanks[fuel] = {
         capacity: CAPACITY[fuel],
-        totalRemaining: Math.round(totalRemaining),
-        currentLotRemaining: Math.round(Math.min(currentLotRemaining, totalRemaining)),
-        nextLotsQty: Math.round(Math.max(0, totalRemaining - Math.min(currentLotRemaining, totalRemaining))),
-        currentPrice: stockCorrection.price,
-        previousPrice: null,
-        stockCorrected: true,
+        totalRemaining:      Math.round(totalRem),
+        currentLotRemaining: Math.round(sameQ),
+        nextLotsQty:         Math.round(totalRem - sameQ),
+        currentPrice:        curP,
+        previousPrice:       null,
+        nextLotPrice:        nxtP,
+        nextLotQty:          Math.round(nxtQ),
+        stockCorrected:      true,
         stockDate,
       };
       continue;
@@ -980,16 +1007,33 @@ app.get('/api/daily/tank-status', (req, res) => {
     }
 
     const currentPrice = fuelLots[lotIdx]?.price || null;
-    let nextLotsQty = 0;
-    for (let i = lotIdx + 1; i < fuelLots.length; i++) nextLotsQty += fuelLots[i].qty;
+
+    // 단가별 재고 분리: 현재 단가 잔량 vs 다음 단가 잔량
+    let sameQty = remainingInLot;  // 현재 단가(currentPrice)와 같은 lot 합산
+    let nextLotPrice = null;
+    let nextLotQty = 0;            // 현재와 다른(새) 단가 lot 합산
+    let nextLotsQty = 0;           // 전체 다음 lot 합산 (totalRemaining 계산용)
+    for (let i = lotIdx + 1; i < fuelLots.length; i++) {
+      const lp = fuelLots[i].price;
+      const lq = fuelLots[i].qty;
+      nextLotsQty += lq;
+      if (lp === currentPrice) {
+        sameQty += lq;             // 같은 단가 → 현재 단가 묶음에 합산
+      } else {
+        if (nextLotPrice === null) nextLotPrice = lp;
+        if (lp === nextLotPrice) nextLotQty += lq;  // 다음 단가 묶음
+      }
+    }
 
     tanks[fuel] = {
       capacity: CAPACITY[fuel],
-      totalRemaining: Math.round(remainingInLot + nextLotsQty),
-      currentLotRemaining: Math.round(remainingInLot),
-      nextLotsQty: Math.round(nextLotsQty),
+      totalRemaining:    Math.round(remainingInLot + nextLotsQty),
+      currentLotRemaining: Math.round(sameQty),     // 현재 단가 전체 잔량
+      nextLotsQty:       Math.round(nextLotsQty),
       currentPrice,
       previousPrice: prevPrice,
+      nextLotPrice,   // 다음 단가 (현재와 다를 경우)
+      nextLotQty:    Math.round(nextLotQty),  // 다음 단가의 수량만
     };
   }
 
@@ -1516,6 +1560,126 @@ app.post('/api/daily/upload-bank', upload.single('file'), (req, res) => {
   } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
+// ── 탱크현황 Excel 내보내기 ──────────────────────────────────────
+// GET /api/export-tank-status?from=YYYY-MM-DD&to=YYYY-MM-DD
+app.get('/api/export-tank-status', async (req, res) => {
+  try {
+    const ExcelJS = require('exceljs');
+    const lots    = readJSON(PURCHASE_LOTS_FILE, []);
+    const FUELS   = ['휘발유', '경유', '등유'];
+    const CAPACITY = { '휘발유': 100000, '경유': 300000, '등유': 50000 };
+
+    // 날짜 범위 (기본: 6/1 ~ 오늘)
+    const from = req.query.from || '2026-06-01';
+    const to   = req.query.to   || new Date().toISOString().slice(0, 10);
+
+    // 날짜 목록 생성
+    const dates = [];
+    let cur = new Date(from);
+    const end = new Date(to);
+    while (cur <= end) {
+      dates.push(cur.toISOString().slice(0, 10));
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    // 유종별 일별 BOS 판매량 맵
+    const bosMap = {};
+    if (fs.existsSync(DAILY_DIR)) {
+      fs.readdirSync(DAILY_DIR).filter(f => f.endsWith('.json')).forEach(f => {
+        const day = readJSON(path.join(DAILY_DIR, f), {});
+        if (!day.bos?.date) return;
+        bosMap[day.bos.date] = day.bos.fuels || {};
+      });
+    }
+
+    // 유종별로 날짜별 재고 계산 (stockCorrection FIFO)
+    function calcForDate(fuel, targetDate) {
+      const fuelLots = lots.filter(l => l.fuel === fuel && l.qty > 0 && l.date <= targetDate)
+        .sort((a, b) => a.date.localeCompare(b.date));
+      let sc = null;
+      for (const l of fuelLots) if (l.stock != null) sc = l;
+      if (!sc) return null;
+
+      let soldAfterStock = 0;
+      if (fs.existsSync(DAILY_DIR)) {
+        fs.readdirSync(DAILY_DIR).filter(f => f.endsWith('.json')).forEach(f => {
+          const day = readJSON(path.join(DAILY_DIR, f), {});
+          if (!day.bos?.date || day.bos.date <= sc.date || day.bos.date >= targetDate) return;
+          soldAfterStock += (day.bos.fuels?.[fuel]?.qty || 0);
+        });
+      }
+      const lotsAfter = fuelLots.filter(l => l.date > sc.date);
+      const queue = [{ qty: sc.stock, price: sc.price }, ...lotsAfter.map(l => ({ qty: l.qty, price: l.price }))];
+      let toC = soldAfterStock;
+      for (const q of queue) { const t = Math.min(toC, q.qty); q.qty -= t; toC -= t; if (toC <= 0) break; }
+      const active = queue.filter(q => q.qty > 0);
+      const total  = active.reduce((s, q) => s + q.qty, 0);
+      const curP   = active[0]?.price ?? sc.price;
+      let sameQ = 0, nxtP = null, nxtQ = 0;
+      for (const q of active) {
+        if (q.price === curP) sameQ += q.qty;
+        else { if (!nxtP) nxtP = q.price; if (q.price === nxtP) nxtQ += q.qty; }
+      }
+      return { total: Math.round(total), curQty: Math.round(sameQ), curPrice: curP, nxtPrice: nxtP, nxtQty: Math.round(nxtQ) };
+    }
+
+    // Excel 생성
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('탱크현황');
+
+    // 헤더
+    const cols = ['날짜', '유종', '현재단가', '현재단가잔량(L)', '다음단가', '다음단가대기(L)', '총잔고(L)', '탱크용량(L)', '재고율(%)', '당일판매(L)'];
+    ws.addRow(cols);
+    ws.getRow(1).font = { bold: true };
+    ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
+    ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    ws.columns = [
+      { width: 12 }, { width: 8 }, { width: 10 }, { width: 14 }, { width: 10 }, { width: 14 },
+      { width: 12 }, { width: 12 }, { width: 10 }, { width: 12 },
+    ];
+
+    let rowNum = 2;
+    for (const date of dates) {
+      for (const fuel of FUELS) {
+        const r = calcForDate(fuel, date);
+        const bosSales = Math.round((bosMap[date]?.[fuel]?.qty || 0) * 10) / 10;
+        const cap = CAPACITY[fuel];
+        const pct = r ? Math.round(r.total / cap * 100) : 0;
+
+        const row = ws.addRow([
+          date, fuel,
+          r?.curPrice ?? '-', r ? r.curQty : '-',
+          r?.nxtPrice ?? '-', r ? (r.nxtQty || '-') : '-',
+          r ? r.total : '-', cap, pct,
+          bosSales || '-',
+        ]);
+        // 재고율에 따라 색상
+        if (r) {
+          const pctCell = row.getCell(9);
+          pctCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: pct < 20 ? 'FFFCA5A5' : pct < 40 ? 'FFFDE68A' : 'FFD1FAE5' } };
+        }
+        // 유종별 행 구분
+        const bgMap = { '휘발유': 'FFFFF7ED', '경유': 'FFEFF6FF', '등유': 'FFF0FDF4' };
+        row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgMap[fuel] } };
+        row.fill = row.fill; // merge later per cell
+        rowNum++;
+      }
+      // 날짜 구분선
+      if (rowNum > 2) {
+        for (let c = 1; c <= cols.length; c++) {
+          ws.getRow(rowNum - 1).getCell(c).border = { bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } } };
+        }
+      }
+    }
+
+    // 응답
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent('탱크현황_'+from+'_'+to+'.xlsx')}`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (e) { console.error('[export-tank-status]', e); res.status(500).send(e.message); }
+});
+
 // ── 월간 보고서 HTML 내보내기 (카카오톡 파일 공유용) ─────────────
 app.get('/api/export-html/:yearMonth', (req, res) => {
   const ym = req.params.yearMonth;
@@ -1948,6 +2112,87 @@ app.use((err, req, res, next) => {
 // 처리되지 않은 Promise 거부 로그
 process.on('unhandledRejection', (reason) => {
   console.error('[Unhandled Rejection]', reason);
+});
+
+// ── 입금검증 ─────────────────────────────────────────────────────
+const DEPOSIT_BOS_FILE  = path.join(DATA_DIR, 'deposit_bos.json');
+const DEPOSIT_EASY_FILE = path.join(DATA_DIR, 'deposit_easy.json');
+
+// BOS 시재현황 업로드
+app.post('/api/deposit/upload-bos', upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) return res.json({ ok: false, error: '파일이 없습니다.' });
+    const { parseBosDeposit } = require('./lib/depositVerifyParser');
+    const data = parseBosDeposit(req.file.path);
+    if (!data.length) return res.json({ ok: false, error: 'BOS 시재현황 파싱 실패. 파일 형식 확인 요망.' });
+    writeJSON(DEPOSIT_BOS_FILE, data);
+    const cards = [...new Set(data.map(r => r.card))];
+    const allDates = data.map(r => r.date).filter(Boolean).sort();
+    const dates = [allDates[0], allDates[allDates.length - 1]];
+    res.json({ ok: true, count: data.length, cards, from: dates[0], to: dates[1] });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
+// 이지샵 입금내역 업로드 (여러 파일 → 누적 저장)
+app.post('/api/deposit/upload-easy', upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) return res.json({ ok: false, error: '파일이 없습니다.' });
+    const { parseEasyshopDeposit } = require('./lib/depositVerifyParser');
+    const newData = parseEasyshopDeposit(req.file.path);
+    if (!newData.length) return res.json({ ok: false, error: '이지샵 입금내역 파싱 실패.' });
+    // 기존 데이터와 병합 (날짜+카드 기준 중복 제거)
+    const existing = readJSON(DEPOSIT_EASY_FILE, []);
+    const merged = [...existing];
+    for (const row of newData) {
+      const idx = merged.findIndex(r => r.date === row.date && r.card === row.card);
+      if (idx >= 0) merged[idx] = row; else merged.push(row);
+    }
+    merged.sort((a, b) => a.date.localeCompare(b.date) || a.card.localeCompare(b.card));
+    writeJSON(DEPOSIT_EASY_FILE, merged);
+    res.json({ ok: true, count: newData.length, total: merged.length });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
+// 매칭 결과 조회
+app.get('/api/deposit/match', (req, res) => {
+  try {
+    const { matchDeposits } = require('./lib/depositVerifyParser');
+    let bosList  = readJSON(DEPOSIT_BOS_FILE,  []);
+    let easyList = readJSON(DEPOSIT_EASY_FILE, []);
+    // 월 필터
+    const month = req.query.month; // YYYY-MM
+    if (month) {
+      bosList  = bosList.filter(r  => r.date?.startsWith(month)  || r.bosDate?.startsWith(month));
+      easyList = easyList.filter(r => r.date?.startsWith(month));
+    }
+    const card = req.query.card;
+    if (card) {
+      bosList  = bosList.filter(r => r.card === card);
+      easyList = easyList.filter(r => r.card === card);
+    }
+    const rows = matchDeposits(bosList, easyList);
+    // 요약
+    const summary = {
+      total:    rows.length,
+      match:    rows.filter(r => r.status === 'match').length,
+      warn:     rows.filter(r => r.status === 'warn').length,
+      mismatch: rows.filter(r => r.status === 'mismatch').length,
+      ez_only:  rows.filter(r => r.status === 'ez_only').length,
+      bos_only: rows.filter(r => r.status === 'bos_only').length,
+      avgLag:   (() => { const lags = rows.filter(r=>r.지연일수!=null).map(r=>r.지연일수); return lags.length ? Math.round(lags.reduce((a,b)=>a+b,0)/lags.length*10)/10 : null; })(),
+    };
+    const cards = [...new Set([...bosList.map(r=>r.card), ...easyList.map(r=>r.card)])].sort();
+    res.json({ ok: true, rows, summary, cards });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
+// 저장된 데이터 초기화
+app.delete('/api/deposit/reset', (req, res) => {
+  try {
+    writeJSON(DEPOSIT_BOS_FILE,  []);
+    writeJSON(DEPOSIT_EASY_FILE, []);
+    res.json({ ok: true });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
 app.listen(PORT, () => {

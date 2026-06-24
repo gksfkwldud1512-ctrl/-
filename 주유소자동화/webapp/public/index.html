@@ -25,6 +25,7 @@
       <button class="tab-btn active" data-tab="daily-main">일마감</button>
       <button class="tab-btn" data-tab="daily-expense">지출목록</button>
       <button class="tab-btn" data-tab="daily-customer">고객판매현황</button>
+      <button class="tab-btn" data-tab="daily-deposit">입금검증</button>
     </div>
     <!-- 월마감 subnav -->
     <div class="subnav-inner" id="subnav-monthly">
@@ -341,11 +342,17 @@
 
     <!-- 탱크 현황 -->
     <div id="tank-section" class="card" style="margin-bottom:12px;">
-      <div class="card-header"><h2>⛽ 탱크 현황
-        <input type="date" id="tank-date-input"
-          style="font-size:13px;font-weight:400;color:#475569;border:1px solid #cbd5e1;border-radius:6px;padding:2px 8px;margin-left:8px;vertical-align:middle;"
-          onchange="loadTankStatus(this.value)">
-      </h2></div>
+      <div class="card-header">
+        <h2>⛽ 탱크 현황
+          <input type="date" id="tank-date-input"
+            style="font-size:13px;font-weight:400;color:#475569;border:1px solid #cbd5e1;border-radius:6px;padding:2px 8px;margin-left:8px;vertical-align:middle;"
+            onchange="loadTankStatus(this.value)">
+        </h2>
+        <button class="btn-upload" style="margin-left:auto;padding:4px 12px;font-size:12px;background:#047857;"
+                onclick="exportTankStatus()">
+          📥 Excel 내보내기
+        </button>
+      </div>
       <div id="tank-container" style="display:flex;gap:24px;justify-content:center;padding:16px 8px;flex-wrap:wrap;">
         <div class="tank-card" id="tank-휘발유"></div>
         <div class="tank-card" id="tank-경유"></div>
@@ -580,6 +587,49 @@
               <tr class="empty-row"><td colspan="6">엑셀 파일을 업로드하면 목록이 표시됩니다</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 입금검증 탭 ── -->
+    <div id="tab-daily-deposit" class="tab-content" style="display:none;">
+      <div class="toolbar" style="flex-wrap:wrap;gap:8px;">
+        <div class="toolbar-group">
+          <!-- label 방식: 파일 선택 시 onchange 직접 호출 -->
+          <label class="btn-upload" style="cursor:pointer;display:inline-flex;align-items:center;">
+            📂 BOS 시재현황 업로드
+            <input type="file" accept=".xlsx,.xls" style="display:none;"
+                   onchange="uploadDepositBos(this)">
+          </label>
+          <span id="deposit-bos-label" class="file-label"></span>
+        </div>
+        <div class="toolbar-group">
+          <label class="btn-upload btn-teal" style="cursor:pointer;display:inline-flex;align-items:center;">
+            💳 이지샵 입금내역 업로드
+            <input type="file" accept=".xlsx,.xls" style="display:none;"
+                   onchange="uploadDepositEasy(this)">
+          </label>
+          <span id="deposit-easy-label" class="file-label"></span>
+        </div>
+        <div class="toolbar-group" style="margin-left:auto;gap:8px;">
+          <select id="deposit-month-filter" style="padding:5px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" onchange="loadDepositMatch()">
+            <option value="">전체 기간</option>
+          </select>
+          <select id="deposit-card-filter" style="padding:5px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" onchange="loadDepositMatch()">
+            <option value="">전체 카드사</option>
+          </select>
+          <button class="btn-upload" style="background:#dc2626;border-color:#dc2626;padding:5px 10px;font-size:12px;"
+                  onclick="resetDepositData()">🗑 초기화</button>
+        </div>
+      </div>
+
+      <!-- 요약 카드 -->
+      <div id="deposit-summary" style="display:flex;gap:10px;padding:12px 16px;flex-wrap:wrap;background:#f8fafc;border-bottom:1px solid #e2e8f0;"></div>
+
+      <!-- 결과 테이블 -->
+      <div id="deposit-result" style="overflow-x:auto;max-height:600px;overflow-y:auto;">
+        <div style="padding:40px;text-align:center;color:#94a3b8;font-size:13px;">
+          BOS 시재현황과 이지샵 입금내역을 업로드하면 매칭 결과가 표시됩니다.
         </div>
       </div>
     </div>

@@ -368,9 +368,47 @@ C:\Users\82108\Desktop\주유소자동화\
 
 ---
 
+## 완료된 작업 전체 목록 (추가 - 2026-06-24 오후) — v2.43.0
+
+### 재고 오차 현황 추가 개선
+- [x] 일별 손익 합계 컬럼 추가 (날짜 옆 — 유종 합산 이익/손실 한눈에)
+- [x] 오차 부호 반전: 양수(+)=이익(초록), 음수(-)=손실(빨강)
+- [x] 오차 표시 컬럼에 재고차(L)·BOS판매 컬럼 추가
+
+### 탱크현황 (일마감 탭) 전면 개편
+- [x] 도넛차트 → 원형 액체 채움 (아래=전재고, 위=신규재고)
+- [x] 단가별 재고 분리: currentLotRemaining = 현재단가 전체, nextLotQty = 다음단가
+- [x] 6/1 기초재고 기준점 추가 (purchase_lots 5/31 stock 항목)
+  - 휘발유 10,848L @1,934원 / 경유 66,258L @1,923원 / 등유 8,855L @1,530원
+- [x] stockCorrection FIFO 로직 완전 재작성 → 가격 전환 정확 처리
+- [x] 다음 단가 표시 (▼ 다음단가 1,873원 27,840L 대기)
+- [x] server.js nextLotPrice, nextLotQty 필드 추가
+
+### 경유 단가 변경 (6/24)
+- [x] purchase_lots: 6/24 경유 27,840L @1,873원 입력
+- [x] 탱크현황 기준: 전재고 1,923원 33,742L → 소진 후 → 1,873원으로 자동 전환
+- [x] 탱크현황 Excel 내보내기: GET /api/export-tank-status
+
+### 입금검증 탭 신규
+- [x] 일마감 subnav에 "입금검증" 탭 추가
+- [x] lib/depositVerifyParser.js 신규:
+  - parseBosDeposit: BOS 시재현황 파싱 (일별 당기발생/입금)
+  - parseEasyshopDeposit: 이지샵 입금내역 파싱
+  - matchDeposits: 연속일 합산 윈도우 매칭 (1~5일)
+- [x] POST /api/deposit/upload-bos: BOS 시재현황 업로드
+- [x] POST /api/deposit/upload-easy: 이지샵 입금내역 업로드 (누적)
+- [x] GET /api/deposit/match: 매칭 결과 조회
+- [x] DELETE /api/deposit/reset: 데이터 초기화
+- [x] UI: label onchange 방식 파일 첨부 (안정적)
+- [x] 결과 테이블: 당기발생일 | 카드사 | 당기발생금액 | 입금일 | 입금금액 | 지연일수 | 금액차이
+- **현황**: 서버 테스트 통과, 서버 재시작 후 실제 사용 확인 필요
+
+---
+
 ## 다음 세션에서 할 작업
 
 ### 우선순위 1
+- [ ] 입금검증 탭 실사용 확인 (서버 재시작 후 파일 업로드 테스트)
 - [ ] 업체별 업태(bizType) 입력
 - [ ] BOS DB 계정 확인 후 /api/sync-bos-db 동기화 엔드포인트 구현
 

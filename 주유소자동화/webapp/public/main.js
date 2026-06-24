@@ -170,15 +170,16 @@ function switchDailySubTab(tab) {
   const gd = document.getElementById('group-daily');
   if (gd) { gd.style.display = 'block'; gd.classList.add('active'); }
   // 탭 콘텐츠: inline style로 확실하게 제어
-  ['daily-main', 'daily-expense', 'daily-customer'].forEach(t => {
+  ['daily-main', 'daily-expense', 'daily-customer', 'daily-deposit'].forEach(t => {
     const el = document.getElementById(`tab-${t}`);
     if (!el) return;
     const show = t === tab;
     el.style.display = show ? 'block' : 'none';
     el.classList.toggle('active', show);
   });
-  if (tab === 'daily-expense') window.location.href = '/expenses.html';
+  if (tab === 'daily-expense')  window.location.href = '/expenses.html';
   if (tab === 'daily-customer') loadCustomerSales();
+  if (tab === 'daily-deposit')  loadDepositMatch();
 }
 
 function switchSubTab(tab) {
@@ -1196,6 +1197,8 @@ function initDailyUpload() {
     if (e.target.files[0]) uploadBankExpenses(e.target.files[0]);
     e.target.value = '';
   });
+
+  // 입금검증은 label onchange(uploadDepositBos/Easy 전역함수)로 처리
 }
 
 function switchToUploadedMonth(dateStr) {
@@ -1606,64 +1609,102 @@ function renderTankStatus(tanks, date) {
   if (tankInput && tankInput.value !== date) tankInput.value = date;
 
   const COLORS = {
-    '휘발유': { main: '#f97316', old: '#fdba74', bg: '#fff7ed', text: '#9a3412' },
-    '경유':   { main: '#3b82f6', old: '#93c5fd', bg: '#eff6ff', text: '#1e3a8a' },
-    '등유':   { main: '#22c55e', old: '#86efac', bg: '#f0fdf4', text: '#14532d' },
+    '휘발유': { new: '#f97316', old: '#fed7aa', bg: '#fff7ed', text: '#9a3412', border: '#fb923c' },
+    '경유':   { new: '#3b82f6', old: '#bfdbfe', bg: '#eff6ff', text: '#1e3a8a', border: '#60a5fa' },
+    '등유':   { new: '#16a34a', old: '#bbf7d0', bg: '#f0fdf4', text: '#14532d', border: '#4ade80' },
   };
-  const LABELS = { '휘발유': '휘발유', '경유': '경유', '등유': '등유' };
+
+  const ID_MAP = { '휘발유': 'gasoline', '경유': 'diesel', '등유': 'kerosene' };
 
   for (const [fuel, t] of Object.entries(tanks)) {
     const el = document.getElementById(`tank-${fuel}`);
     if (!el) continue;
-    const col = COLORS[fuel];
-    const cap = t.capacity;
-    const total = Math.min(t.totalRemaining, cap);
-    const oldQty = Math.min(t.currentLotRemaining, total);
-    const newQty = total - oldQty;
-    const totalPct = cap > 0 ? Math.round(total / cap * 100) : 0;
-    const oldPct   = cap > 0 ? Math.round(oldQty / cap * 100) : 0;
+    const col  = COLORS[fuel];
+    const cap  = t.capacity;
+    const total   = Math.min(t.totalRemaining, cap);
+    const oldQty  = Math.min(t.currentLotRemaining, total);  // 현재단가 전체 잔량 (아래)
+    const newQty  = Math.min(t.nextLotQty || 0, total - oldQty); // 다음단가 수량 (위)
+    const totalPct = cap > 0 ? (total / cap * 100) : 0;
+    const fmtN = n => n >= 10000 ? (n/10000).toFixed(1)+'만L' : n >= 1000 ? (n/1000).toFixed(1)+'천L' : n+'L';
 
-    // SVG 원형 탱크 (r=70, 중심 cx=80 cy=80)
-    const R = 70, CX = 80, CY = 80;
-    const totalAngle = totalPct / 100 * 360;
-    const oldAngle   = oldPct   / 100 * 360;
+    // 원형 액체 채움: 클립패스로 원 안에 rect 채움
+    const R = 68, CX = 80, CY = 80;
+    const clipId = `tc-${ID_MAP[fuel] || fuel}`;
+    const diameter = R * 2;           // 136
+    const bottomY  = CY + R;          // 148 (원의 맨 아래)
 
-    function arcPath(cx, cy, r, angleDeg) {
-      if (angleDeg >= 360) angleDeg = 359.99;
-      const rad = (angleDeg - 90) * Math.PI / 180;
-      const x = cx + r * Math.cos(rad);
-      const y = cy + r * Math.sin(rad);
-      const large = angleDeg > 180 ? 1 : 0;
-      return `M ${cx} ${cy - r} A ${r} ${r} 0 ${large} 1 ${x} ${y} L ${cx} ${cy}`;
-    }
+    // 채움 높이 (픽셀)
+    const totalFillH = diameter * (totalPct / 100);
+    const oldFillH   = total > 0 ? totalFillH * (oldQty / total) : 0;
+    const newFillH   = totalFillH - oldFillH;
 
-    const fmtL = n => n >= 1000 ? (n/1000).toFixed(1)+'천L' : n+'L';
-    const fmtK = n => Math.round(n/1000).toLocaleString()+'천L';
+    // rect의 y 좌표 (아래에서 위로 채움)
+    const oldRectY = bottomY - oldFillH;          // 전재고 rect top
+    const newRectY = oldRectY - newFillH;         // 신규재고 rect top
+    const totalRectY = bottomY - totalFillH;      // 전체 채움 top
+
+    // 수면선 y (흔들리는 선 효과 없이 깔끔한 직선)
+    const waterLineY = totalRectY;
 
     el.innerHTML = `
-      <div style="text-align:center;padding:8px 12px 12px;background:${col.bg};border-radius:12px;min-width:160px;">
-        <div style="font-weight:700;font-size:15px;color:${col.text};margin-bottom:8px;">${LABELS[fuel]}</div>
-        <svg width="160" height="160" viewBox="0 0 160 160">
-          <!-- 배경 원 -->
-          <circle cx="${CX}" cy="${CY}" r="${R}" fill="#e5e7eb"/>
-          <!-- 신규단가 채움 -->
-          ${totalAngle > 0 ? `<path d="${arcPath(CX,CY,R,totalAngle)}" fill="${col.main}" opacity="0.9"/>` : ''}
-          <!-- 전달단가 채움 (하단, 더 진한색) -->
-          ${oldAngle > 0 ? `<path d="${arcPath(CX,CY,R,oldAngle)}" fill="${col.old}"/>` : ''}
-          <!-- 내부 흰 원 (도넛) -->
-          <circle cx="${CX}" cy="${CY}" r="45" fill="white"/>
-          <!-- 중앙 텍스트 -->
-          <text x="${CX}" y="${CY-8}" text-anchor="middle" font-size="13" font-weight="700" fill="${col.text}">${totalPct}%</text>
-          <text x="${CX}" y="${CY+8}" text-anchor="middle" font-size="10" fill="#6b7280">${fmtK(total)}</text>
-          <text x="${CX}" y="${CY+22}" text-anchor="middle" font-size="9" fill="#9ca3af">/ ${(cap/10000).toFixed(0)}만L</text>
+      <div style="text-align:center;padding:10px 12px 12px;background:${col.bg};border-radius:12px;min-width:170px;">
+        <div style="font-weight:700;font-size:15px;color:${col.text};margin-bottom:6px;">${fuel}</div>
+        <svg width="160" height="160" viewBox="0 0 160 160" style="overflow:visible;">
+          <defs>
+            <clipPath id="${clipId}">
+              <circle cx="${CX}" cy="${CY}" r="${R}"/>
+            </clipPath>
+          </defs>
+          <!-- 빈 탱크 배경 -->
+          <circle cx="${CX}" cy="${CY}" r="${R}" fill="#f1f5f9"/>
+          <!-- 전재고 (아래 — 현재 소비 중) -->
+          ${oldFillH > 0.5 ? `<rect x="${CX-R}" y="${oldRectY}" width="${diameter}" height="${oldFillH}"
+            fill="${col.old}" clip-path="url(#${clipId})"/>` : ''}
+          <!-- 신규재고 (위 — 새 입고분) -->
+          ${newFillH > 0.5 ? `<rect x="${CX-R}" y="${newRectY}" width="${diameter}" height="${newFillH}"
+            fill="${col.new}" opacity="0.85" clip-path="url(#${clipId})"/>` : ''}
+          <!-- 단색 채움 (신구재고 구분 없을 때) -->
+          ${(oldFillH <= 0.5 && newFillH <= 0.5 && totalFillH > 0.5) ? `<rect x="${CX-R}" y="${totalRectY}" width="${diameter}" height="${totalFillH}"
+            fill="${col.new}" opacity="0.85" clip-path="url(#${clipId})"/>` : ''}
+          <!-- 경계선 (전재고↔신규재고 구분) -->
+          ${oldFillH > 0.5 && newFillH > 0.5 ? `<line x1="${CX-R}" y1="${oldRectY}" x2="${CX+R}" y2="${oldRectY}"
+            stroke="white" stroke-width="1.5" stroke-dasharray="4,2" clip-path="url(#${clipId})"/>` : ''}
+          <!-- 원 테두리 -->
+          <circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${col.border}" stroke-width="2"/>
+          <!-- 중앙 텍스트 (흰색 배경으로 가독성 확보) -->
+          <text x="${CX}" y="${CY-6}" text-anchor="middle" font-size="20" font-weight="800"
+            fill="${totalPct > 40 ? 'white' : col.text}" stroke="${totalPct > 40 ? col.text : 'none'}" stroke-width="0.3">
+            ${Math.round(totalPct)}%
+          </text>
+          <text x="${CX}" y="${CY+13}" text-anchor="middle" font-size="11" font-weight="600"
+            fill="${totalPct > 40 ? 'white' : col.text}">
+            ${fmtN(total)}
+          </text>
+          <text x="${CX}" y="${CY+27}" text-anchor="middle" font-size="9"
+            fill="${totalPct > 55 ? '#e2e8f0' : '#94a3b8'}">
+            / ${fmtN(cap)}
+          </text>
         </svg>
-        <div style="font-size:11px;margin-top:4px;line-height:1.6;">
-          ${t.currentPrice ? `<div style="color:${col.text};font-weight:600;">현재단가 ${t.currentPrice.toLocaleString()}원</div>` : ''}
-          ${oldQty > 0 && t.currentPrice ? `
-          <div style="background:${col.old};border-radius:6px;padding:3px 6px;margin-top:4px;color:${col.text};">
-            전달단가 ${t.previousPrice ? t.previousPrice.toLocaleString()+'원' : '-'} 잔여<br>
-            <strong>${oldQty.toLocaleString()}L</strong> (${oldPct}%)
-          </div>` : (t.previousPrice ? `<div style="color:#9ca3af;font-size:10px;">전달단가 소진 완료</div>` : '')}
+        <!-- 범례 -->
+        <div style="font-size:11px;margin-top:6px;line-height:1.7;text-align:left;">
+          ${newQty > 0 && t.nextLotPrice ? `
+          <div style="display:flex;align-items:center;gap:5px;">
+            <span style="display:inline-block;width:10px;height:10px;background:${col.new};border-radius:2px;flex-shrink:0;"></span>
+            <span style="color:${col.text};font-weight:600;">신규 ${t.nextLotPrice.toLocaleString()}원</span>
+            <span style="color:#64748b;margin-left:auto;">${newQty.toLocaleString()}L</span>
+          </div>` : ''}
+          ${oldQty > 0 ? `
+          <div style="display:flex;align-items:center;gap:5px;margin-top:2px;">
+            <span style="display:inline-block;width:10px;height:10px;background:${col.old};border-radius:2px;flex-shrink:0;"></span>
+            <span style="color:${col.text};">전재고 ${t.currentPrice?.toLocaleString() ?? ''}원</span>
+            <span style="color:#64748b;margin-left:auto;">${oldQty.toLocaleString()}L</span>
+          </div>` : ''}
+          ${!t.nextLotPrice && total > 0 ? `
+          <div style="display:flex;align-items:center;gap:5px;margin-top:2px;">
+            <span style="display:inline-block;width:10px;height:10px;background:${col.new};border-radius:2px;flex-shrink:0;"></span>
+            <span style="color:${col.text};font-weight:600;">${t.currentPrice?.toLocaleString() ?? ''}원</span>
+            <span style="color:#64748b;margin-left:auto;">${total.toLocaleString()}L</span>
+          </div>` : ''}
         </div>
       </div>`;
   }
@@ -2326,6 +2367,172 @@ async function loadSummary() {
   loadStockVariance();
 }
 
+// ── 탱크현황 Excel 내보내기 ──────────────────────────────────────
+function exportTankStatus() {
+  const dateEl = document.getElementById('tank-date-input');
+  const to = dateEl?.value || new Date().toISOString().slice(0, 10);
+  const from = '2026-06-01';
+  const url = `/api/export-tank-status?from=${from}&to=${to}`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  showToast(`📥 탱크현황 Excel 다운로드 중... (${from} ~ ${to})`);
+}
+
+// ── 입금검증 ─────────────────────────────────────────────────────
+
+async function uploadDepositBos(input) {
+  const file = input.files[0]; if (!file) return;
+  const fd = new FormData(); fd.append('file', file);
+  showToast('BOS 시재현황 업로드 중...');
+  try {
+    const r = await fetch('/api/deposit/upload-bos', { method:'POST', body:fd });
+    const d = await r.json();
+    if (d.ok) {
+      const lbl = document.getElementById('deposit-bos-label');
+      if (lbl) lbl.textContent = `✓ ${d.count}건 (${d.from}~${d.to})`;
+      showToast(`✅ BOS 시재현황 ${d.count}건 업로드 완료`, 'success');
+      loadDepositMatch();
+    } else showToast('❌ ' + d.error, 'error');
+  } catch(e) { showToast('❌ 오류: ' + e.message, 'error'); }
+  input.value = '';
+}
+
+async function uploadDepositEasy(input) {
+  const file = input.files[0]; if (!file) return;
+  const fd = new FormData(); fd.append('file', file);
+  showToast('이지샵 입금내역 업로드 중...');
+  try {
+    const r = await fetch('/api/deposit/upload-easy', { method:'POST', body:fd });
+    const d = await r.json();
+    if (d.ok) {
+      const lbl = document.getElementById('deposit-easy-label');
+      if (lbl) lbl.textContent = `✓ 누적 ${d.total}건`;
+      showToast(`✅ 이지샵 입금내역 ${d.count}건 추가 (총 ${d.total}건)`, 'success');
+      loadDepositMatch();
+    } else showToast('❌ ' + d.error, 'error');
+  } catch(e) { showToast('❌ 오류: ' + e.message, 'error'); }
+  input.value = '';
+}
+
+async function loadDepositMatch() {
+  const month = document.getElementById('deposit-month-filter')?.value || '';
+  const card  = document.getElementById('deposit-card-filter')?.value  || '';
+  const params = new URLSearchParams();
+  if (month) params.set('month', month);
+  if (card)  params.set('card',  card);
+  try {
+    const r = await fetch('/api/deposit/match?' + params);
+    const d = await r.json();
+    if (!d.ok) return;
+    renderDepositSummary(d.summary);
+    renderDepositTable(d.rows);
+    // 필터 옵션 갱신
+    const mSel = document.getElementById('deposit-month-filter');
+    if (mSel) {
+      const months = [...new Set(d.rows.map(r=>(r.bosFrom||'').slice(0,7)).filter(Boolean))].sort();
+      const curM = mSel.value;
+      mSel.innerHTML = '<option value="">전체 기간</option>' +
+        months.map(m=>`<option value="${m}"${m===curM?' selected':''}>${m}</option>`).join('');
+    }
+    const cSel = document.getElementById('deposit-card-filter');
+    if (cSel) {
+      const curC = cSel.value;
+      cSel.innerHTML = '<option value="">전체 카드사</option>' +
+        (d.cards||[]).map(c=>`<option value="${c}"${c===curC?' selected':''}>${c}</option>`).join('');
+    }
+  } catch(e) { console.error('[loadDepositMatch]', e); }
+}
+
+function renderDepositSummary(s) {
+  const el = document.getElementById('deposit-summary');
+  if (!el || !s) return;
+  const chip = (label, val, color) =>
+    `<div style="background:white;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px;text-align:center;">
+      <div style="font-size:11px;color:#64748b;">${label}</div>
+      <div style="font-size:18px;font-weight:700;color:${color};">${val}</div>
+    </div>`;
+  el.innerHTML =
+    chip('전체',      s.total,    '#1e293b') +
+    chip('매칭완료',  s.match,    '#16a34a') +
+    chip('금액주의',  s.warn,     '#d97706') +
+    chip('미매칭',    s.mismatch, '#dc2626') +
+    chip('이지샵만',  s.ez_only,  '#7c3aed') +
+    chip('BOS만',    s.bos_only, '#0369a1') +
+    (s.avgLag != null ? chip('평균지연일', s.avgLag+'일', '#475569') : '');
+}
+
+function renderDepositTable(rows) {
+  const el = document.getElementById('deposit-result');
+  if (!el) return;
+  if (!rows || !rows.length) {
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:#94a3b8;">데이터 없음 — 파일을 업로드해 주세요</div>';
+    return;
+  }
+  const fmt = v => v != null ? Math.round(v).toLocaleString() : '-';
+  const STATUS = {
+    match:    { bg:'#f0fdf4', text:'✅ 매칭',   color:'#16a34a' },
+    warn:     { bg:'#fefce8', text:'⚠ 주의',    color:'#d97706' },
+    mismatch: { bg:'#fef2f2', text:'❌ 불일치',  color:'#dc2626' },
+    ez_only:  { bg:'#faf5ff', text:'🟣 입금만', color:'#7c3aed' },
+    bos_only: { bg:'#eff6ff', text:'🔵 발생만', color:'#0369a1' },
+  };
+
+  // BOS 발생일 기준 정렬, 카드사 묶음
+  const sorted = [...rows].sort((a,b)=>(a.bosFrom||'').localeCompare(b.bosFrom||'')||a.card.localeCompare(b.card));
+
+  let html = `<table style="font-size:12px;border-collapse:collapse;min-width:850px;width:100%;">
+    <thead style="position:sticky;top:0;z-index:1;background:#1e293b;color:#f8fafc;">
+      <tr>
+        <th style="padding:8px 10px;text-align:center;white-space:nowrap;">매칭여부</th>
+        <th style="padding:8px 10px;text-align:left;">카드사</th>
+        <th style="padding:8px 10px;text-align:center;white-space:nowrap;">당기발생일</th>
+        <th style="padding:8px 10px;text-align:right;white-space:nowrap;">당기발생금액</th>
+        <th style="padding:8px 10px;text-align:center;white-space:nowrap;">입금일</th>
+        <th style="padding:8px 10px;text-align:right;white-space:nowrap;">입금금액</th>
+        <th style="padding:8px 10px;text-align:center;background:#1e3a5f;white-space:nowrap;">지연일수</th>
+        <th style="padding:8px 10px;text-align:right;white-space:nowrap;">금액차이</th>
+      </tr>
+    </thead><tbody>`;
+
+  for (const r of sorted) {
+    const st = STATUS[r.status] || { bg:'', text:'-', color:'#64748b' };
+    const diff = r.금액차이 != null
+      ? `<span style="color:${Math.abs(r.금액차이)>50000?'#dc2626':'#64748b'}">${r.금액차이>0?'+':''}${fmt(r.금액차이)}</span>`
+      : '-';
+    const lagColor = !r.지연일수 ? '#94a3b8' : r.지연일수>7?'#dc2626':r.지연일수>4?'#d97706':'#16a34a';
+    html += `<tr style="background:${st.bg};border-bottom:1px solid #f1f5f9;">
+      <td style="padding:5px 10px;text-align:center;font-weight:600;color:${st.color};font-size:11px;">${st.text}</td>
+      <td style="padding:5px 10px;font-weight:600;color:#1e293b;">${r.card}</td>
+      <td style="padding:5px 10px;text-align:center;color:#475569;">${r.bosFrom||'-'}</td>
+      <td style="padding:5px 10px;text-align:right;font-weight:600;">${fmt(r.bos발생합계)}</td>
+      <td style="padding:5px 10px;text-align:center;color:#0369a1;">${r.date||'-'}</td>
+      <td style="padding:5px 10px;text-align:right;color:#0369a1;font-weight:600;">${fmt(r.입금예정액)}</td>
+      <td style="padding:5px 10px;text-align:center;font-weight:700;color:${lagColor};">${r.지연일수!=null?r.지연일수+'일':'-'}</td>
+      <td style="padding:5px 10px;text-align:right;">${diff}</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+async function resetDepositData() {
+  if (!confirm('업로드된 입금검증 데이터를 모두 초기화하시겠습니까?')) return;
+  await fetch('/api/deposit/reset', { method:'DELETE' });
+  const bLbl = document.getElementById('deposit-bos-label');
+  const eLbl = document.getElementById('deposit-easy-label');
+  if (bLbl) bLbl.textContent = '';
+  if (eLbl) eLbl.textContent = '';
+  const sum = document.getElementById('deposit-summary');
+  if (sum) sum.innerHTML = '';
+  const res = document.getElementById('deposit-result');
+  if (res) res.innerHTML = '<div style="padding:40px;text-align:center;color:#94a3b8;">초기화 완료</div>';
+  showToast('입금검증 데이터 초기화 완료');
+}
+
 // ── BOS PostgreSQL 연결 테스트 ──────────────────────────────────
 async function testBosDb() {
   const btn = document.getElementById('btn-test-bos-db');
@@ -2439,6 +2646,7 @@ function renderStockVariance(rows, totalAll, byMonth) {
   html += '<thead style="position:sticky;top:0;z-index:1;">';
   html += '<tr style="background:#1e293b;color:#f8fafc;">';
   html += '<th rowspan="2" style="padding:8px 10px;text-align:center;border-right:1px solid #334155;">날짜</th>';
+  html += '<th rowspan="2" style="padding:8px 10px;text-align:center;border-right:2px solid #475569;white-space:nowrap;background:#1e3a5f;min-width:90px;">일별 손익</th>';
   for (const f of FUELS) {
     html += `<th colspan="7" style="padding:6px 8px;text-align:center;border-right:1px solid #334155;border-bottom:1px solid #334155;">${f}</th>`;
   }
@@ -2464,7 +2672,7 @@ function renderStockVariance(rows, totalAll, byMonth) {
       const mSub = byMonth?.[rowMonth] || {};
       const mTot = mSub.total || 0;
       html += `<tr style="background:#dbeafe;">`;
-      html += `<td style="padding:6px 10px;font-weight:700;font-size:12px;color:#1d4ed8;" colspan="22">`;
+      html += `<td style="padding:6px 10px;font-weight:700;font-size:12px;color:#1d4ed8;" colspan="23">`;
       html += `▸ ${y}년 ${parseInt(m)}월 소계&nbsp;&nbsp;`;
       html += `경유: <span style="${gainStyle(-(mSub.경유||0))}">${fmtGain(-(mSub.경유||0))}원</span>&nbsp;&nbsp;`;
       html += `휘발유: <span style="${gainStyle(-(mSub.휘발유||0))}">${fmtGain(-(mSub.휘발유||0))}원</span>&nbsp;&nbsp;`;
@@ -2475,9 +2683,13 @@ function renderStockVariance(rows, totalAll, byMonth) {
 
     const noBos = !row.hasBos;
     const rowBg = noBos ? 'background:#fef3c7;' : (revRows.indexOf(row) % 2 === 0 ? '' : 'background:#f8fafc;');
+    // 일별 합계: 3개 유종 금액 합산 (표시값 = -(amount))
+    const dayTotal = FUELS.reduce((s, f) => s - (row.fuels[f]?.amount || 0), 0);
     html += `<tr style="${rowBg}border-bottom:1px solid #f1f5f9;">`;
     html += `<td style="padding:5px 8px;white-space:nowrap;color:${noBos?'#92400e':'#475569'};font-size:11px;">`;
     html += `${row.date}${noBos ? ' <span style="font-size:10px;color:#d97706;">⚠BOS없음</span>' : ''}</td>`;
+    html += `<td style="padding:5px 10px;text-align:right;font-weight:700;font-size:12px;border-right:2px solid #e2e8f0;${gainStyle(dayTotal)}background:${gainBg(dayTotal)}">`;
+    html += `${fmtGain(dayTotal)}원</td>`;
 
     for (const f of FUELS) {
       const fd = row.fuels[f] || {};
@@ -2501,14 +2713,15 @@ function renderStockVariance(rows, totalAll, byMonth) {
   if (totalAll) {
     const dispTotal = -(totalAll.total || 0);
     html += '<tr style="background:#fef9c3;border-top:2px solid #e2e8f0;font-weight:700;">';
-    html += '<td style="padding:7px 10px;color:#92400e;">전체합계</td>';
+    html += `<td style="padding:7px 10px;color:#92400e;">전체합계</td>`;
+    html += `<td style="padding:7px 10px;text-align:right;font-size:13px;border-right:2px solid #e2e8f0;${gainStyle(dispTotal)}">${fmtGain(dispTotal)}원</td>`;
     for (const f of FUELS) {
       const dv = -(totalAll[f] || 0);
       html += `<td colspan="5" style="padding:7px 6px;text-align:center;color:#64748b;font-size:11px;">${f}</td>`;
       html += `<td colspan="2" style="padding:7px 6px;text-align:right;${gainStyle(dv)};border-right:1px solid #e2e8f0;">${fmtGain(dv)}원</td>`;
     }
     html += '</tr>';
-    html += `<tr style="background:#fef9c3;"><td colspan="22" style="padding:7px 14px;font-size:12px;color:#78350f;">`;
+    html += `<tr style="background:#fef9c3;"><td colspan="23" style="padding:7px 14px;font-size:12px;color:#78350f;">`;
     html += `재고 손익 합계: <strong style="${gainStyle(dispTotal)};font-size:14px;">${fmtGain(dispTotal)}원</strong>`;
     html += `&nbsp;&nbsp;<span style="color:#94a3b8;font-weight:400;">(영업이익 미반영 · 온도·증발·ATG오차 모니터링용)</span>`;
     html += `&nbsp;&nbsp;오차해석: <span style="color:#16a34a;">+(초록)</span>=BOS판매>탱크소모(이익) `;
