@@ -1585,6 +1585,7 @@ async function loadDailyMonth() {
   const lastDate = `${dailyState.year}-${String(dailyState.month).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
   const tankInput = document.getElementById('tank-date-input');
   if (tankInput) tankInput.value = lastDate;
+  loadBaseStock();
   loadTankStatus(lastDate);
 }
 
@@ -1596,6 +1597,53 @@ function selectDailyRow(tr, date) {
   if (input) input.value = date;
   loadTankStatus(date);
   document.getElementById('tank-section')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ── 기초재고 기준점 ───────────────────────────────────────────
+async function loadBaseStock() {
+  const r = await api('GET', '/api/base-stock');
+  if (!r.ok) return;
+  if (r.date) {
+    const d = document.getElementById('base-stock-date');
+    if (d) d.value = r.date;
+    const map = { '휘발유': 'gasoline', '경유': 'diesel', '등유': 'kerosene' };
+    for (const [fuel, key] of Object.entries(map)) {
+      const el = document.getElementById(`base-stock-${key}`);
+      if (el && r.stocks[fuel]) el.value = r.stocks[fuel].qty;
+    }
+    const st = document.getElementById('base-stock-status');
+    if (st) st.textContent = `현재 기준: ${r.date}`;
+  } else {
+    // 기본값: 이번 달 1일
+    const now = new Date();
+    const d = document.getElementById('base-stock-date');
+    if (d) d.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+  }
+}
+
+async function saveBaseStock() {
+  const date = document.getElementById('base-stock-date')?.value;
+  if (!date) { showToast('기준일을 선택하세요', 'error'); return; }
+  const stocks = {
+    '휘발유': Number(document.getElementById('base-stock-gasoline')?.value) || 0,
+    '경유':   Number(document.getElementById('base-stock-diesel')?.value)   || 0,
+    '등유':   Number(document.getElementById('base-stock-kerosene')?.value) || 0,
+  };
+  if (!stocks['휘발유'] && !stocks['경유'] && !stocks['등유']) {
+    showToast('최소 1개 유종의 기초재고를 입력하세요', 'error'); return;
+  }
+  showToast('기초재고 저장 중...');
+  const r = await api('POST', '/api/base-stock', { date, stocks });
+  if (r.ok) {
+    showToast(`✅ ${date} 기초재고 저장 완료`, 'success');
+    const st = document.getElementById('base-stock-status');
+    if (st) st.textContent = `현재 기준: ${date}`;
+    // 탱크현황 갱신
+    const tankDate = document.getElementById('tank-date-input')?.value;
+    if (tankDate) loadTankStatus(tankDate);
+  } else {
+    showToast('❌ ' + r.error, 'error');
+  }
 }
 
 async function loadTankStatus(date) {
@@ -1704,6 +1752,10 @@ function renderTankStatus(tanks, date) {
             <span style="display:inline-block;width:10px;height:10px;background:${col.new};border-radius:2px;flex-shrink:0;"></span>
             <span style="color:${col.text};font-weight:600;">${t.currentPrice?.toLocaleString() ?? ''}원</span>
             <span style="color:#64748b;margin-left:auto;">${total.toLocaleString()}L</span>
+          </div>` : ''}
+          ${t.stockCorrected ? `
+          <div style="margin-top:4px;padding-top:4px;border-top:1px dashed #cbd5e1;font-size:10px;color:#94a3b8;text-align:center;">
+            기준: ${t.stockDate}
           </div>` : ''}
         </div>
       </div>`;

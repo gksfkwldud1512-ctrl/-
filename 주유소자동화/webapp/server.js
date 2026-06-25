@@ -900,6 +900,42 @@ app.get('/api/tank-variance', (req, res) => {
   } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
+// ── 기초재고 기준점 조회/저장 ──────────────────────────────────
+app.get('/api/base-stock', (req, res) => {
+  const lots = readJSON(PURCHASE_LOTS_FILE, []);
+  const stocks = lots.filter(l => l.type === 'stock');
+  // 가장 최근 날짜의 stock 항목만 반환
+  const dates = [...new Set(stocks.map(s => s.date))].sort().reverse();
+  const latest = dates[0] || null;
+  const result = {};
+  for (const s of stocks.filter(s => s.date === latest)) {
+    result[s.fuel] = { qty: s.qty, price: s.price, date: s.date };
+  }
+  res.json({ ok: true, date: latest, stocks: result });
+});
+
+app.post('/api/base-stock', express.json(), (req, res) => {
+  try {
+    const { date, stocks } = req.body;  // stocks: { '휘발유': qty, '경유': qty, '등유': qty }
+    if (!date) return res.json({ ok: false, error: '기준일을 입력하세요.' });
+    let lots = readJSON(PURCHASE_LOTS_FILE, []);
+    // 해당 날짜 기존 stock 항목 제거
+    lots = lots.filter(l => !(l.type === 'stock' && l.date === date));
+    for (const [fuel, qty] of Object.entries(stocks)) {
+      if (!qty || isNaN(qty)) continue;
+      // 직전 입고 단가 자동 참조
+      const prevLot = lots
+        .filter(l => l.fuel === fuel && l.date <= date && l.type !== 'stock')
+        .sort((a, b) => b.date.localeCompare(a.date))[0];
+      const price = prevLot?.price || 0;
+      lots.push({ date, fuel, qty: Number(qty), price, type: 'stock', stock: Number(qty) });
+    }
+    lots.sort((a, b) => a.date.localeCompare(b.date) || (a.fuel || '').localeCompare(b.fuel || ''));
+    writeJSON(PURCHASE_LOTS_FILE, lots);
+    res.json({ ok: true, date, saved: Object.keys(stocks).length });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
 // ── 탱크 현황 조회 (FIFO 기준 현재고 + 전달단가 잔여량) ────────
 app.get('/api/daily/tank-status', (req, res) => {
   const targetDate = req.query.date || new Date().toISOString().slice(0, 10);

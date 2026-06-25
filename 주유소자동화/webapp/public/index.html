@@ -353,6 +353,36 @@
           📥 Excel 내보내기
         </button>
       </div>
+      <!-- 기초재고 기준점 설정 -->
+      <div id="base-stock-panel" style="display:flex;align-items:center;gap:10px;padding:8px 16px;background:#f0f9ff;border-bottom:1px solid #bae6fd;flex-wrap:wrap;">
+        <span style="font-size:12px;font-weight:700;color:#0369a1;white-space:nowrap;">📦 기초재고</span>
+        <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:#475569;">
+          기준일
+          <input type="date" id="base-stock-date"
+            style="font-size:12px;padding:2px 6px;border:1px solid #94a3b8;border-radius:5px;">
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:12px;">
+          <span style="color:#dc2626;font-weight:700;">●</span> 휘발유
+          <input type="number" id="base-stock-gasoline" min="0" step="1" placeholder="0"
+            style="width:80px;font-size:12px;padding:2px 6px;border:1px solid #94a3b8;border-radius:5px;text-align:right;">
+          L
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:12px;">
+          <span style="color:#16a34a;font-weight:700;">●</span> 경유
+          <input type="number" id="base-stock-diesel" min="0" step="1" placeholder="0"
+            style="width:80px;font-size:12px;padding:2px 6px;border:1px solid #94a3b8;border-radius:5px;text-align:right;">
+          L
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:12px;">
+          <span style="color:#d97706;font-weight:700;">●</span> 등유
+          <input type="number" id="base-stock-kerosene" min="0" step="1" placeholder="0"
+            style="width:80px;font-size:12px;padding:2px 6px;border:1px solid #94a3b8;border-radius:5px;text-align:right;">
+          L
+        </label>
+        <button class="btn-upload" style="padding:3px 12px;font-size:12px;background:#0369a1;border-color:#0369a1;"
+                onclick="saveBaseStock()">💾 저장</button>
+        <span id="base-stock-status" style="font-size:11px;color:#64748b;"></span>
+      </div>
       <div id="tank-container" style="display:flex;gap:24px;justify-content:center;padding:16px 8px;flex-wrap:wrap;">
         <div class="tank-card" id="tank-휘발유"></div>
         <div class="tank-card" id="tank-경유"></div>
