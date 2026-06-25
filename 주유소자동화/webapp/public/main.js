@@ -2524,7 +2524,6 @@ function renderDepositTable(rows) {
     return;
   }
   const fmt  = v => v != null ? Math.round(v).toLocaleString() : '-';
-  const fmtD = v => v ? v.slice(5) : '-';  // YYYY-MM-DD → MM-DD
   const STATUS = {
     match:    { bg:'#f0fdf4', text:'✅ 매칭',   color:'#16a34a' },
     warn:     { bg:'#fefce8', text:'⚠ 주의',    color:'#d97706' },
@@ -2565,25 +2564,26 @@ function renderDepositTable(rows) {
       </tr>`;
       prevMonth = rowMonth;
     }
-    // 발생일 표시: 범위이면 MM-DD~MM-DD, 단일이면 MM-DD
+    // 발생일: 범위이면 MM/DD~MM/DD, 단일이면 YYYY-MM-DD 전체
     let 발생일표시 = '-';
     if (r.발생일) {
       if (r.발생일.includes('~')) {
         const [f, t] = r.발생일.split('~');
-        발생일표시 = `${fmtD(f)}~${fmtD(t)}`;
+        발생일표시 = `${f.slice(5).replace('-','/')}~${t.slice(5).replace('-','/')}`;
       } else {
-        발생일표시 = fmtD(r.발생일);
+        발생일표시 = r.발생일;
       }
     }
+    const 입금일표시 = r.입금일 || '-';
     const diff = r.금액차이 != null
       ? `<span style="color:${Math.abs(r.금액차이)>10000?'#dc2626':Math.abs(r.금액차이)>0?'#d97706':'#16a34a'};font-weight:600;">${r.금액차이>0?'+':''}${fmt(r.금액차이)}</span>`
       : '-';
     html += `<tr style="background:${st.bg};border-bottom:1px solid #f1f5f9;">
       <td style="padding:5px 8px;text-align:center;font-weight:600;color:${st.color};font-size:11px;white-space:nowrap;">${st.text}</td>
       <td style="padding:5px 8px;font-weight:600;color:#1e293b;white-space:nowrap;">${r.card}</td>
-      <td style="padding:5px 8px;text-align:center;color:#475569;font-family:monospace;">${발생일표시}</td>
+      <td style="padding:5px 8px;text-align:center;color:#475569;font-family:monospace;white-space:nowrap;">${발생일표시}</td>
       <td style="padding:5px 8px;text-align:right;font-weight:600;">${fmt(r.발생금액)}</td>
-      <td style="padding:5px 8px;text-align:center;color:#0369a1;font-weight:700;font-family:monospace;">${r.입금일?fmtD(r.입금일):'-'}</td>
+      <td style="padding:5px 8px;text-align:center;color:#0369a1;font-weight:700;font-family:monospace;white-space:nowrap;">${입금일표시}</td>
       <td style="padding:5px 8px;text-align:right;color:#0369a1;font-weight:600;">${fmt(r.접수금액)}</td>
       <td style="padding:5px 8px;text-align:right;color:#64748b;">${fmt(r.수수료)}</td>
       <td style="padding:5px 8px;text-align:right;color:#0f766e;font-weight:600;">${fmt(r.입금예정액)}</td>
