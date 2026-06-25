@@ -1585,7 +1585,6 @@ async function loadDailyMonth() {
   const lastDate = `${dailyState.year}-${String(dailyState.month).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
   const tankInput = document.getElementById('tank-date-input');
   if (tankInput) tankInput.value = lastDate;
-  loadBaseStock();
   loadTankStatus(lastDate);
 }
 
