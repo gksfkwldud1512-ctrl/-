@@ -593,9 +593,9 @@
 
     <!-- ── 입금검증 탭 ── -->
     <div id="tab-daily-deposit" class="tab-content" style="display:none;">
+      <!-- 파일 업로드 툴바 -->
       <div class="toolbar" style="flex-wrap:wrap;gap:8px;">
         <div class="toolbar-group">
-          <!-- label 방식: 파일 선택 시 onchange 직접 호출 -->
           <label class="btn-upload" style="cursor:pointer;display:inline-flex;align-items:center;">
             📂 BOS 시재현황 업로드
             <input type="file" accept=".xlsx,.xls" style="display:none;"
@@ -611,29 +611,26 @@
           </label>
           <span id="deposit-easy-label" class="file-label"></span>
         </div>
-        <div class="toolbar-group" style="margin-left:auto;gap:6px;align-items:center;">
-          <label class="label-sm">조회 년월</label>
-          <select id="deposit-year" style="padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" onchange="loadDepositMatch()">
-            <option value="">전체</option>
-            <option value="2026" selected>2026</option>
-          </select>년
-          <select id="deposit-month" style="padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" onchange="loadDepositMatch()">
-            <option value="">전체</option>
-            <option value="01">1</option><option value="02">2</option><option value="03">3</option>
-            <option value="04">4</option><option value="05">5</option><option value="06">6</option>
-            <option value="07">7</option><option value="08">8</option><option value="09">9</option>
-            <option value="10">10</option><option value="11">11</option><option value="12">12</option>
-          </select>월
-          <select id="deposit-card-filter" style="padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" onchange="loadDepositMatch()">
-            <option value="">전체 카드사</option>
-          </select>
+        <div class="toolbar-group" style="margin-left:auto;">
           <button class="btn-upload" style="background:#dc2626;border-color:#dc2626;padding:5px 10px;font-size:12px;"
                   onclick="resetDepositData()">🗑 초기화</button>
         </div>
       </div>
 
+      <!-- 월별 / 카드사 필터 버튼 -->
+      <div style="background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:10px 16px;">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+          <span style="font-size:11px;font-weight:700;color:#64748b;min-width:40px;">월별</span>
+          <div id="deposit-month-btns" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span style="font-size:11px;font-weight:700;color:#64748b;min-width:40px;">카드사</span>
+          <div id="deposit-card-btns" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
+        </div>
+      </div>
+
       <!-- 요약 카드 -->
-      <div id="deposit-summary" style="display:flex;gap:10px;padding:12px 16px;flex-wrap:wrap;background:#f8fafc;border-bottom:1px solid #e2e8f0;"></div>
+      <div id="deposit-summary" style="display:flex;gap:10px;padding:12px 16px;flex-wrap:wrap;background:#fff;border-bottom:1px solid #e2e8f0;"></div>
 
       <!-- 결과 테이블 -->
       <div id="deposit-result" style="overflow-x:auto;max-height:600px;overflow-y:auto;">

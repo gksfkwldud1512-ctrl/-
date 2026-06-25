@@ -2214,9 +2214,12 @@ app.get('/api/deposit/match', (req, res) => {
       mismatch: rows.filter(r => r.status === 'mismatch').length,
       ez_only:  rows.filter(r => r.status === 'ez_only').length,
       bos_only: rows.filter(r => r.status === 'bos_only').length,
+      pending:  rows.filter(r => r.status === 'pending').length,
     };
-    const cards = [...new Set([...bosList.map(r=>r.card), ...easyList.map(r=>r.card)])].sort();
-    res.json({ ok: true, rows, summary, cards });
+    const allEasy = readJSON(DEPOSIT_EASY_FILE, []);
+    const cards = [...new Set([...bosList.map(r=>r.card), ...allEasy.map(r=>r.card)])].sort();
+    const allMonths = [...new Set(allEasy.map(r=>(r.date||'').slice(0,7)).filter(Boolean))].sort();
+    res.json({ ok: true, rows, summary, cards, allMonths });
   } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 

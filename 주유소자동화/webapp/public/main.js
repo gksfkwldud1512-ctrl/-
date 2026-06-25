@@ -2470,28 +2470,58 @@ async function uploadDepositEasy(input) {
 }
 
 async function loadDepositMatch() {
-  const year  = document.getElementById('deposit-year')?.value  || '';
-  const mon   = document.getElementById('deposit-month')?.value || '';
-  const card  = document.getElementById('deposit-card-filter')?.value || '';
-  const monthParam = (year && mon) ? `${year}-${mon}` : '';
   const params = new URLSearchParams();
-  if (monthParam) params.set('month', monthParam);
-  if (card)       params.set('card',  card);
+  if (_depositFilter.month) params.set('month', _depositFilter.month);
+  if (_depositFilter.card)  params.set('card',  _depositFilter.card);
   try {
     const r = await fetch('/api/deposit/match?' + params);
     const d = await r.json();
     if (!d.ok) return;
     _depositRows = d.rows || [];
     renderDepositSummary(d.summary);
+    renderDepositFilterBtns(d.allMonths || [], d.cards || []);
     renderDepositTable(_depositRows);
-    // 카드사 필터 옵션 갱신
-    const cSel = document.getElementById('deposit-card-filter');
-    if (cSel) {
-      const curC = cSel.value;
-      cSel.innerHTML = '<option value="">전체 카드사</option>' +
-        (d.cards||[]).map(c=>`<option value="${c}"${c===curC?' selected':''}>${c}</option>`).join('');
-    }
   } catch(e) { console.error('[loadDepositMatch]', e); }
+}
+
+// ── 입금검증 필터 상태 ─────────────────────────────────────────
+let _depositFilter = { month: '', card: '' };
+
+function setDepositMonth(month) {
+  _depositFilter.month = _depositFilter.month === month ? '' : month;
+  loadDepositMatch();
+}
+function setDepositCard(card) {
+  _depositFilter.card = _depositFilter.card === card ? '' : card;
+  loadDepositMatch();
+}
+
+function renderDepositFilterBtns(months, cards) {
+  // 월별 버튼
+  const mEl = document.getElementById('deposit-month-btns');
+  if (mEl) {
+    // 데이터에서 월 목록 자동 추출
+    const availMonths = [...new Set(_depositRows.map(r=>(r.입금일||r.bosFrom||'').slice(0,7)).filter(Boolean))].sort();
+    const allMonths = months.length ? months : availMonths;
+    const btnStyle = (active) => `padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid;white-space:nowrap;` +
+      (active ? 'background:#1e293b;color:#f8fafc;border-color:#1e293b;' : 'background:white;color:#475569;border-color:#cbd5e1;');
+    mEl.innerHTML =
+      `<button style="${btnStyle(!_depositFilter.month)}" onclick="setDepositMonth('')">전체</button>` +
+      allMonths.map(m => {
+        const label = m.slice(5).replace(/^0/, '') + '월';
+        return `<button style="${btnStyle(_depositFilter.month===m)}" onclick="setDepositMonth('${m}')">${label}</button>`;
+      }).join('');
+  }
+  // 카드사 버튼
+  const cEl = document.getElementById('deposit-card-btns');
+  if (cEl) {
+    const allCards = cards.length ? cards : [...new Set(_depositRows.map(r=>r.card).filter(Boolean))].sort();
+    const btnStyle = (active) => `padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid;white-space:nowrap;` +
+      (active ? 'background:#0369a1;color:white;border-color:#0369a1;' : 'background:white;color:#475569;border-color:#cbd5e1;');
+    cEl.innerHTML =
+      `<button style="${btnStyle(!_depositFilter.card)}" onclick="setDepositCard('')">전체</button>` +
+      allCards.map(c => `<button style="${btnStyle(_depositFilter.card===c)}" onclick="setDepositCard('${c}')">${c}</button>`).join('');
+  }
 }
 
 function renderDepositSummary(s) {
@@ -2500,15 +2530,15 @@ function renderDepositSummary(s) {
   const chip = (label, val, color) =>
     `<div style="background:white;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px;text-align:center;">
       <div style="font-size:11px;color:#64748b;">${label}</div>
-      <div style="font-size:18px;font-weight:700;color:${color};">${val}</div>
+      <div style="font-size:18px;font-weight:700;color:${color};">${val ?? 0}</div>
     </div>`;
   el.innerHTML =
-    chip('전체',      s.total,    '#1e293b') +
-    chip('매칭완료',  s.match,    '#16a34a') +
-    chip('금액주의',  s.warn,     '#d97706') +
-    chip('미매칭',    s.mismatch, '#dc2626') +
-    chip('이지샵만',  s.ez_only,  '#7c3aed') +
-    chip('BOS만',    s.bos_only, '#0369a1');
+    chip('전체',       s.total,    '#1e293b') +
+    chip('매칭완료',   s.match,    '#16a34a') +
+    chip('미매칭',     s.mismatch, '#dc2626') +
+    chip('이지샵만',   s.ez_only,  '#7c3aed') +
+    chip('BOS만',     s.bos_only, '#0369a1') +
+    (s.pending ? chip('미입금예정', s.pending, '#94a3b8') : '');
 }
 
 // ── 입금검증 정렬 상태 ────────────────────────────────────────
@@ -2530,11 +2560,11 @@ function renderDepositTable(rows) {
   }
   const fmt  = v => v != null ? Math.round(v).toLocaleString() : '-';
   const STATUS = {
-    match:    { bg:'#f0fdf4', text:'✅ 매칭',   color:'#16a34a' },
-    warn:     { bg:'#fefce8', text:'⚠ 주의',    color:'#d97706' },
-    mismatch: { bg:'#fef2f2', text:'❌ 불일치',  color:'#dc2626' },
-    ez_only:  { bg:'#faf5ff', text:'🟣 입금만', color:'#7c3aed' },
-    bos_only: { bg:'#eff6ff', text:'🔵 발생만', color:'#0369a1' },
+    match:    { bg:'#f0fdf4', text:'✅ 매칭',     color:'#16a34a' },
+    mismatch: { bg:'#fef2f2', text:'❌ 불일치',   color:'#dc2626' },
+    ez_only:  { bg:'#faf5ff', text:'🟣 입금만',  color:'#7c3aed' },
+    bos_only: { bg:'#eff6ff', text:'🔵 발생만',  color:'#0369a1' },
+    pending:  { bg:'#f8fafc', text:'⏳ 미입금예정', color:'#94a3b8' },
   };
 
   // 정렬
