@@ -28,7 +28,6 @@ function toDateStr(v) {
   return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0,10) : '';
 }
 
-// BOS 시재현황 파싱
 function parseBosDeposit(filePath) {
   const wb   = XLSX.readFile(filePath);
   const ws   = wb.Sheets[wb.SheetNames[0]];
@@ -40,7 +39,7 @@ function parseBosDeposit(filePath) {
   }
   if (hdrIdx < 0) return [];
 
-  const hdr    = rows[hdrIdx];
+  const hdr     = rows[hdrIdx];
   const colCard = hdr.indexOf('카드사명');
   const colDate = hdr.indexOf('일자');
   const col발생 = hdr.indexOf('당기발생');
@@ -64,8 +63,6 @@ function parseBosDeposit(filePath) {
   return result;
 }
 
-// 이지샵 입금내역 파싱
-// 롯데(구동양)는 '합계금액' = 실제 입금 기준금액, '접수금액' = 누적금액
 function parseEasyshopDeposit(filePath) {
   const wb   = XLSX.readFile(filePath);
   const ws   = wb.Sheets[wb.SheetNames[0]];
@@ -77,12 +74,12 @@ function parseEasyshopDeposit(filePath) {
   }
   if (hdrIdx < 0) return [];
 
-  const hdr = rows[hdrIdx];
+  const hdr       = rows[hdrIdx];
   const colCard   = hdr.indexOf('카드사');
   const colDate   = hdr.findIndex(h => String(h).includes('입금예정일자') || String(h).includes('입금일자'));
   const col건수   = hdr.indexOf('접수건수');
   const col접수   = hdr.indexOf('접수금액');
-  const col합계   = hdr.indexOf('합계금액');   // 롯데카드: 실제 이번 입금 기준금액
+  const col합계   = hdr.indexOf('합계금액');
   const col수수료 = hdr.indexOf('수수료');
   const col입금   = hdr.indexOf('입금예정액');
 
@@ -98,20 +95,20 @@ function parseEasyshopDeposit(filePath) {
     const 수수료    = Number(r[col수수료]) || 0;
     const 입금예정액 = Number(r[col입금])  || 0;
     if (!접수금액) continue;
-    // 매칭기준금액: 롯데카드는 합계금액(실입금기준), 나머지는 접수금액
     const 매칭기준금액 = 합계금액 > 0 ? 합계금액 : 접수금액;
     result.push({ date, card, 접수건수, 접수금액, 합계금액, 매칭기준금액, 수수료, 입금예정액 });
   }
   return result;
 }
 
-// BOS 발생(매출)을 이지샵 매칭기준금액과 연결
-// - 완전 일치(차이=0)만 match, 나머지는 mismatch
-// - 롯데카드: 합계금액=0이면 이번 입금 없음(pending)
+// ── 2패스 매칭 알고리즘 ────────────────────────────────────────
+// 패스1: 완전 일치(차이=0) 우선 확보
+// 패스2: 나머지 최근접 매칭 (mismatch로 표시)
 function matchDeposits(bosList, easyList) {
   bosList  = bosList.map(r  => ({ ...r, card: normCard(r.card) }));
   easyList = easyList.map(r => ({ ...r, card: normCard(r.card) }));
 
+  // 카드사별 BOS 발생 맵
   const bosMap = {};
   for (const b of bosList) {
     if (b.발생 <= 0) continue;
@@ -122,13 +119,71 @@ function matchDeposits(bosList, easyList) {
     bosMap[c].sort((a, b) => a.date.localeCompare(b.date));
   }
 
-  const usedDates = {};
+  const usedDates = {};  // card → Set<date>
+  const usedEasyIdx = new Set();
   const results = [];
 
-  for (const ez of easyList) {
+  // 후보 윈도우 생성 (공통 유틸)
+  function getCandidates(card, inputDate) {
+    const bosRows = bosMap[card] || [];
+    return bosRows.filter(b =>
+      b.date < inputDate && dateDiff(b.date, inputDate) <= 14
+    );
+  }
+  function findWindows(candidates, card) {
+    const wins = [];
+    for (let winSize = 1; winSize <= 5; winSize++) {
+      for (let end = candidates.length - 1; end >= winSize - 1; end--) {
+        const win = candidates.slice(end - winSize + 1, end + 1);
+        if (win.some(b => usedDates[card]?.has(b.date))) continue;
+        let consecutive = true;
+        for (let k = 1; k < win.length; k++) {
+          if (dateDiff(win[k-1].date, win[k].date) > 3) { consecutive = false; break; }
+        }
+        if (!consecutive) continue;
+        wins.push(win);
+      }
+    }
+    return wins;
+  }
+
+  // ── 패스 1: 완전 일치(차이=0) 먼저 확보 ──
+  for (let ei = 0; ei < easyList.length; ei++) {
+    const ez = easyList[ei];
+    const 기준금액 = ez.매칭기준금액 ?? ez.접수금액;
+    if (!기준금액 || (ez.합계금액 === 0 && ez.입금예정액 === 0)) continue;
+
+    if (!usedDates[ez.card]) usedDates[ez.card] = new Set();
+    const candidates = getCandidates(ez.card, ez.date);
+    const windows = findWindows(candidates, ez.card);
+
+    const exactWin = windows.find(win => win.reduce((s, b) => s + b.발생, 0) === 기준금액);
+    if (!exactWin) continue;
+
+    for (const b of exactWin) usedDates[ez.card].add(b.date);
+    usedEasyIdx.add(ei);
+
+    const bosFrom = exactWin[0].date;
+    const bosTo   = exactWin[exactWin.length - 1].date;
+    results.push({
+      입금일: ez.date, card: ez.card,
+      발생일: exactWin.length > 1 ? `${bosFrom}~${bosTo}` : bosFrom,
+      bosFrom, bosTo, 발생금액: 기준금액,
+      접수금액: ez.접수금액, 합계금액: ez.합계금액, 매칭기준금액: 기준금액,
+      접수건수: ez.접수건수, 수수료: ez.수수료, 입금예정액: ez.입금예정액,
+      금액차이: 0, status: 'match',
+    });
+  }
+
+  // ── 패스 2: 나머지 처리 (최근접 또는 pending/ez_only) ──
+  for (let ei = 0; ei < easyList.length; ei++) {
+    if (usedEasyIdx.has(ei)) continue;
+    const ez = easyList[ei];
     const 기준금액 = ez.매칭기준금액 ?? ez.접수금액;
 
-    // 합계금액=0 → 이번에 입금 없음(pending)
+    if (!usedDates[ez.card]) usedDates[ez.card] = new Set();
+
+    // pending: 이번에 입금 없음
     if (ez.합계금액 === 0 && ez.입금예정액 === 0) {
       results.push({
         입금일: ez.date, card: ez.card,
@@ -140,13 +195,7 @@ function matchDeposits(bosList, easyList) {
       continue;
     }
 
-    const bosRows = bosMap[ez.card] || [];
-    if (!usedDates[ez.card]) usedDates[ez.card] = new Set();
-
-    const candidates = bosRows.filter(b =>
-      b.date < ez.date && dateDiff(b.date, ez.date) <= 14
-    );
-
+    const candidates = getCandidates(ez.card, ez.date);
     if (!candidates.length) {
       results.push({
         입금일: ez.date, card: ez.card,
@@ -158,32 +207,8 @@ function matchDeposits(bosList, easyList) {
       continue;
     }
 
-    // 완전 일치 우선 탐색 (차이=0)
-    let bestMatch = null;
-    let bestDiff  = Infinity;
-
-    for (let winSize = 1; winSize <= 5; winSize++) {
-      for (let end = candidates.length - 1; end >= winSize - 1; end--) {
-        const win = candidates.slice(end - winSize + 1, end + 1);
-        let consecutive = true;
-        for (let k = 1; k < win.length; k++) {
-          if (dateDiff(win[k-1].date, win[k].date) > 3) { consecutive = false; break; }
-        }
-        if (!consecutive) continue;
-        if (win.some(b => usedDates[ez.card].has(b.date))) continue;
-
-        const sum  = win.reduce((s, b) => s + b.발생, 0);
-        const diff = Math.abs(sum - 기준금액);
-        if (diff < bestDiff) {
-          bestDiff  = diff;
-          bestMatch = { win, sum };
-        }
-        if (diff === 0) break;  // 완전 일치 발견 시 즉시 선택
-      }
-      if (bestDiff === 0) break;
-    }
-
-    if (!bestMatch) {
+    const windows = findWindows(candidates, ez.card);
+    if (!windows.length) {
       results.push({
         입금일: ez.date, card: ez.card,
         발생일: null, bosFrom: null, bosTo: null, 발생금액: null,
@@ -194,23 +219,27 @@ function matchDeposits(bosList, easyList) {
       continue;
     }
 
-    const { win, sum } = bestMatch;
+    // 최근접 윈도우 선택
+    let bestWin = null, bestDiff = Infinity;
+    for (const win of windows) {
+      const sum  = win.reduce((s, b) => s + b.발생, 0);
+      const diff = Math.abs(sum - 기준금액);
+      if (diff < bestDiff) { bestDiff = diff; bestWin = win; }
+    }
+
+    for (const b of bestWin) usedDates[ez.card].add(b.date);
+
+    const sum     = bestWin.reduce((s, b) => s + b.발생, 0);
     const 금액차이 = 기준금액 - sum;
-    // 완전 일치(0원 차이)만 match, 나머지는 mismatch
-    const status = 금액차이 === 0 ? 'match' : 'mismatch';
-
-    for (const b of win) usedDates[ez.card].add(b.date);
-
-    const bosFrom = win[0].date;
-    const bosTo   = win[win.length - 1].date;
-    const 발생일  = win.length > 1 ? `${bosFrom}~${bosTo}` : bosFrom;
-
+    const bosFrom = bestWin[0].date;
+    const bosTo   = bestWin[bestWin.length - 1].date;
     results.push({
       입금일: ez.date, card: ez.card,
-      발생일, bosFrom, bosTo, 발생금액: sum,
+      발생일: bestWin.length > 1 ? `${bosFrom}~${bosTo}` : bosFrom,
+      bosFrom, bosTo, 발생금액: sum,
       접수금액: ez.접수금액, 합계금액: ez.합계금액, 매칭기준금액: 기준금액,
       접수건수: ez.접수건수, 수수료: ez.수수료, 입금예정액: ez.입금예정액,
-      금액차이, status,
+      금액차이, status: 'mismatch',
     });
   }
 
