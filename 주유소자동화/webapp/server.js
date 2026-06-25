@@ -2157,20 +2157,19 @@ app.post('/api/deposit/upload-easy', upload.single('file'), (req, res) => {
 app.get('/api/deposit/match', (req, res) => {
   try {
     const { matchDeposits } = require('./lib/depositVerifyParser');
-    let bosList  = readJSON(DEPOSIT_BOS_FILE,  []);
-    let easyList = readJSON(DEPOSIT_EASY_FILE, []);
-    // 월 필터
+    const bosList  = readJSON(DEPOSIT_BOS_FILE,  []);
+    let   easyList = readJSON(DEPOSIT_EASY_FILE, []);
     const month = req.query.month; // YYYY-MM
-    if (month) {
-      bosList  = bosList.filter(r  => r.date?.startsWith(month)  || r.bosDate?.startsWith(month));
-      easyList = easyList.filter(r => r.date?.startsWith(month));
-    }
-    const card = req.query.card;
-    if (card) {
-      bosList  = bosList.filter(r => r.card === card);
-      easyList = easyList.filter(r => r.card === card);
-    }
-    const rows = matchDeposits(bosList, easyList);
+    const card  = req.query.card;
+    // 이지샵은 입금일(date) 기준 필터 — BOS는 전체 범위 사용 (발생일이 전월일 수 있음)
+    if (month) easyList = easyList.filter(r => r.date?.startsWith(month));
+    if (card)  easyList = easyList.filter(r => r.card === card);
+    const bosFiltered = card ? bosList.filter(r => r.card === card) : bosList;
+    const allRows = matchDeposits(bosFiltered, easyList);
+    // bos_only는 발생일 기준으로 월 필터
+    const rows = month
+      ? allRows.filter(r => r.status !== 'bos_only' || (r.bosFrom || '').startsWith(month))
+      : allRows;
     // 요약
     const summary = {
       total:    rows.length,
@@ -2179,7 +2178,6 @@ app.get('/api/deposit/match', (req, res) => {
       mismatch: rows.filter(r => r.status === 'mismatch').length,
       ez_only:  rows.filter(r => r.status === 'ez_only').length,
       bos_only: rows.filter(r => r.status === 'bos_only').length,
-      avgLag:   (() => { const lags = rows.filter(r=>r.지연일수!=null).map(r=>r.지연일수); return lags.length ? Math.round(lags.reduce((a,b)=>a+b,0)/lags.length*10)/10 : null; })(),
     };
     const cards = [...new Set([...bosList.map(r=>r.card), ...easyList.map(r=>r.card)])].sort();
     res.json({ ok: true, rows, summary, cards });

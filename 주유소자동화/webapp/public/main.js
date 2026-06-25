@@ -2430,10 +2430,10 @@ async function loadDepositMatch() {
     if (!d.ok) return;
     renderDepositSummary(d.summary);
     renderDepositTable(d.rows);
-    // 필터 옵션 갱신
+    // 월 필터 옵션: 입금일 기준
     const mSel = document.getElementById('deposit-month-filter');
     if (mSel) {
-      const months = [...new Set(d.rows.map(r=>(r.bosFrom||'').slice(0,7)).filter(Boolean))].sort();
+      const months = [...new Set(d.rows.map(r=>(r.입금일||r.bosFrom||'').slice(0,7)).filter(Boolean))].sort();
       const curM = mSel.value;
       mSel.innerHTML = '<option value="">전체 기간</option>' +
         months.map(m=>`<option value="${m}"${m===curM?' selected':''}>${m}</option>`).join('');
@@ -2461,8 +2461,7 @@ function renderDepositSummary(s) {
     chip('금액주의',  s.warn,     '#d97706') +
     chip('미매칭',    s.mismatch, '#dc2626') +
     chip('이지샵만',  s.ez_only,  '#7c3aed') +
-    chip('BOS만',    s.bos_only, '#0369a1') +
-    (s.avgLag != null ? chip('평균지연일', s.avgLag+'일', '#475569') : '');
+    chip('BOS만',    s.bos_only, '#0369a1');
 }
 
 function renderDepositTable(rows) {
@@ -2472,7 +2471,8 @@ function renderDepositTable(rows) {
     el.innerHTML = '<div style="padding:40px;text-align:center;color:#94a3b8;">데이터 없음 — 파일을 업로드해 주세요</div>';
     return;
   }
-  const fmt = v => v != null ? Math.round(v).toLocaleString() : '-';
+  const fmt  = v => v != null ? Math.round(v).toLocaleString() : '-';
+  const fmtD = v => v ? v.slice(5) : '-';  // YYYY-MM-DD → MM-DD
   const STATUS = {
     match:    { bg:'#f0fdf4', text:'✅ 매칭',   color:'#16a34a' },
     warn:     { bg:'#fefce8', text:'⚠ 주의',    color:'#d97706' },
@@ -2481,38 +2481,61 @@ function renderDepositTable(rows) {
     bos_only: { bg:'#eff6ff', text:'🔵 발생만', color:'#0369a1' },
   };
 
-  // BOS 발생일 기준 정렬, 카드사 묶음
-  const sorted = [...rows].sort((a,b)=>(a.bosFrom||'').localeCompare(b.bosFrom||'')||a.card.localeCompare(b.card));
+  // 입금일 기준 정렬 (bos_only는 발생일 기준)
+  const sorted = [...rows].sort((a, b) =>
+    (a.입금일||a.bosFrom||'').localeCompare(b.입금일||b.bosFrom||'') ||
+    (a.card||'').localeCompare(b.card||'')
+  );
 
-  let html = `<table style="font-size:12px;border-collapse:collapse;min-width:850px;width:100%;">
+  let html = `<table style="font-size:12px;border-collapse:collapse;min-width:950px;width:100%;">
     <thead style="position:sticky;top:0;z-index:1;background:#1e293b;color:#f8fafc;">
       <tr>
-        <th style="padding:8px 10px;text-align:center;white-space:nowrap;">매칭여부</th>
-        <th style="padding:8px 10px;text-align:left;">카드사</th>
-        <th style="padding:8px 10px;text-align:center;white-space:nowrap;">당기발생일</th>
-        <th style="padding:8px 10px;text-align:right;white-space:nowrap;">당기발생금액</th>
-        <th style="padding:8px 10px;text-align:center;white-space:nowrap;">입금일</th>
-        <th style="padding:8px 10px;text-align:right;white-space:nowrap;">입금금액</th>
-        <th style="padding:8px 10px;text-align:center;background:#1e3a5f;white-space:nowrap;">지연일수</th>
+        <th style="padding:8px 10px;text-align:center;white-space:nowrap;">상태</th>
+        <th style="padding:8px 10px;text-align:left;white-space:nowrap;">카드사</th>
+        <th style="padding:8px 10px;text-align:center;white-space:nowrap;">발생일(BOS)</th>
+        <th style="padding:8px 10px;text-align:right;white-space:nowrap;">발생금액</th>
+        <th style="padding:8px 10px;text-align:center;background:#1e3a5f;white-space:nowrap;">실입금일</th>
+        <th style="padding:8px 10px;text-align:right;background:#1e3a5f;white-space:nowrap;">접수금액(이지샵)</th>
+        <th style="padding:8px 10px;text-align:right;white-space:nowrap;">수수료</th>
+        <th style="padding:8px 10px;text-align:right;white-space:nowrap;">입금예정액</th>
         <th style="padding:8px 10px;text-align:right;white-space:nowrap;">금액차이</th>
       </tr>
     </thead><tbody>`;
 
+  let prevMonth = '';
   for (const r of sorted) {
     const st = STATUS[r.status] || { bg:'', text:'-', color:'#64748b' };
+    // 월 구분선
+    const rowMonth = (r.입금일||r.bosFrom||'').slice(0, 7);
+    if (rowMonth && rowMonth !== prevMonth) {
+      html += `<tr style="background:#e2e8f0;">
+        <td colspan="9" style="padding:4px 12px;font-size:11px;font-weight:700;color:#475569;">${rowMonth}</td>
+      </tr>`;
+      prevMonth = rowMonth;
+    }
+    // 발생일 표시: 범위이면 MM-DD~MM-DD, 단일이면 MM-DD
+    let 발생일표시 = '-';
+    if (r.발생일) {
+      if (r.발생일.includes('~')) {
+        const [f, t] = r.발생일.split('~');
+        발생일표시 = `${fmtD(f)}~${fmtD(t)}`;
+      } else {
+        발생일표시 = fmtD(r.발생일);
+      }
+    }
     const diff = r.금액차이 != null
-      ? `<span style="color:${Math.abs(r.금액차이)>50000?'#dc2626':'#64748b'}">${r.금액차이>0?'+':''}${fmt(r.금액차이)}</span>`
+      ? `<span style="color:${Math.abs(r.금액차이)>10000?'#dc2626':Math.abs(r.금액차이)>0?'#d97706':'#16a34a'};font-weight:600;">${r.금액차이>0?'+':''}${fmt(r.금액차이)}</span>`
       : '-';
-    const lagColor = !r.지연일수 ? '#94a3b8' : r.지연일수>7?'#dc2626':r.지연일수>4?'#d97706':'#16a34a';
     html += `<tr style="background:${st.bg};border-bottom:1px solid #f1f5f9;">
-      <td style="padding:5px 10px;text-align:center;font-weight:600;color:${st.color};font-size:11px;">${st.text}</td>
-      <td style="padding:5px 10px;font-weight:600;color:#1e293b;">${r.card}</td>
-      <td style="padding:5px 10px;text-align:center;color:#475569;">${r.bosFrom||'-'}</td>
-      <td style="padding:5px 10px;text-align:right;font-weight:600;">${fmt(r.bos발생합계)}</td>
-      <td style="padding:5px 10px;text-align:center;color:#0369a1;">${r.date||'-'}</td>
-      <td style="padding:5px 10px;text-align:right;color:#0369a1;font-weight:600;">${fmt(r.입금예정액)}</td>
-      <td style="padding:5px 10px;text-align:center;font-weight:700;color:${lagColor};">${r.지연일수!=null?r.지연일수+'일':'-'}</td>
-      <td style="padding:5px 10px;text-align:right;">${diff}</td>
+      <td style="padding:5px 8px;text-align:center;font-weight:600;color:${st.color};font-size:11px;white-space:nowrap;">${st.text}</td>
+      <td style="padding:5px 8px;font-weight:600;color:#1e293b;white-space:nowrap;">${r.card}</td>
+      <td style="padding:5px 8px;text-align:center;color:#475569;font-family:monospace;">${발생일표시}</td>
+      <td style="padding:5px 8px;text-align:right;font-weight:600;">${fmt(r.발생금액)}</td>
+      <td style="padding:5px 8px;text-align:center;color:#0369a1;font-weight:700;font-family:monospace;">${r.입금일?fmtD(r.입금일):'-'}</td>
+      <td style="padding:5px 8px;text-align:right;color:#0369a1;font-weight:600;">${fmt(r.접수금액)}</td>
+      <td style="padding:5px 8px;text-align:right;color:#64748b;">${fmt(r.수수료)}</td>
+      <td style="padding:5px 8px;text-align:right;color:#0f766e;font-weight:600;">${fmt(r.입금예정액)}</td>
+      <td style="padding:5px 8px;text-align:right;">${diff}</td>
     </tr>`;
   }
   html += '</tbody></table>';

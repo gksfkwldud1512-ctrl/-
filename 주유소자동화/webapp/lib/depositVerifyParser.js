@@ -3,14 +3,13 @@ const XLSX = require('xlsx');
 
 // 카드사명 정규화
 const CARD_NORM = {
-  // BOS → 표준
-  '하나카드(외환)': '하나카드', '하나구외환': '하나카드', '하나카드': '하나카드',
+  '하나카드(외환)': '하나카드', '하나구외환': '하나카드', '하나카드': '하나카드', '하나체크카드': '하나카드',
   '국민카드': '국민카드', 'KB국민카드': '국민카드',
   'BC카드': 'BC카드', '비씨카드': 'BC카드',
   '신한카드': '신한카드',
   '삼성카드': '삼성카드',
   '현대카드': '현대카드',
-  '롯데카드': '롯데카드',
+  '롯데카드': '롯데카드', '롯데(구동양)': '롯데카드',
   'NH카드': 'NH카드', '농협카드': 'NH카드',
   '우리카드': '우리카드',
   'JCB카드': 'JCB카드',
@@ -37,7 +36,6 @@ function parseBosDeposit(filePath) {
   const ws   = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
-  // 헤더 행 찾기 (카드사명/일자 등이 있는 행)
   let hdrIdx = -1;
   for (let i = 0; i < rows.length; i++) {
     if (rows[i].includes('카드사명') && rows[i].includes('당기발생')) { hdrIdx = i; break; }
@@ -68,7 +66,7 @@ function parseBosDeposit(filePath) {
   return result;
 }
 
-// 이지샵 입금내역 파싱 → [{date, card, 접수건수, 접수금액, 수수료, 입금예정액}]
+// 이지샵 입금내역 파싱 → [{date(입금일), card, 접수건수, 접수금액, 수수료, 입금예정액}]
 function parseEasyshopDeposit(filePath) {
   const wb   = XLSX.readFile(filePath);
   const ws   = wb.Sheets[wb.SheetNames[0]];
@@ -104,9 +102,15 @@ function parseEasyshopDeposit(filePath) {
   return result;
 }
 
-// 연속 날짜 합산으로 이지샵 금액 매칭
-// BOS 발생을 1~5일 연속 합산해서 이지샵 접수금액과 비교
+// BOS 발생(매출)을 이지샵 접수금액(입금)과 연결
+// - 이지샵 date = 입금일(카드사 입금 날짜)
+// - BOS date = 매출 발생일 (입금일보다 며칠 앞)
+// - 이지샵 접수금액 ≈ BOS 연속 발생 합산 (같아야 정상)
 function matchDeposits(bosList, easyList) {
+  // 이미 저장된 데이터의 카드사명 재정규화 (저장 당시 정규화 미적용 데이터 대응)
+  bosList  = bosList.map(r  => ({ ...r, card: normCard(r.card) }));
+  easyList = easyList.map(r => ({ ...r, card: normCard(r.card) }));
+
   // 카드사별 날짜 정렬 BOS 맵
   const bosMap = {};  // card → [{date, 발생}] sorted
   for (const b of bosList) {
@@ -121,18 +125,24 @@ function matchDeposits(bosList, easyList) {
   const usedDates = {};  // card → Set of used BOS dates
   const results = [];
 
-  // 이지샵 기준 매칭
+  // 이지샵 입금일 기준으로 BOS 발생일 역추적
   for (const ez of easyList) {
     const bosRows = bosMap[ez.card] || [];
     if (!usedDates[ez.card]) usedDates[ez.card] = new Set();
 
-    // 입금예정일 이전 1~12일 범위의 BOS 행들
+    // 입금일 이전 1~14일 범위의 BOS 발생 행
     const candidates = bosRows.filter(b =>
-      b.date < ez.date && dateDiff(b.date, ez.date) <= 12
+      b.date < ez.date && dateDiff(b.date, ez.date) <= 14
     );
 
     if (!candidates.length) {
-      results.push({ ...ez, bosFrom: null, bosTo: null, bos발생합계: null, bos발생Days: null, 지연일수: null, 금액차이: null, status: 'ez_only' });
+      results.push({
+        입금일: ez.date, card: ez.card,
+        발생일: null, bosFrom: null, bosTo: null, 발생금액: null,
+        접수금액: ez.접수금액, 접수건수: ez.접수건수,
+        수수료: ez.수수료, 입금예정액: ez.입금예정액,
+        금액차이: null, status: 'ez_only',
+      });
       continue;
     }
 
@@ -142,62 +152,77 @@ function matchDeposits(bosList, easyList) {
 
     for (let winSize = 1; winSize <= 5; winSize++) {
       for (let end = candidates.length - 1; end >= winSize - 1; end--) {
-        const window = candidates.slice(end - winSize + 1, end + 1);
-        // 날짜가 연속인지 확인 (최대 1일 공백 허용 - 주말)
+        const win = candidates.slice(end - winSize + 1, end + 1);
+        // 날짜가 연속인지 확인 (최대 3일 공백 허용 - 주말/공휴일)
         let consecutive = true;
-        for (let k = 1; k < window.length; k++) {
-          if (dateDiff(window[k-1].date, window[k].date) > 3) { consecutive = false; break; }
+        for (let k = 1; k < win.length; k++) {
+          if (dateDiff(win[k-1].date, win[k].date) > 3) { consecutive = false; break; }
         }
         if (!consecutive) continue;
-        // 이미 사용된 날짜 포함 여부 확인
-        if (window.some(b => usedDates[ez.card].has(b.date))) continue;
+        if (win.some(b => usedDates[ez.card].has(b.date))) continue;
 
-        const sum = window.reduce((s, b) => s + b.발생, 0);
+        const sum = win.reduce((s, b) => s + b.발생, 0);
         const diff = Math.abs(sum - ez.접수금액);
         if (diff < bestDiff) {
           bestDiff  = diff;
-          bestMatch = { window, sum };
+          bestMatch = { win, sum };
         }
       }
     }
 
     if (!bestMatch) {
-      results.push({ ...ez, bosFrom: null, bosTo: null, bos발생합계: null, bos발생Days: null, 지연일수: null, 금액차이: null, status: 'ez_only' });
+      results.push({
+        입금일: ez.date, card: ez.card,
+        발생일: null, bosFrom: null, bosTo: null, 발생금액: null,
+        접수금액: ez.접수금액, 접수건수: ez.접수건수,
+        수수료: ez.수수료, 입금예정액: ez.입금예정액,
+        금액차이: null, status: 'ez_only',
+      });
       continue;
     }
 
-    const { window, sum } = bestMatch;
-    const pct = bestDiff / ez.접수금액;
-    const status = pct <= 0.02 ? 'match'    // 2% 이내 = 정상 (수수료·단수 차이)
-                 : pct <= 0.10 ? 'warn'     // 10% 이내 = 주의
+    const { win, sum } = bestMatch;
+    const pct    = bestDiff / ez.접수금액;
+    const status = pct <= 0.02 ? 'match'
+                 : pct <= 0.10 ? 'warn'
                  : 'mismatch';
 
-    // 사용 처리
-    for (const b of window) usedDates[ez.card].add(b.date);
+    for (const b of win) usedDates[ez.card].add(b.date);
 
-    const bosFrom = window[0].date;
-    const bosTo   = window[window.length - 1].date;
-    const 지연일수 = dateDiff(bosTo, ez.date);  // 마지막 발생일 기준 지연
-    const 금액차이 = ez.접수금액 - sum;
-    const bos발생Days = window.length > 1 ? `${bosFrom}~${bosTo}` : bosFrom;
+    const bosFrom  = win[0].date;
+    const bosTo    = win[win.length - 1].date;
+    const 발생일   = win.length > 1 ? `${bosFrom}~${bosTo}` : bosFrom;
+    const 금액차이 = ez.접수금액 - sum;  // 양수: 이지샵이 BOS보다 많음
 
-    results.push({ ...ez, bosFrom, bosTo, bos발생합계: sum, bos발생Days, 지연일수, 금액차이, status });
+    results.push({
+      입금일: ez.date, card: ez.card,
+      발생일, bosFrom, bosTo, 발생금액: sum,
+      접수금액: ez.접수금액, 접수건수: ez.접수건수,
+      수수료: ez.수수료, 입금예정액: ez.입금예정액,
+      금액차이, status,
+    });
   }
 
-  // BOS에만 있는 것
+  // BOS에만 있는 발생 (이지샵에 매칭 없음)
   for (const card of Object.keys(bosMap)) {
     for (const b of bosMap[card]) {
       if (!(usedDates[card] && usedDates[card].has(b.date))) {
         results.push({
-          date: null, card: b.card, 접수건수: null, 접수금액: null, 수수료: null, 입금예정액: null,
-          bosFrom: b.date, bosTo: b.date, bos발생합계: b.발생, bos발생Days: b.date,
-          지연일수: null, 금액차이: null, status: 'bos_only',
+          입금일: null, card: b.card,
+          발생일: b.date, bosFrom: b.date, bosTo: b.date, 발생금액: b.발생,
+          접수금액: null, 접수건수: null,
+          수수료: null, 입금예정액: null,
+          금액차이: null, status: 'bos_only',
         });
       }
     }
   }
 
-  results.sort((a, b) => (a.date || a.bosFrom || '').localeCompare(b.date || b.bosFrom || '') || (a.card || '').localeCompare(b.card || ''));
+  // 입금일 기준 정렬 (bos_only는 발생일 기준)
+  results.sort((a, b) =>
+    (a.입금일 || a.bosFrom || '').localeCompare(b.입금일 || b.bosFrom || '') ||
+    (a.card || '').localeCompare(b.card || '')
+  );
   return results;
 }
 
