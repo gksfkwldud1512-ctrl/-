@@ -2470,25 +2470,21 @@ async function uploadDepositEasy(input) {
 }
 
 async function loadDepositMatch() {
-  const month = document.getElementById('deposit-month-filter')?.value || '';
-  const card  = document.getElementById('deposit-card-filter')?.value  || '';
+  const year  = document.getElementById('deposit-year')?.value  || '';
+  const mon   = document.getElementById('deposit-month')?.value || '';
+  const card  = document.getElementById('deposit-card-filter')?.value || '';
+  const monthParam = (year && mon) ? `${year}-${mon}` : '';
   const params = new URLSearchParams();
-  if (month) params.set('month', month);
-  if (card)  params.set('card',  card);
+  if (monthParam) params.set('month', monthParam);
+  if (card)       params.set('card',  card);
   try {
     const r = await fetch('/api/deposit/match?' + params);
     const d = await r.json();
     if (!d.ok) return;
+    _depositRows = d.rows || [];
     renderDepositSummary(d.summary);
-    renderDepositTable(d.rows);
-    // 월 필터 옵션: 입금일 기준
-    const mSel = document.getElementById('deposit-month-filter');
-    if (mSel) {
-      const months = [...new Set(d.rows.map(r=>(r.입금일||r.bosFrom||'').slice(0,7)).filter(Boolean))].sort();
-      const curM = mSel.value;
-      mSel.innerHTML = '<option value="">전체 기간</option>' +
-        months.map(m=>`<option value="${m}"${m===curM?' selected':''}>${m}</option>`).join('');
-    }
+    renderDepositTable(_depositRows);
+    // 카드사 필터 옵션 갱신
     const cSel = document.getElementById('deposit-card-filter');
     if (cSel) {
       const curC = cSel.value;
@@ -2515,6 +2511,16 @@ function renderDepositSummary(s) {
     chip('BOS만',    s.bos_only, '#0369a1');
 }
 
+// ── 입금검증 정렬 상태 ────────────────────────────────────────
+let _depositRows = [];
+let _depositSort = { col: '입금일', asc: true };
+
+function sortDepositBy(col) {
+  if (_depositSort.col === col) _depositSort.asc = !_depositSort.asc;
+  else { _depositSort.col = col; _depositSort.asc = true; }
+  renderDepositTable(_depositRows);
+}
+
 function renderDepositTable(rows) {
   const el = document.getElementById('deposit-result');
   if (!el) return;
@@ -2531,24 +2537,40 @@ function renderDepositTable(rows) {
     bos_only: { bg:'#eff6ff', text:'🔵 발생만', color:'#0369a1' },
   };
 
-  // 입금일 기준 정렬 (bos_only는 발생일 기준)
-  const sorted = [...rows].sort((a, b) =>
-    (a.입금일||a.bosFrom||'').localeCompare(b.입금일||b.bosFrom||'') ||
-    (a.card||'').localeCompare(b.card||'')
-  );
+  // 정렬
+  const { col, asc } = _depositSort;
+  const getVal = r => {
+    if (col === '입금일')   return r.입금일   || r.bosFrom || '';
+    if (col === '발생일')   return r.bosFrom  || '';
+    if (col === '카드사')   return r.card     || '';
+    if (col === '발생금액') return r.발생금액 ?? (asc ? Infinity : -Infinity);
+    if (col === '접수금액') return r.접수금액 ?? (asc ? Infinity : -Infinity);
+    if (col === '수수료')   return r.수수료   ?? (asc ? Infinity : -Infinity);
+    if (col === '입금예정액') return r.입금예정액 ?? (asc ? Infinity : -Infinity);
+    if (col === '금액차이') return r.금액차이 ?? (asc ? Infinity : -Infinity);
+    return '';
+  };
+  const sorted = [...rows].sort((a, b) => {
+    const va = getVal(a), vb = getVal(b);
+    const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb;
+    return asc ? cmp : -cmp;
+  });
+
+  const thStyle = `padding:8px 10px;white-space:nowrap;cursor:pointer;user-select:none;`;
+  const arrow = c => _depositSort.col === c ? (_depositSort.asc ? ' ▲' : ' ▼') : ' ⇅';
 
   let html = `<table style="font-size:12px;border-collapse:collapse;min-width:950px;width:100%;">
     <thead style="position:sticky;top:0;z-index:1;background:#1e293b;color:#f8fafc;">
       <tr>
-        <th style="padding:8px 10px;text-align:center;white-space:nowrap;">상태</th>
-        <th style="padding:8px 10px;text-align:left;white-space:nowrap;">카드사</th>
-        <th style="padding:8px 10px;text-align:center;white-space:nowrap;">발생일(BOS)</th>
-        <th style="padding:8px 10px;text-align:right;white-space:nowrap;">발생금액</th>
-        <th style="padding:8px 10px;text-align:center;background:#1e3a5f;white-space:nowrap;">실입금일</th>
-        <th style="padding:8px 10px;text-align:right;background:#1e3a5f;white-space:nowrap;">접수금액(이지샵)</th>
-        <th style="padding:8px 10px;text-align:right;white-space:nowrap;">수수료</th>
-        <th style="padding:8px 10px;text-align:right;white-space:nowrap;">입금예정액</th>
-        <th style="padding:8px 10px;text-align:right;white-space:nowrap;">금액차이</th>
+        <th style="${thStyle}text-align:center;" onclick="sortDepositBy('상태')">상태${arrow('상태')}</th>
+        <th style="${thStyle}text-align:left;"   onclick="sortDepositBy('카드사')">카드사${arrow('카드사')}</th>
+        <th style="${thStyle}text-align:center;" onclick="sortDepositBy('발생일')">발생일(BOS)${arrow('발생일')}</th>
+        <th style="${thStyle}text-align:right;"  onclick="sortDepositBy('발생금액')">발생금액${arrow('발생금액')}</th>
+        <th style="${thStyle}text-align:center;background:#1e3a5f;" onclick="sortDepositBy('입금일')">실입금일${arrow('입금일')}</th>
+        <th style="${thStyle}text-align:right;background:#1e3a5f;"  onclick="sortDepositBy('접수금액')">접수금액(이지샵)${arrow('접수금액')}</th>
+        <th style="${thStyle}text-align:right;"  onclick="sortDepositBy('수수료')">수수료${arrow('수수료')}</th>
+        <th style="${thStyle}text-align:right;"  onclick="sortDepositBy('입금예정액')">입금예정액${arrow('입금예정액')}</th>
+        <th style="${thStyle}text-align:right;"  onclick="sortDepositBy('금액차이')">금액차이${arrow('금액차이')}</th>
       </tr>
     </thead><tbody>`;
 

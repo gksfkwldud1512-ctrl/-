@@ -611,11 +611,20 @@
           </label>
           <span id="deposit-easy-label" class="file-label"></span>
         </div>
-        <div class="toolbar-group" style="margin-left:auto;gap:8px;">
-          <select id="deposit-month-filter" style="padding:5px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" onchange="loadDepositMatch()">
-            <option value="">전체 기간</option>
-          </select>
-          <select id="deposit-card-filter" style="padding:5px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" onchange="loadDepositMatch()">
+        <div class="toolbar-group" style="margin-left:auto;gap:6px;align-items:center;">
+          <label class="label-sm">조회 년월</label>
+          <select id="deposit-year" style="padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" onchange="loadDepositMatch()">
+            <option value="">전체</option>
+            <option value="2026" selected>2026</option>
+          </select>년
+          <select id="deposit-month" style="padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" onchange="loadDepositMatch()">
+            <option value="">전체</option>
+            <option value="01">1</option><option value="02">2</option><option value="03">3</option>
+            <option value="04">4</option><option value="05">5</option><option value="06">6</option>
+            <option value="07">7</option><option value="08">8</option><option value="09">9</option>
+            <option value="10">10</option><option value="11">11</option><option value="12">12</option>
+          </select>월
+          <select id="deposit-card-filter" style="padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" onchange="loadDepositMatch()">
             <option value="">전체 카드사</option>
           </select>
           <button class="btn-upload" style="background:#dc2626;border-color:#dc2626;padding:5px 10px;font-size:12px;"
