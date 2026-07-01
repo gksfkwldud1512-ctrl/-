@@ -84,8 +84,9 @@ function recomputeFifoPrices() {
   const priceChanges = [];
 
   for (const fuel of ['휘발유', '경유', '등유']) {
+    // type:'stock' 또는 stock 필드가 있는 항목은 재고 스냅샷이므로 FIFO 입고 계산에서 제외
     const fuelLots = lots
-      .filter(l => l.fuel === fuel && l.qty > 0)
+      .filter(l => l.fuel === fuel && l.qty > 0 && l.type !== 'stock' && !l.stock)
       .sort((a, b) => a.date.localeCompare(b.date));
     if (!fuelLots.length) continue;
 
