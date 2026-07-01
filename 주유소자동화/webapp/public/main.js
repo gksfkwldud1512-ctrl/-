@@ -235,6 +235,19 @@ async function loadAll() {
     const certStatus = document.getElementById('cert-pass-status');
     if (certStatus) certStatus.textContent = sRes.hasCertPass ? '✅ 공동인증서 비밀번호 저장됨' : '';
   }
+
+  // 현재 월에 데이터가 없으면 가장 최근 데이터 있는 달로 자동 전환
+  if (state.vendors.length === 0 && mRes.ok) {
+    const latestMonth = Object.entries(state.monthlyStatus)
+      .filter(([, has]) => has)
+      .map(([mo]) => Number(mo))
+      .sort((a, b) => b - a)[0];
+    if (latestMonth && latestMonth !== state.month) {
+      switchMonth(latestMonth);
+      return; // switchMonth → loadForMonth → renderAll 호출함
+    }
+  }
+
   renderAll();
 }
 
