@@ -332,7 +332,7 @@ app.get('/api/customers', (req, res) => {
 
 // ── 고객 저장 ────────────────────────────────────────────────
 app.post('/api/customers', (req, res) => {
-  const { name, bizNo, ceoName, contactName, email, phone, address, bizType, bizItem, printMethod, hometaxMethod, taxIssuance, splitDelivery } = req.body;
+  const { name, bizNo, ceoName, contactName, email, taxEmail, phone, address, bizType, bizItem, printMethod, hometaxMethod, taxIssuance, splitDelivery } = req.body;
   if (!name) return res.status(400).json({ ok: false, error: '업체명은 필수입니다.' });
   const customers = readJSON(CUSTOMERS_FILE, []);
   const idx = customers.findIndex(c => c.name === name);
@@ -344,6 +344,7 @@ app.post('/api/customers', (req, res) => {
     ceoName:      ceoName      || existing.ceoName      || '',
     contactName:  contactName  || existing.contactName  || '',
     email:        email        || existing.email        || '',
+    taxEmail:     taxEmail     || existing.taxEmail     || '',
     phone:        phone        || existing.phone        || '',
     address:      address      || existing.address      || '',
     bizType:      bizType      || existing.bizType      || '',
@@ -420,6 +421,7 @@ app.post('/api/import-customers', upload.single('file'), (req, res) => {
         ceoName:      String(row['대표자명']             || '').trim(),
         contactName:  String(row['담당자명']             || '').trim(),
         email:        String(row['이메일']               || '').trim(),
+        taxEmail:     String(row['세금계산서이메일']     || '').trim(),
         phone:        String(row['연락처']               || '').trim(),
         address:      String(row['주소']                 || '').trim(),
         bizType:      String(row['업태']                 || '').trim(),
@@ -431,7 +433,7 @@ app.post('/api/import-customers', upload.single('file'), (req, res) => {
 
       const idx = customers.findIndex(c => c.name === name);
       if (idx >= 0) {
-        ['bizNo','ceoName','contactName','email','phone','address','bizType','bizItem','printMethod','hometaxMethod','taxIssuance'].forEach(k => {
+        ['bizNo','ceoName','contactName','email','taxEmail','phone','address','bizType','bizItem','printMethod','hometaxMethod','taxIssuance'].forEach(k => {
           if (incoming[k] && incoming[k] !== '통합' && incoming[k] !== '합산') customers[idx][k] = incoming[k];
           else if (k === 'hometaxMethod') customers[idx][k] = incoming[k] || '통합';
           else if (k === 'taxIssuance')   customers[idx][k] = incoming[k] || '합산';

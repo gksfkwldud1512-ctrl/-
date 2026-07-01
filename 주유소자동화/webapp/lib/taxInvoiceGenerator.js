@@ -76,7 +76,7 @@ function buildDataRow(issueDate, customer, products) {
     customer.address     || '',                    // O: 공급받는자 사업장주소
     customer.bizType     || '',                    // P: 공급받는자 업태
     customer.bizItem     || '',                    // Q: 공급받는자 종목
-    customer.email       || '',                    // R: 공급받는자 이메일1
+    customer.taxEmail || customer.email || '',      // R: 공급받는자 이메일1 (세금계산서용 우선)
     '',                                            // S: 공급받는자 이메일2
     totalSupply,                                   // T: 공급가액합계
     totalTax,                                      // U: 세액합계

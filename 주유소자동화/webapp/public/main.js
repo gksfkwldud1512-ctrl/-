@@ -918,6 +918,7 @@ async function saveCustomer() {
   const ceoName       = document.getElementById('c-ceoname').value.trim();
   const contactName   = document.getElementById('c-contact').value.trim();
   const email         = document.getElementById('c-email').value.trim();
+  const taxEmail      = document.getElementById('c-taxemail').value.trim();
   const phone         = document.getElementById('c-phone').value.trim();
   const address       = document.getElementById('c-address').value.trim();
   const bizType       = document.getElementById('c-biztype').value.trim();
@@ -927,7 +928,7 @@ async function saveCustomer() {
   const splitDelivery = document.getElementById('c-split-delivery').value === 'true';
   if (!name) return toast('업체명을 입력하세요.', 'warn');
 
-  const res = await api('POST', '/api/customers', { name, bizNo, ceoName, contactName, email, phone, address, bizType, bizItem, printMethod, taxIssuance, splitDelivery });
+  const res = await api('POST', '/api/customers', { name, bizNo, ceoName, contactName, email, taxEmail, phone, address, bizType, bizItem, printMethod, taxIssuance, splitDelivery });
   if (res.ok) {
     toast(`✅ ${name} 저장 완료`, 'success');
     closeCustomerForm();
@@ -947,6 +948,7 @@ function editCustomer(name) {
   document.getElementById('c-ceoname').value       = c.ceoName || '';
   document.getElementById('c-contact').value       = c.contactName || '';
   document.getElementById('c-email').value         = c.email || '';
+  document.getElementById('c-taxemail').value      = c.taxEmail || '';
   document.getElementById('c-phone').value         = c.phone || '';
   document.getElementById('c-address').value       = c.address || '';
   document.getElementById('c-biztype').value       = c.bizType || '';
@@ -962,7 +964,7 @@ function editCustomer(name) {
 
 function closeCustomerForm() {
   document.getElementById('customer-form-card').style.display = 'none';
-  ['c-name','c-bizno','c-ceoname','c-contact','c-email','c-phone','c-address','c-biztype','c-bizitem'].forEach(id =>
+  ['c-name','c-bizno','c-ceoname','c-contact','c-email','c-taxemail','c-phone','c-address','c-biztype','c-bizitem'].forEach(id =>
     document.getElementById(id).value = ''
   );
   document.getElementById('c-print-method').value   = '';
