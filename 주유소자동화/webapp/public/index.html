@@ -793,6 +793,10 @@
           <input type="text" id="c-bizno" placeholder="000-00-00000">
         </div>
         <div class="form-group">
+          <label>대표자명 <small style="color:#64748b;font-weight:400">(세금계산서 성명)</small></label>
+          <input type="text" id="c-ceoname" placeholder="홍길동">
+        </div>
+        <div class="form-group">
           <label>담당자명</label>
           <input type="text" id="c-contact" placeholder="홍길동">
         </div>
@@ -860,12 +864,14 @@
             <th>담당자명</th>
             <th>이메일</th>
             <th>연락처</th>
+            <th>업태</th>
+            <th>종목</th>
             <th class="col-method">출력방법</th>
             <th class="col-action">관리</th>
           </tr>
         </thead>
         <tbody id="customer-tbody">
-          <tr class="empty-row"><td colspan="7">등록된 고객이 없습니다</td></tr>
+          <tr class="empty-row"><td colspan="9">등록된 고객이 없습니다</td></tr>
         </tbody>
       </table>
     </div>

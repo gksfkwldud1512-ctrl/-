@@ -376,6 +376,7 @@ td.col-chk   { text-align: center; }
 .badge-no      { background: #f1f5f9; color: var(--text-muted); }
 .badge-warn    { background: var(--warn-bg); color: var(--warn-fg); }
 .badge-sending { background: #dbeafe; color: #1e40af; }
+.badge-info    { background: #eff6ff; color: #2563eb; }
 .badge-sent    { background: var(--success-bg); color: var(--success-fg); }
 .badge-fail    { background: var(--error-bg); color: var(--error-fg); }
 .badge-count {

@@ -332,7 +332,7 @@ app.get('/api/customers', (req, res) => {
 
 // ── 고객 저장 ────────────────────────────────────────────────
 app.post('/api/customers', (req, res) => {
-  const { name, bizNo, contactName, email, phone, address, bizType, bizItem, printMethod, hometaxMethod, taxIssuance, splitDelivery } = req.body;
+  const { name, bizNo, ceoName, contactName, email, phone, address, bizType, bizItem, printMethod, hometaxMethod, taxIssuance, splitDelivery } = req.body;
   if (!name) return res.status(400).json({ ok: false, error: '업체명은 필수입니다.' });
   const customers = readJSON(CUSTOMERS_FILE, []);
   const idx = customers.findIndex(c => c.name === name);
@@ -341,6 +341,7 @@ app.post('/api/customers', (req, res) => {
   const customer = {
     name,
     bizNo:        bizNo        || existing.bizNo        || '',
+    ceoName:      ceoName      || existing.ceoName      || '',
     contactName:  contactName  || existing.contactName  || '',
     email:        email        || existing.email        || '',
     phone:        phone        || existing.phone        || '',
@@ -416,6 +417,7 @@ app.post('/api/import-customers', upload.single('file'), (req, res) => {
       const incoming = {
         name,
         bizNo:        String(row['사업자번호']           || '').trim(),
+        ceoName:      String(row['대표자명']             || '').trim(),
         contactName:  String(row['담당자명']             || '').trim(),
         email:        String(row['이메일']               || '').trim(),
         phone:        String(row['연락처']               || '').trim(),
@@ -429,7 +431,7 @@ app.post('/api/import-customers', upload.single('file'), (req, res) => {
 
       const idx = customers.findIndex(c => c.name === name);
       if (idx >= 0) {
-        ['bizNo','contactName','email','phone','address','bizType','bizItem','printMethod','hometaxMethod','taxIssuance'].forEach(k => {
+        ['bizNo','ceoName','contactName','email','phone','address','bizType','bizItem','printMethod','hometaxMethod','taxIssuance'].forEach(k => {
           if (incoming[k] && incoming[k] !== '통합' && incoming[k] !== '합산') customers[idx][k] = incoming[k];
           else if (k === 'hometaxMethod') customers[idx][k] = incoming[k] || '통합';
           else if (k === 'taxIssuance')   customers[idx][k] = incoming[k] || '합산';

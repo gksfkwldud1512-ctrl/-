@@ -72,7 +72,7 @@ function buildDataRow(issueDate, customer, products) {
     (customer.bizNo || '').replace(/-/g, ''),      // K: 공급받는자 등록번호 ("-" 없이)
     '',                                            // L: 공급받는자 종사업장번호
     customer.name        || '',                    // M: 공급받는자 상호
-    customer.contactName || '',                    // N: 공급받는자 성명
+    customer.ceoName || customer.contactName || '', // N: 공급받는자 성명 (대표자명 우선)
     customer.address     || '',                    // O: 공급받는자 사업장주소
     customer.bizType     || '',                    // P: 공급받는자 업태
     customer.bizItem     || '',                    // Q: 공급받는자 종목

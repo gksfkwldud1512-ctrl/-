@@ -63,7 +63,7 @@ function parseBosDaily(filePath) {
     else if (payType === '신용카드') day.byPay['신용카드'] += amount;
     else if (payType === '외상')    day.byPay['외상']      += amount;
 
-    if (payType === '신용카드') {
+    if (payType === '신용카드' || payType === '외상') {
       const approvalNo = String(r[fmt.approvalCol] || '').trim();
       if (approvalNo) {
         const cardNo = fmt.cardNoCol >= 0 ? bosCardNo(String(r[fmt.cardNoCol] || '')) : '';
@@ -73,6 +73,7 @@ function parseBosDaily(filePath) {
           cardNo,
           product,
           amount,
+          bosPayType: payType,
         });
       }
     }

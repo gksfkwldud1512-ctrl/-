@@ -564,6 +564,8 @@ function renderCustomers() {
     <td>${esc(c.contactName) || dash()}</td>
     <td>${esc(c.email) || dash()}</td>
     <td>${esc(c.phone) || dash()}</td>
+    <td>${c.bizType ? `<span class="badge badge-info">${esc(c.bizType)}</span>` : dash()}</td>
+    <td>${c.bizItem ? `<span class="badge badge-info">${esc(c.bizItem)}</span>` : dash()}</td>
     <td class="col-method">${c.printMethod ? `<span class="badge badge-no">${esc(c.printMethod)}</span>` : dash()}</td>
     <td class="col-action">
       <button class="btn-sm" onclick='editCustomer(${JSON.stringify(c.name)})'>수정</button>
@@ -913,6 +915,7 @@ async function importCustomers(file) {
 async function saveCustomer() {
   const name          = document.getElementById('c-name').value.trim();
   const bizNo         = document.getElementById('c-bizno').value.trim();
+  const ceoName       = document.getElementById('c-ceoname').value.trim();
   const contactName   = document.getElementById('c-contact').value.trim();
   const email         = document.getElementById('c-email').value.trim();
   const phone         = document.getElementById('c-phone').value.trim();
@@ -924,7 +927,7 @@ async function saveCustomer() {
   const splitDelivery = document.getElementById('c-split-delivery').value === 'true';
   if (!name) return toast('업체명을 입력하세요.', 'warn');
 
-  const res = await api('POST', '/api/customers', { name, bizNo, contactName, email, phone, address, bizType, bizItem, printMethod, taxIssuance, splitDelivery });
+  const res = await api('POST', '/api/customers', { name, bizNo, ceoName, contactName, email, phone, address, bizType, bizItem, printMethod, taxIssuance, splitDelivery });
   if (res.ok) {
     toast(`✅ ${name} 저장 완료`, 'success');
     closeCustomerForm();
@@ -941,6 +944,7 @@ function editCustomer(name) {
   if (!c) return;
   document.getElementById('c-name').value          = c.name;
   document.getElementById('c-bizno').value         = c.bizNo || '';
+  document.getElementById('c-ceoname').value       = c.ceoName || '';
   document.getElementById('c-contact').value       = c.contactName || '';
   document.getElementById('c-email').value         = c.email || '';
   document.getElementById('c-phone').value         = c.phone || '';
@@ -958,7 +962,7 @@ function editCustomer(name) {
 
 function closeCustomerForm() {
   document.getElementById('customer-form-card').style.display = 'none';
-  ['c-name','c-bizno','c-contact','c-email','c-phone','c-address','c-biztype','c-bizitem'].forEach(id =>
+  ['c-name','c-bizno','c-ceoname','c-contact','c-email','c-phone','c-address','c-biztype','c-bizitem'].forEach(id =>
     document.getElementById(id).value = ''
   );
   document.getElementById('c-print-method').value   = '';

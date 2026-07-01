@@ -19,6 +19,7 @@ function matchCards(bosCards, easyCards) {
         cardNo:      t.cardNo,
         totalAmount: 0,
         products:    [],
+        bosPayType:  t.bosPayType || '신용카드',
       });
     }
     const g = bosMap.get(t.approvalNo);
@@ -36,6 +37,8 @@ function matchCards(bosCards, easyCards) {
     const easyTx = easyMap.get(no);
     const product = bosGroup.products.length > 0 ? bosGroup.products.join('+') : '미분류';
     if (!easyTx) {
+      // 외상 거래가 이지샵에 없으면 오류 아님 (별도 단말기 처리 등)
+      if (bosGroup.bosPayType === '외상') continue;
       errors.push({
         type:        'bos_only',
         approvalNo:  no,
@@ -78,7 +81,12 @@ function matchCards(bosCards, easyCards) {
     }
   }
 
-  const bosTotal  = bosCards.reduce((s, t) => s + t.amount, 0);
+  // 합계: 이지샵에 없는 외상 거래는 bosTotal에서 제외 (별도 단말기 처리)
+  const bosTotal = bosCards.reduce((s, t) => {
+    const payType = t.bosPayType || '신용카드';
+    if (payType !== '외상') return s + t.amount;
+    return easyMap.has(t.approvalNo) ? s + t.amount : s;
+  }, 0);
   const easyTotal = easyCards.reduce((s, t) => s + t.amount, 0);
 
   return {
