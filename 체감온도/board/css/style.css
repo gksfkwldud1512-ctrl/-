@@ -1,0 +1,225 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background: #ffffff;
+  color: #1a2233;
+  font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+  overflow: hidden;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5vh 3vw;
+  height: 10vh;
+  background: #ffffff;
+  border-bottom: 2px solid #e3e8f2;
+}
+
+.logo-area {
+  display: flex;
+  align-items: center;
+}
+.logo { height: 6vh; display: block; }
+.logo-fallback {
+  display: none;
+  font-size: 3vh;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #1a2233;
+}
+
+.time-area {
+  text-align: right;
+}
+
+.date {
+  font-size: 2.2vh;
+  font-weight: 500;
+  color: #62708c;
+  margin-bottom: 0.3vh;
+}
+
+.clock {
+  font-size: 4vh;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #2b3a55;
+}
+
+.screen {
+  height: 82vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 2vh 3vw;
+  background: #ffffff;
+  transition: background 0.4s ease;
+}
+
+.banner {
+  width: 100%;
+  border-radius: 16px;
+  padding: 4vh 2vw;
+  text-align: center;
+  margin-bottom: 3vh;
+  transition: background 0.4s ease;
+}
+
+.banner-time {
+  font-size: 6vh;
+  font-weight: 700;
+  margin-bottom: 1vh;
+  font-variant-numeric: tabular-nums;
+}
+
+.banner-text {
+  font-size: 11vh;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+
+/* 상태별 색상 */
+.screen.state-idle .banner {
+  background: #eef1f7;
+  color: #62708c;
+}
+
+.screen.state-not-granted .banner {
+  background: linear-gradient(135deg, #ff6600, #cc5200);
+  color: #ffffff;
+}
+
+.screen.state-granted .banner {
+  background: linear-gradient(135deg, #17b563, #0e8f4d);
+  color: #ffffff;
+  animation: pulse 1.4s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(23, 181, 99, 0.45); }
+  50% { box-shadow: 0 0 40px 12px rgba(23, 181, 99, 0.25); }
+}
+
+.info-row {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin-bottom: 3vh;
+}
+
+.info-card {
+  background: #f5f7fb;
+  border: 2px solid #a7b2c9;
+  border-radius: 12px;
+  padding: 2vh 4vw;
+  text-align: center;
+  min-width: 40vw;
+  box-shadow: 0 2px 6px rgba(26, 34, 51, 0.08);
+}
+
+.info-label {
+  font-size: 2.2vh;
+  color: #62708c;
+  margin-bottom: 0.5vh;
+}
+
+.info-value {
+  font-size: 5.5vh;
+  font-weight: 800;
+  color: #1a2233;
+}
+
+.info-sub {
+  font-size: 1.8vh;
+  color: #8592ab;
+  margin-top: 0.5vh;
+}
+
+.process-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 1.2vw;
+  width: 100%;
+}
+
+.process-cell {
+  background: #f5f7fb;
+  border: 2px solid #a7b2c9;
+  border-radius: 10px;
+  padding: 1.8vh 0.5vw;
+  text-align: center;
+  box-shadow: 0 2px 6px rgba(26, 34, 51, 0.08);
+}
+
+.process-cell .name {
+  font-size: 2vh;
+  color: #62708c;
+  margin-bottom: 0.8vh;
+}
+
+.process-cell .value {
+  font-size: 3.4vh;
+  font-weight: 700;
+  color: #1a2233;
+}
+
+.process-cell.over .value { color: #d21f1a; }
+
+/* 테스트 패널 - 배포 시 삭제 대상 */
+.test-panel {
+  height: 8vh;
+  background: #f5f7fb;
+  border-top: 2px dashed #c7d0e2;
+  display: flex;
+  align-items: center;
+  padding: 0 3vw;
+  gap: 2vw;
+  font-size: 1.8vh;
+}
+
+.test-panel-title {
+  font-weight: 700;
+  color: #b8790a;
+  white-space: nowrap;
+}
+
+.test-row {
+  display: flex;
+  align-items: center;
+  gap: 1.5vw;
+  flex-wrap: wrap;
+}
+
+.test-row label {
+  display: flex;
+  align-items: center;
+  gap: 0.4vw;
+  color: #3a4863;
+}
+
+.test-row input[type="number"],
+.test-row input[type="text"] {
+  width: 8vw;
+  padding: 0.4vh 0.5vw;
+  border-radius: 4px;
+  border: 1px solid #c7d0e2;
+  background: #ffffff;
+  color: #1a2233;
+}
+
+.test-row button {
+  padding: 0.6vh 1.2vw;
+  border-radius: 4px;
+  border: none;
+  background: #3a6df0;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.test-row button:hover { background: #2c56c4; }

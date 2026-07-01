@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>쉬는시간 안내 전광판</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="logo-area">
+      <img src="assets/logo.png" alt="Johnson Electric" class="logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <div class="logo-fallback">JOHNSON ELECTRIC</div>
+    </div>
+    <div class="time-area">
+      <div class="date" id="date">----년 --월 --일 (-)</div>
+      <div class="clock" id="clock">--:--:--</div>
+    </div>
+  </header>
+
+  <main class="screen state-idle" id="screen">
+    <div class="banner" id="banner">
+      <div class="banner-time" id="banner-time">--:-- ~ --:--</div>
+      <div class="banner-text" id="banner-text">판정 대기중</div>
+    </div>
+
+    <div class="info-row">
+      <div class="info-card">
+        <div class="info-label">측정시점 평균온도</div>
+        <div class="info-value" id="avg-temp">--°C</div>
+        <div class="info-sub" id="window-range">측정창: --:-- ~ --:--</div>
+      </div>
+    </div>
+
+    <div class="process-grid" id="process-grid"></div>
+  </main>
+
+  <!-- 개발/테스트용 컨트롤 패널 - 실제 배포 시 이 섹션만 삭제하면 됩니다 -->
+  <section class="test-panel" id="test-panel">
+    <div class="test-panel-title">테스트 컨트롤 (하드웨어 연결 전 임시)</div>
+    <div class="test-row">
+      <label>
+        <input type="checkbox" id="test-enabled">
+        테스트 값 사용
+      </label>
+      <label>
+        평균온도(°C):
+        <input type="number" id="test-avg" step="0.1" value="34.0">
+      </label>
+      <label>
+        시간 오버라이드 (HH:MM, 비우면 현재시각):
+        <input type="text" id="test-time" placeholder="예: 23:40">
+      </label>
+      <button id="test-apply">적용</button>
+    </div>
+  </section>
+
+  <script src="js/board.js"></script>
+</body>
+</html>
