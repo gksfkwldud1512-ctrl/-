@@ -1605,6 +1605,29 @@ async function loadDailyMonth() {
   const tankInput = document.getElementById('tank-date-input');
   if (tankInput) tankInput.value = lastDate;
   loadTankStatus(lastDate);
+
+  // 기초재고 표시 (해당 월 1일 기준 — 당일 판매 전 잔량)
+  const firstDate = `${dailyState.year}-${String(dailyState.month).padStart(2,'0')}-01`;
+  const bar = document.getElementById('opening-stock-bar');
+  try {
+    const stockRes = await api('GET', `/api/daily/tank-status?date=${firstDate}`);
+    if (stockRes.ok && stockRes.tanks && bar) {
+      bar.style.display = '';
+      document.getElementById('opening-month-label').textContent = `(${dailyState.month}/1)`;
+      const fuels = [
+        { fuel: '휘발유', id: 'opening-휘발유' },
+        { fuel: '경유',   id: 'opening-경유' },
+        { fuel: '등유',   id: 'opening-등유' },
+      ];
+      for (const { fuel, id } of fuels) {
+        const el = document.getElementById(id);
+        const t  = stockRes.tanks[fuel];
+        if (el && t) {
+          el.textContent = `${fuel} ${t.totalRemaining.toLocaleString()}L@${t.currentPrice?.toLocaleString()}원`;
+        }
+      }
+    }
+  } catch(e) { if (bar) bar.style.display = 'none'; }
 }
 
 // ── 탱크 현황 ────────────────────────────────────────────────
