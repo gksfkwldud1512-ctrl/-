@@ -981,18 +981,18 @@ app.get('/api/daily/tank-status', (req, res) => {
       const baseQty    = stockCorrection.stock;
       const basePrice  = stockCorrection.price;
 
-      // 기준점 이후 BOS 판매량
+      // 기준점 이후 BOS 판매량 (스냅샷 날짜 당일 판매도 포함: 스냅샷은 당일 판매 전 잔량)
       let soldAfterStock = 0;
       if (fs.existsSync(DAILY_DIR)) {
         fs.readdirSync(DAILY_DIR).filter(f => f.endsWith('.json')).forEach(f => {
           const day = readJSON(path.join(DAILY_DIR, f), {});
-          if (!day.bos?.date || day.bos.date <= stockDate || day.bos.date >= targetDate) return;
+          if (!day.bos?.date || day.bos.date < stockDate || day.bos.date >= targetDate) return;
           soldAfterStock += (day.bos.fuels?.[fuel]?.qty || 0);
         });
       }
 
-      // FIFO 큐: 기초재고 + 이후 입고 lot (날짜 순)
-      const lotsAfterStock = fuelLots.filter(l => l.date > stockDate);
+      // FIFO 큐: 기초재고 + 이후 입고 lot (날짜 순, stock 스냅샷 엔트리 제외)
+      const lotsAfterStock = fuelLots.filter(l => l.date >= stockDate && !l.stock && l.type !== 'stock');
       const queue = [
         { qty: baseQty, price: basePrice },
         ...lotsAfterStock.map(l => ({ qty: l.qty, price: l.price })),
