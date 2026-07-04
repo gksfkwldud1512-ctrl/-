@@ -405,11 +405,83 @@ C:\Users\82108\Desktop\주유소자동화\
 
 ---
 
+## 완료된 작업 전체 목록 (추가 - 2026-07-01) — 고객관리 필드 확장
+
+### 고객 등록 양식 필드 추가
+- [x] 세금계산서 필수 필드 추가: 주소(address), 업태(bizType), 종목(bizItem)
+- [x] 대표자명(ceoName) 필드 신규 추가 (담당자명과 분리)
+  - 세금계산서 N열(공급받는자 성명) = ceoName 우선, fallback: contactName
+- [x] 이메일 2개로 분리:
+  - email = 거래명세서 발송용
+  - taxEmail = 세금계산서 R열(이메일1)용, 비우면 email 자동 사용
+- [x] 고객등록양식.xlsx: 12컬럼으로 재생성 (기존 변환완료 87개 업체 데이터 포함)
+- [x] server.js POST /api/customers, /api/import-customers: 신규 필드 처리
+- [x] index.html: 고객 편집 폼에 대표자명·세금계산서이메일 입력란 추가
+- [x] main.js: saveCustomer/editCustomer/closeCustomerForm/renderCustomers 업데이트
+- [x] 고객 목록 테이블: 업태·종목 컬럼 추가 (badge-info 스타일)
+
+---
+
+## 완료된 작업 전체 목록 (추가 - 2026-07-01) — FIFO 선입선출 수정
+
+### 경유 FIFO 적용 단가 전환 수정
+- [x] **근본 원인**: purchase_lots.json의 5/31·6/1 stock 스냅샷(각 66,258L)이
+  FIFO 입고로 오산되어 허구 재고 132,516L 발생 → 1923원이 절대 소진 안 됨
+- [x] recomputeFifoPrices() 필터 수정: `l.type !== 'stock' && !l.stock` 추가
+- [x] **경유 단가 전환 (2026-06-26 이후)**:
+  - 6/26~6/28: 1,873원 (6/24 입고 27,840L)
+  - 6/29~6/30: 1,773원 (6/29 입고 27,768L)
+- [x] fifo_daily_prices.json 직접 수정 (1순위 적용 파일)
+- [x] purchase_prices.json FIFO 재계산
+
+### 조회년월 옆 기초재고 표시 추가
+- [x] index.html: 조회년월 select 옆에 기초재고 바 (#opening-stock-bar) 추가
+- [x] main.js loadDailyMonth(): 해당 월 1일 기준 tank-status 조회 → 유종별 잔량@단가 표시
+
+---
+
+## 완료된 작업 전체 목록 (추가 - 2026-07-04) — 전체 로직 재검증
+
+### 검증 결과 요약
+- [x] 경유 FIFO 단가 정상 확인: 6/26 1873원, 6/29 1773원 ✓
+- [x] 6월 일별 영업이익 정상 확인 (6월 유종 합계 약 3,554만원)
+- [x] purchase_prices.json 중복 날짜 4건 (2/11·3/12·4/10·6/24 경유): 동일 가격 중복, 계산 영향 없음
+
+### 탱크현황 soldAfterStock 버그 수정 (commit 758ba4b)
+- [x] **버그**: stock 스냅샷 날짜(6/1)의 BOS 판매량이 `soldAfterStock` 계산에서 누락됨
+  - 기존 조건 `day.bos.date <= stockDate` → 당일 판매 제외됨
+  - 경유 6/1 판매 13,416L 미반영 → 탱크 38,858L(과대) 표시
+- [x] **수정**: `<= stockDate` → `< stockDate` (당일 판매 포함)
+- [x] lotsAfterStock 필터: `date > stockDate` → `date >= stockDate && !l.stock && l.type !== 'stock'`
+  (당일 일반 배달 lot 포함, stock 스냅샷 이중계산 방지)
+- [x] **수정 후 6/30 기준 탱크 잔여량**:
+  | 유종 | 잔여량 | 단가 |
+  |------|--------|------|
+  | 경유 | 25,442L | 1,773원 |
+  | 휘발유 | 6,067L | 1,934원 |
+  | 등유 | 1,330L | 1,530원 |
+
+### 미결 데이터 이슈 (코드 버그 아님)
+- ⚠️ **등유 FIFO 적자**: 1~6월 판매(171,551L) > 입고(167,186L), 부족분 4,365L
+  - 원인 추정: 배달 판매 과집계 또는 입고 기록 누락
+  - 5/31·6/1 stock 스냅샷(8,855L)으로 탱크현황 보정 중
+  - 영업이익 단가에는 영향 없음 (4월~: 1,530원 고정)
+  - **등유 잔여 1,330L — 7월 입고 시 purchase_lots.json 즉시 등록 필요**
+
+### FIFO 데이터 구조 최종 정리 (중요 참고사항)
+- fifo_daily_prices.json: 마감자료 업로드 시 자동 생성, **1순위** 적용
+  - 최근 배달분 단가 변경 후 수동 수정 필요할 수 있음 (6/26 1873, 6/29 1773 직접 수정함)
+- purchase_prices.json: recomputeFifoPrices() 자동 계산, **2순위** (fallback)
+  - stock 스냅샷 항목 (`type:'stock'` 또는 `stock` 필드) 자동 제외
+- purchase_lots.json: 실제 입고 이력 + stock 스냅샷 혼재 (스냅샷은 FIFO 보정 기준점)
+
+---
+
 ## 다음 세션에서 할 작업
 
 ### 우선순위 1
 - [ ] 입금검증 탭 실사용 확인 (서버 재시작 후 파일 업로드 테스트)
-- [ ] 업체별 업태(bizType) 입력
+- [ ] 등유 입고 기록 보완 (7월 입고분 purchase_lots.json 등록)
 - [ ] BOS DB 계정 확인 후 /api/sync-bos-db 동기화 엔드포인트 구현
 
 ---
