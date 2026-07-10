@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+
+# 얼굴 인식용 생체정보(사진/모델)와 출입 로그는 저장소에 올리지 않음
+known_faces/raw_images/
+known_faces/*.pkl
+known_faces/*.yml
+known_faces/labels.json
+logs/*.csv
+
+.claude/
