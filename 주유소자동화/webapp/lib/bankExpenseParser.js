@@ -49,12 +49,124 @@ const CATEGORY_MAP = [
   { re: /보험/,                                           cat: '고정비', sub: '보험비',   account: '보험료' },
   { re: /퇴직금|퇴직적립/,                               cat: '변동비', sub: '퇴직금',   account: '퇴직급여' },
   { re: /협회|조합비/,                                   cat: '변동비', sub: '협회비',   account: '조합비' },
+  { re: /전기요금/,                                       cat: '고정비', sub: '전력비',   account: '전력비' },
+  { re: /급여이체/,                                       cat: '고정비', sub: '급여',     account: '급여' },
 ];
 
-function classifyVendor(vendor) {
+// ── 과거 지출목록(계정과목 확정된 항목) 기반 자동 매칭 ───────────
+// 같은/비슷한 거래처명 또는 동일 금액이 과거 자료에 있으면 그 계정과목을 재사용한다.
+function normalize(s) {
+  return String(s || '').toLowerCase().replace(/[^0-9a-z가-힣]/g, '');
+}
+
+function commonPrefixLen(a, b) {
+  const n = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < n && a[i] === b[i]) i++;
+  return i;
+}
+
+// 두 정규화된 거래처명의 유사도(0~1). 포함 관계 또는 앞부분 일치(일련번호 등 접미 변동) 인식
+function vendorSimilarity(a, b) {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if ((a.includes(b) || b.includes(a)) && Math.min(a.length, b.length) >= 3) return 0.9;
+  const cp = commonPrefixLen(a, b);
+  const ratio = cp / Math.max(a.length, b.length);
+  return (cp >= 4 && ratio >= 0.6) ? ratio : 0;
+}
+
+/**
+ * 과거 지출 목록(이미 계정과목이 정해진 항목들)으로부터 매칭 인덱스를 만든다.
+ * @param {Array} history expenses.json 형태의 배열 (subCategory==='기타'인 항목은 참조에서 제외)
+ */
+function buildHistoryIndex(history) {
+  const vendorGroups = new Map();  // norm -> Map(key -> {count,category,subCategory,account,lastDate})
+  const amountGroups = new Map();  // amount -> Map(key -> count)
+
+  for (const e of (history || [])) {
+    if (!e || !e.vendor || !e.subCategory || e.subCategory === '기타') continue;
+    const norm = normalize(e.vendor);
+    if (!norm) continue;
+    const key = `${e.category || ''}|${e.subCategory}|${e.account || ''}`;
+
+    if (!vendorGroups.has(norm)) vendorGroups.set(norm, new Map());
+    const g = vendorGroups.get(norm);
+    const cur = g.get(key) || { count: 0, category: e.category, subCategory: e.subCategory, account: e.account || '', lastDate: '' };
+    cur.count++;
+    if ((e.date || '') > cur.lastDate) cur.lastDate = e.date || '';
+    g.set(key, cur);
+
+    if (e.amount != null) {
+      if (!amountGroups.has(e.amount)) amountGroups.set(e.amount, new Map());
+      const ag = amountGroups.get(e.amount);
+      ag.set(key, (ag.get(key) || 0) + 1);
+    }
+  }
+
+  // 거래처별 대표 계정과목 (가장 많이 쓰인 것, 동률이면 최근 것)
+  const vendorMap = new Map();
+  for (const [norm, g] of vendorGroups) {
+    let best = null;
+    for (const val of g.values()) {
+      if (!best || val.count > best.count || (val.count === best.count && val.lastDate > best.lastDate)) best = val;
+    }
+    vendorMap.set(norm, best);
+  }
+
+  // 금액별 계정과목 (동일 금액이 항상 같은 계정과목으로만 쓰였을 때만 채택 - 모호하면 제외)
+  const amountMap = new Map();
+  for (const [amt, g] of amountGroups) {
+    if (g.size === 1) {
+      const [key] = g.keys();
+      const [category, subCategory, account] = key.split('|');
+      amountMap.set(amt, { category, subCategory, account });
+    }
+  }
+
+  return { vendorMap, amountMap };
+}
+
+// 거래처명(정규화) 기준 매칭: 정확히 일치 → 유사(포함/접두사 공통) 매칭
+function matchVendorHistory(norm, idx) {
+  if (!norm || !idx) return null;
+  const exact = idx.vendorMap.get(norm);
+  if (exact) return exact;
+
+  let best = null, bestScore = 0, ambiguous = false;
+  for (const [key, val] of idx.vendorMap) {
+    const score = vendorSimilarity(norm, key);
+    if (score > bestScore) {
+      best = val; bestScore = score; ambiguous = false;
+    } else if (score > 0 && score === bestScore && val.subCategory !== best.subCategory) {
+      ambiguous = true;
+    }
+  }
+  return (bestScore >= 0.6 && !ambiguous) ? best : null;
+}
+
+/**
+ * 거래처 계정과목 분류
+ * 우선순위: 1) 과거자료 거래처 매칭(정확/유사) 2) 정규식 규칙 3) 과거자료 금액 매칭 4) 기타
+ * @param {string} vendor
+ * @param {number} amount
+ * @param {{vendorMap:Map, amountMap:Map}} [historyIndex] buildHistoryIndex() 결과
+ */
+function classifyVendor(vendor, amount, historyIndex) {
+  if (historyIndex) {
+    const vm = matchVendorHistory(normalize(vendor), historyIndex);
+    if (vm) return { category: vm.category, subCategory: vm.subCategory, account: vm.account };
+  }
+
   for (const { re, cat, sub, account } of CATEGORY_MAP) {
     if (re.test(vendor)) return { category: cat, subCategory: sub, account };
   }
+
+  if (historyIndex && historyIndex.amountMap.has(amount)) {
+    const am = historyIndex.amountMap.get(amount);
+    return { category: am.category, subCategory: am.subCategory, account: am.account };
+  }
+
   return { category: '변동비', subCategory: '기타', account: '잡비' };
 }
 
@@ -73,9 +185,11 @@ function isInternalTransfer(vendor) {
 /**
  * 수시입출예금 입출금내역.xls 파싱
  * @param {string} filePath
+ * @param {Array} [history] 기존 지출목록(expenses.json) — 계정과목 자동 매칭 참조용
  * @returns {{ date:string, month:string, category:string, subCategory:string, vendor:string, amount:number, source:'bank' }[]}
  */
-function parseBankExpenses(filePath) {
+function parseBankExpenses(filePath, history = []) {
+  const historyIndex = buildHistoryIndex(history);
   const wb = XLSX.readFile(filePath, { type: 'file', cellDates: true, codepage: 949 });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
@@ -147,7 +261,8 @@ function parseBankExpenses(filePath) {
     const month = dateStr.slice(0, 7);  // 'YYYY-MM'
     if (!month || month.length < 7) continue;
 
-    const { category, subCategory, account } = classifyVendor(vendor);
+    const roundedAmt = Math.round(outAmt);
+    const { category, subCategory, account } = classifyVendor(vendor, roundedAmt, historyIndex);
 
     result.push({
       date:        dateStr,
@@ -156,7 +271,7 @@ function parseBankExpenses(filePath) {
       subCategory,
       account,
       vendor,
-      amount:      Math.round(outAmt),
+      amount:      roundedAmt,
       source:      'bank',
     });
   }
@@ -164,4 +279,4 @@ function parseBankExpenses(filePath) {
   return result;
 }
 
-module.exports = { parseBankExpenses };
+module.exports = { parseBankExpenses, buildHistoryIndex, classifyVendor };

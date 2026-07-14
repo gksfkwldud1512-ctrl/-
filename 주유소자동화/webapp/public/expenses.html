@@ -268,6 +268,12 @@
           하나은행 수시입출예금 입출금내역 Excel (.xls / .xlsx)
         </div>
       </div>
+      <div>
+        <button class="btn-upload" id="btn-rematch" style="background:#2563eb;" onclick="rematchOthers()">
+          🔄 기타 재매칭
+        </button>
+        <div class="upload-info">과거 계정과목 확정 항목을 참조해 기타 항목을 재분류합니다</div>
+      </div>
     </div>
   </div>
 
@@ -568,7 +574,11 @@ function applyFilter() {
     return;
   }
 
+  // 계정과목 미매칭(기타) 항목은 정렬 기준과 무관하게 항상 최상단에 배치 (수정 우선순위)
   const sorted = [...list].sort((a,b)=>{
+    const aOther = (a.subCategory||'기타')==='기타' ? 0 : 1;
+    const bOther = (b.subCategory||'기타')==='기타' ? 0 : 1;
+    if (aOther !== bOther) return aOther - bOther;
     if (sortCol==='amount')
       return sortDir==='asc' ? (a.amount||0)-(b.amount||0) : (b.amount||0)-(a.amount||0);
     const da=a.date||a.month||'', db=b.date||b.month||'';
@@ -672,6 +682,24 @@ document.getElementById('bank-expense-input').addEventListener('change', async e
   } catch(err) { info.textContent='❌ 서버 연결 실패'; showBanner(err.message,'err'); }
   btn.disabled=false; btn.textContent='📥 수시입출예금 업로드'; e.target.value='';
 });
+
+// ── 기타 재매칭 ──────────────────────────────────────────────
+async function rematchOthers() {
+  const btn = document.getElementById('btn-rematch');
+  btn.disabled = true; btn.textContent = '⏳ 재매칭 중…';
+  showBanner('기타 항목 재매칭 중…', 'info');
+  try {
+    const res  = await fetch('/api/expenses/rematch', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      showBanner(`✅ ${data.updated}건 재매칭 완료 (기타 ${data.remaining}건 남음)`, 'ok');
+      await loadData();
+    } else {
+      showBanner('재매칭 실패: ' + (data.error||''), 'err');
+    }
+  } catch (e) { showBanner('서버 오류: ' + e.message, 'err'); }
+  btn.disabled = false; btn.textContent = '🔄 기타 재매칭';
+}
 
 // ── 필터 이벤트 ───────────────────────────────────────────────
 ['filter-cat','filter-sub'].forEach(id=>document.getElementById(id).addEventListener('change',applyFilter));

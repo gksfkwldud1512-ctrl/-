@@ -433,6 +433,16 @@
       </summary>
 
       <div style="margin-top:12px;">
+        <!-- 주문목록 업로드 -->
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;margin-bottom:12px;">
+          <input type="file" id="order-list-input" accept=".xlsx,.xls" hidden>
+          <button class="btn-primary" id="order-list-btn" style="background:#16a34a;" onclick="document.getElementById('order-list-input').click()">
+            📥 주문목록 업로드
+          </button>
+          <span style="font-size:12px;color:#166534;">현대오일뱅크 주문목록.xlsx → 배차완료 수량을 배차일 기준으로 입고 이력에 자동 반영</span>
+          <span id="order-list-info" style="font-size:12px;color:#64748b;"></span>
+        </div>
+
         <!-- 입력 폼 -->
         <div class="pp-add-row" style="flex-wrap:wrap;gap:8px;align-items:flex-end;">
           <div class="form-group" style="flex:0 0 140px;">

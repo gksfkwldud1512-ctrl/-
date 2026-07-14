@@ -1578,6 +1578,43 @@ async function addPurchaseLot() {
   }
 }
 
+async function uploadOrderList(file) {
+  const btn  = document.getElementById('order-list-btn');
+  const info = document.getElementById('order-list-info');
+  btn.disabled = true; btn.textContent = '⏳ 처리 중…';
+  info.textContent = `처리 중: ${file.name}`;
+
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const res  = await fetch('/api/daily/lots/upload-orders', { method: 'POST', body: form });
+    const data = await res.json();
+    if (data.ok) {
+      _allLots = data.lots || [];
+      _lotFilterMonth = 'all';
+      renderLotMonthTabs(_allLots);
+      renderLotTable(_allLots, _lotFilterMonth);
+      updatePpBadge();
+      renderDailyTable();
+      info.textContent = `✅ 신규 ${data.count}건 반영` + (data.skipped ? ` · 기존 ${data.skipped}건 유지` : '');
+      toast(data.count ? `주문목록 ${data.count}건 입고 반영 완료` : '신규 입고 항목 없음 (이미 반영됨)', data.count ? 'success' : '');
+    } else {
+      info.textContent = '❌ ' + data.error;
+      toast(data.error || '업로드 실패', 'error');
+    }
+  } catch (e) {
+    info.textContent = '❌ 서버 연결 실패';
+    toast(e.message, 'error');
+  }
+  btn.disabled = false; btn.textContent = '📥 주문목록 업로드';
+}
+
+document.getElementById('order-list-input')?.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (file) uploadOrderList(file);
+  e.target.value = '';
+});
+
 async function deletePurchaseLot(date, fuel, price) {
   if (!confirm(`${date} ${fuel} 입고를 삭제하시겠습니까?`)) return;
   const res = await api('DELETE', '/api/daily/lots', { date, fuel, price });

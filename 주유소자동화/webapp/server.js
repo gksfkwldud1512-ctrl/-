@@ -1115,6 +1115,39 @@ app.delete('/api/daily/lots', (req, res) => {
   } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
+// ── 주문목록(현대오일뱅크) 업로드 → 배차수량 자동 입고 반영 ─────
+// 출하일자 기준 배차완료 항목만 반영. 이미 입고 이력이 있는 날짜+유종은 건드리지 않고
+// (마감자료 임포트·수동 입력·정산단가 수정 등으로 이미 확정된 값을 보존),
+// 아직 등록되지 않은 날짜+유종만 신규로 추가한다 — 재업로드해도 중복 없음.
+app.post('/api/daily/lots/upload-orders', upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) return res.json({ ok: false, error: '파일이 없습니다.' });
+    const { parseOrderLots } = require('./lib/orderListParser');
+    const parsed = parseOrderLots(req.file.path);
+    if (!parsed.length) return res.json({ ok: false, error: '배차 완료된 유류 항목을 찾을 수 없습니다.' });
+
+    const lots = readJSON(PURCHASE_LOTS_FILE, []);
+    const existingKeys = new Set(
+      lots.filter(l => l.type !== 'stock' && l.stock == null).map(l => `${l.date}|${l.fuel}`)
+    );
+
+    const newLots = parsed.filter(l => !existingKeys.has(`${l.date}|${l.fuel}`));
+    const skipped = parsed.length - newLots.length;
+
+    if (!newLots.length) {
+      return res.json({ ok: true, count: 0, skipped, lots, message: '이미 등록된 입고 내역뿐입니다 (신규 항목 없음).' });
+    }
+
+    const merged = lots.concat(newLots).sort((a, b) => a.date.localeCompare(b.date) || a.fuel.localeCompare(b.fuel));
+    writeJSON(PURCHASE_LOTS_FILE, merged);
+    try { recomputeFifoPrices(); } catch (e2) { console.error('[recomputeFifoPrices]', e2.message); }
+
+    res.json({ ok: true, count: newLots.length, skipped, lots: merged, prices: readJSON(PURCHASE_PRICES_FILE, []) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ── 마감자료 Excel 업로드 (FIFO 단가 + 입고 이력 임포트) ─────
 app.post('/api/upload-management', upload.single('file'), (req, res) => {
   try {
@@ -1177,18 +1210,47 @@ app.post('/api/upload-bank-expenses', upload.single('file'), (req, res) => {
   try {
     if (!req.file) return res.json({ ok: false, error: '파일이 없습니다.' });
     const { parseBankExpenses } = require('./lib/bankExpenseParser');
-    const newItems = parseBankExpenses(req.file.path);
+    // 기존 지출목록(이미 계정과목이 확정된 항목들)을 참조로 넘겨 자동 매칭
+    const history = readJSON(EXPENSES_FILE, []);
+    const newItems = parseBankExpenses(req.file.path, history);
 
     // 영향을 받는 월 목록
     const affectedMonths = [...new Set(newItems.map(e => e.month))];
 
     // expenses.json 에서 source==='bank' 이고 해당 월인 것 제거 후 새 항목 추가
-    let list = readJSON(EXPENSES_FILE, []);
-    list = list.filter(e => !(e.source === 'bank' && affectedMonths.includes(e.month)));
+    let list = history.filter(e => !(e.source === 'bank' && affectedMonths.includes(e.month)));
     list = list.concat(newItems);
     writeJSON(EXPENSES_FILE, list);
 
     res.json({ ok: true, count: newItems.length, months: affectedMonths });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── 기타(미분류) 지출 재매칭: 계정과목이 확정된 다른 항목들을 참조하여
+//    거래처명(정확/유사) 또는 동일 금액이 일치하면 계정과목을 자동 적용 ──
+app.post('/api/expenses/rematch', (req, res) => {
+  try {
+    const { buildHistoryIndex, classifyVendor } = require('./lib/bankExpenseParser');
+    const list = readJSON(EXPENSES_FILE, []);
+    const reference = list.filter(e => e.subCategory && e.subCategory !== '기타');
+    const idx = buildHistoryIndex(reference);
+
+    let updated = 0;
+    list.forEach(e => {
+      if (e.subCategory !== '기타' || !e.vendor) return;
+      const m = classifyVendor(e.vendor, e.amount, idx);
+      if (m.subCategory !== '기타') {
+        e.category = m.category;
+        e.subCategory = m.subCategory;
+        e.account = m.account;
+        updated++;
+      }
+    });
+
+    writeJSON(EXPENSES_FILE, list);
+    res.json({ ok: true, updated, remaining: list.filter(e => e.subCategory === '기타').length });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
