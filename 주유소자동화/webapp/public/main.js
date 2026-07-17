@@ -1643,12 +1643,18 @@ async function loadDailyMonth() {
   if (tankInput) tankInput.value = lastDate;
   loadTankStatus(lastDate);
 
-  // 기초재고 표시 (해당 월 1일 기준 — 당일 판매 전 잔량)
+  await refreshOpeningStockBar();
+}
+
+// 기초재고 표시 (해당 월 1일 기준 — 당일 판매 전 잔량)
+let _openingTanks = null; // 편집 입력창 프리필용 캐시
+async function refreshOpeningStockBar() {
   const firstDate = `${dailyState.year}-${String(dailyState.month).padStart(2,'0')}-01`;
   const bar = document.getElementById('opening-stock-bar');
   try {
     const stockRes = await api('GET', `/api/daily/tank-status?date=${firstDate}`);
     if (stockRes.ok && stockRes.tanks && bar) {
+      _openingTanks = stockRes.tanks;
       bar.style.display = '';
       document.getElementById('opening-month-label').textContent = `(${dailyState.month}/1)`;
       const fuels = [
@@ -1667,45 +1673,26 @@ async function loadDailyMonth() {
   } catch(e) { if (bar) bar.style.display = 'none'; }
 }
 
-// ── 탱크 현황 ────────────────────────────────────────────────
-function selectDailyRow(tr, date) {
-  document.querySelectorAll('#daily-tbody tr.row-selected').forEach(r => r.classList.remove('row-selected'));
-  tr.classList.add('row-selected');
-  const input = document.getElementById('tank-date-input');
-  if (input) input.value = date;
-  loadTankStatus(date);
-  document.getElementById('tank-section')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-// ── 기초재고 기준점 ───────────────────────────────────────────
-async function loadBaseStock() {
-  const r = await api('GET', '/api/base-stock');
-  if (!r.ok) return;
-  if (r.date) {
-    const d = document.getElementById('base-stock-date');
-    if (d) d.value = r.date;
-    const map = { '휘발유': 'gasoline', '경유': 'diesel', '등유': 'kerosene' };
-    for (const [fuel, key] of Object.entries(map)) {
-      const el = document.getElementById(`base-stock-${key}`);
-      if (el && r.stocks[fuel]) el.value = r.stocks[fuel].qty;
+function toggleOpeningStockEdit() {
+  const row = document.getElementById('opening-edit-row');
+  if (!row) return;
+  const show = row.style.display === 'none';
+  row.style.display = show ? 'inline-flex' : 'none';
+  if (show && _openingTanks) {
+    for (const fuel of ['휘발유', '경유', '등유']) {
+      const input = document.getElementById(`opening-input-${fuel}`);
+      const t = _openingTanks[fuel];
+      if (input && t) input.value = t.totalRemaining;
     }
-    const st = document.getElementById('base-stock-status');
-    if (st) st.textContent = `현재 기준: ${r.date}`;
-  } else {
-    // 기본값: 이번 달 1일
-    const now = new Date();
-    const d = document.getElementById('base-stock-date');
-    if (d) d.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
   }
 }
 
-async function saveBaseStock() {
-  const date = document.getElementById('base-stock-date')?.value;
-  if (!date) { showToast('기준일을 선택하세요', 'error'); return; }
+async function saveOpeningStock() {
+  const date = `${dailyState.year}-${String(dailyState.month).padStart(2,'0')}-01`;
   const stocks = {
-    '휘발유': Number(document.getElementById('base-stock-gasoline')?.value) || 0,
-    '경유':   Number(document.getElementById('base-stock-diesel')?.value)   || 0,
-    '등유':   Number(document.getElementById('base-stock-kerosene')?.value) || 0,
+    '휘발유': Number(document.getElementById('opening-input-휘발유')?.value) || 0,
+    '경유':   Number(document.getElementById('opening-input-경유')?.value)   || 0,
+    '등유':   Number(document.getElementById('opening-input-등유')?.value)   || 0,
   };
   if (!stocks['휘발유'] && !stocks['경유'] && !stocks['등유']) {
     showToast('최소 1개 유종의 기초재고를 입력하세요', 'error'); return;
@@ -1714,14 +1701,23 @@ async function saveBaseStock() {
   const r = await api('POST', '/api/base-stock', { date, stocks });
   if (r.ok) {
     showToast(`✅ ${date} 기초재고 저장 완료`, 'success');
-    const st = document.getElementById('base-stock-status');
-    if (st) st.textContent = `현재 기준: ${date}`;
-    // 탱크현황 갱신
+    toggleOpeningStockEdit();
+    await refreshOpeningStockBar();
     const tankDate = document.getElementById('tank-date-input')?.value;
     if (tankDate) loadTankStatus(tankDate);
   } else {
     showToast('❌ ' + r.error, 'error');
   }
+}
+
+// ── 탱크 현황 ────────────────────────────────────────────────
+function selectDailyRow(tr, date) {
+  document.querySelectorAll('#daily-tbody tr.row-selected').forEach(r => r.classList.remove('row-selected'));
+  tr.classList.add('row-selected');
+  const input = document.getElementById('tank-date-input');
+  if (input) input.value = date;
+  loadTankStatus(date);
+  document.getElementById('tank-section')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 async function loadTankStatus(date) {

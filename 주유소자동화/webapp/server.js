@@ -908,7 +908,7 @@ app.get('/api/tank-variance', (req, res) => {
 // ── 기초재고 기준점 조회/저장 ──────────────────────────────────
 app.get('/api/base-stock', (req, res) => {
   const lots = readJSON(PURCHASE_LOTS_FILE, []);
-  const stocks = lots.filter(l => l.type === 'stock');
+  const stocks = lots.filter(l => l.stock != null);
   // 가장 최근 날짜의 stock 항목만 반환
   const dates = [...new Set(stocks.map(s => s.date))].sort().reverse();
   const latest = dates[0] || null;
@@ -925,12 +925,12 @@ app.post('/api/base-stock', express.json(), (req, res) => {
     if (!date) return res.json({ ok: false, error: '기준일을 입력하세요.' });
     let lots = readJSON(PURCHASE_LOTS_FILE, []);
     // 해당 날짜 기존 stock 항목 제거
-    lots = lots.filter(l => !(l.type === 'stock' && l.date === date));
+    lots = lots.filter(l => !(l.stock != null && l.date === date));
     for (const [fuel, qty] of Object.entries(stocks)) {
       if (!qty || isNaN(qty)) continue;
-      // 직전 입고 단가 자동 참조
+      // 직전 입고 단가 자동 참조 (실 입고 lot만, 스냅샷 제외)
       const prevLot = lots
-        .filter(l => l.fuel === fuel && l.date <= date && l.type !== 'stock')
+        .filter(l => l.fuel === fuel && l.date <= date && !l.stock)
         .sort((a, b) => b.date.localeCompare(a.date))[0];
       const price = prevLot?.price || 0;
       lots.push({ date, fuel, qty: Number(qty), price, type: 'stock', stock: Number(qty) });

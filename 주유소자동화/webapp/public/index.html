@@ -378,6 +378,19 @@
         <span id="opening-경유" style="color:#0369a1;white-space:nowrap;"></span>
         <span style="color:#e2e8f0;">|</span>
         <span id="opening-등유" style="color:#0f766e;white-space:nowrap;"></span>
+        <button type="button" title="기초재고 직접 입력/수정" onclick="toggleOpeningStockEdit()"
+                style="border:none;background:none;cursor:pointer;font-size:12px;padding:0 2px;">✏️</button>
+        <span id="opening-edit-row" style="display:none;gap:6px;align-items:center;">
+          <span style="color:#e2e8f0;">|</span>
+          <span style="color:#7c3aed;">휘발유</span>
+          <input type="number" id="opening-input-휘발유" style="width:70px;font-size:12px;padding:2px 4px;">
+          <span style="color:#0369a1;">경유</span>
+          <input type="number" id="opening-input-경유" style="width:70px;font-size:12px;padding:2px 4px;">
+          <span style="color:#0f766e;">등유</span>
+          <input type="number" id="opening-input-등유" style="width:70px;font-size:12px;padding:2px 4px;">
+          <button type="button" onclick="saveOpeningStock()"
+                  style="font-size:12px;padding:2px 8px;background:#0369a1;color:#fff;border:none;border-radius:4px;cursor:pointer;">저장</button>
+        </span>
       </div>
       <div class="toolbar-group" style="margin-left:auto; gap:8px;">
         <button class="btn-upload btn-purple" onclick="showMobileShare()" style="background:#7c3aed;border-color:#7c3aed;">
