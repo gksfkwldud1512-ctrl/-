@@ -20,30 +20,34 @@ function MixtureTable({
     return <p className="px-1 py-6 text-sm text-zinc-400">등록된 항목이 없습니다.</p>;
   }
   return (
-    <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
-      <table className="w-full text-sm">
+    <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white">
+      <table className="w-full min-w-[840px] text-sm table-fixed">
         <thead className="bg-zinc-50 text-left text-zinc-500">
           <tr>
-            <th className="px-4 py-3 font-medium">화학물질명</th>
-            <th className="px-4 py-3 font-medium">제조사</th>
-            <th className="px-4 py-3 font-medium">유해화학물질여부</th>
-            <th className="px-4 py-3 font-medium">세부물질</th>
-            <th className="px-4 py-3 font-medium"></th>
+            <th className="w-10 px-3 py-3 font-medium">#</th>
+            <th className="w-[26%] px-3 py-3 font-medium">화학물질명</th>
+            <th className="w-[20%] px-3 py-3 font-medium">제조사</th>
+            <th className="w-[28%] px-3 py-3 font-medium">유해화학물질여부</th>
+            <th className="w-24 px-3 py-3 font-medium">세부물질</th>
+            <th className="w-14 px-3 py-3 font-medium"></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-zinc-100">
-          {mixtures.map((m) => {
+          {mixtures.map((m, idx) => {
             const detailHref = m.status === "confirmed" ? `/mixtures/${m.id}` : `/mixtures/${m.id}/review`;
             const names = hazardousNames.get(m.id) ?? [];
             return (
               <tr key={m.id} className="hover:bg-zinc-50">
-                <td className="px-4 py-3">
-                  <Link href={detailHref} className="font-medium text-zinc-900 hover:underline">
+                <td className="px-3 py-3 text-zinc-400">{idx + 1}</td>
+                <td className="px-3 py-3">
+                  <Link href={detailHref} className="font-medium text-zinc-900 hover:underline truncate block" title={m.productName}>
                     {m.productName}
                   </Link>
                 </td>
-                <td className="px-4 py-3 text-zinc-600">{m.manufacturer ?? "-"}</td>
-                <td className="px-4 py-3">
+                <td className="px-3 py-3 text-zinc-600 truncate" title={m.manufacturer ?? undefined}>
+                  {m.manufacturer ?? "-"}
+                </td>
+                <td className="px-3 py-3">
                   {m.status === "pending_review" ? (
                     <span className="rounded-full bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-500">
                       검토 대기
@@ -56,20 +60,22 @@ function MixtureTable({
                         {OVERALL_VERDICT_LABEL[m.overallVerdict ?? "not_hazardous"]}
                       </span>
                       {names.length > 0 && (
-                        <span className="text-xs text-red-700">해당 물질: {names.join(", ")}</span>
+                        <span className="text-xs text-red-700 truncate" title={names.join(", ")}>
+                          해당 물질: {names.join(", ")}
+                        </span>
                       )}
                     </div>
                   )}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-3 py-3">
                   <Link
                     href={detailHref}
-                    className="rounded-md border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-100"
+                    className="inline-block whitespace-nowrap rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-100"
                   >
-                    세부물질 →
+                    상세보기
                   </Link>
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-3 py-3 text-right">
                   <DeleteMixtureButton mixtureId={m.id} productName={m.productName} />
                 </td>
               </tr>
@@ -92,7 +98,7 @@ export default async function Home() {
   for (const m of mixtures) grouped[m.materialType].push(m);
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-6 py-10">
+    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-6 py-10">
       <div>
         <h1 className="text-2xl font-semibold">화학물질 유해성 관리</h1>
         <p className="mt-1 text-sm text-zinc-500">

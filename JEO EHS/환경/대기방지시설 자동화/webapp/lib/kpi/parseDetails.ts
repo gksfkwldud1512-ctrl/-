@@ -10,6 +10,8 @@ const MONTH_NUMBER: Record<string, number> = {
 };
 
 export type SeriesKey = "energy" | "waste" | "water" | "scope1" | "scope2" | "salesUSD";
+// 하위 항목(구성 내역)까지 조회 가능한 지표만 별도로 세분화해서 보관한다.
+export type BreakdownSeriesKey = "energy" | "waste" | "water";
 
 export const SERIES_META: Record<SeriesKey, { label: string; unit: string }> = {
   energy: { label: "에너지 사용량", unit: "GJ" },
@@ -46,11 +48,36 @@ export type KpiSummary = {
   uploadedAt: string;
   sourceFilename: string;
   series: Record<SeriesKey, MonthlyPoint[]>;
+  // 에너지/폐기물/용수는 MEASURES(가장 세부 항목) 단위 내역도 함께 보관해 하위 데이터 조회를 지원한다.
+  breakdown: Record<BreakdownSeriesKey, Record<string, MonthlyPoint[]>>;
 };
 
 function calendarYearOf(fiscalYearLabel: string, monthNumber: number): number {
   const [first, second] = fiscalYearLabel.split("/").map((s) => parseInt(s, 10));
   return monthNumber >= 4 ? first : second;
+}
+
+/** "Electricity (grid) [GJ]" -> "Electricity (grid)" 처럼 끝의 단위 표기를 정리한다. */
+function cleanMeasureName(raw: string): string {
+  return raw.replace(/\s*\[[^\]]*\]\s*$/, "").trim() || raw.trim();
+}
+
+function pointsFromMap(map: Map<string, number>): MonthlyPoint[] {
+  const points: MonthlyPoint[] = [];
+  for (const [mapKey, value] of map.entries()) {
+    const [fiscalYear, month] = mapKey.split("|");
+    const monthNumber = MONTH_NUMBER[month];
+    if (!monthNumber) continue;
+    points.push({
+      fiscalYear,
+      month,
+      monthNumber,
+      calendarYear: calendarYearOf(fiscalYear, monthNumber),
+      value,
+    });
+  }
+  points.sort((a, b) => a.calendarYear - b.calendarYear || a.monthNumber - b.monthNumber);
+  return points;
 }
 
 export async function parseKpiDetailsWorkbook(buffer: Buffer, filename: string): Promise<KpiSummary> {
@@ -67,13 +94,14 @@ export async function parseKpiDetailsWorkbook(buffer: Buffer, filename: string):
 
   const iLevel0 = colIndex("MEASURES LEVEL0");
   const iLevel1 = colIndex("MEASURES LEVEL1");
+  const iMeasure = colIndex("MEASURES");
   const iMonth = colIndex("MONTH");
   const iYear = colIndex("YEAR");
   const iValue = colIndex("VALUE");
 
-  if ([iLevel0, iLevel1, iMonth, iYear, iValue].some((i) => i < 1)) {
+  if ([iLevel0, iLevel1, iMeasure, iMonth, iYear, iValue].some((i) => i < 1)) {
     throw new Error(
-      "필요한 컬럼(MEASURES LEVEL0/LEVEL1/MONTH/YEAR/VALUE)을 찾을 수 없습니다. SPHERA/E MASTER 내보내기 형식인지 확인해 주세요."
+      "필요한 컬럼(MEASURES LEVEL0/LEVEL1/MEASURES/MONTH/YEAR/VALUE)을 찾을 수 없습니다. SPHERA/E MASTER 내보내기 형식인지 확인해 주세요."
     );
   }
 
@@ -82,11 +110,16 @@ export async function parseKpiDetailsWorkbook(buffer: Buffer, filename: string):
     energy: new Map(), waste: new Map(), water: new Map(),
     scope1: new Map(), scope2: new Map(), salesUSD: new Map(),
   };
+  // key: seriesKey -> measureName -> "fiscalYear|month" -> 합계
+  const breakdownSums: Record<BreakdownSeriesKey, Map<string, Map<string, number>>> = {
+    energy: new Map(), waste: new Map(), water: new Map(),
+  };
 
   for (let r = 2; r <= ws.rowCount; r++) {
     const row = ws.getRow(r);
     const level0 = String(row.getCell(iLevel0).value ?? "").trim();
     const level1 = String(row.getCell(iLevel1).value ?? "").trim();
+    const measure = String(row.getCell(iMeasure).value ?? "").trim();
     const month = String(row.getCell(iMonth).value ?? "").trim();
     const fiscalYear = String(row.getCell(iYear).value ?? "").trim();
     const rawValue = row.getCell(iValue).value;
@@ -97,27 +130,30 @@ export async function parseKpiDetailsWorkbook(buffer: Buffer, filename: string):
       if (!SERIES_MATCH[key](level0, level1)) continue;
       const mapKey = `${fiscalYear}|${month}`;
       sums[key].set(mapKey, (sums[key].get(mapKey) ?? 0) + value);
+
+      if (key === "energy" || key === "waste" || key === "water") {
+        const measureName = cleanMeasureName(measure) || "기타";
+        const byMeasure = breakdownSums[key];
+        if (!byMeasure.has(measureName)) byMeasure.set(measureName, new Map());
+        const m = byMeasure.get(measureName)!;
+        m.set(mapKey, (m.get(mapKey) ?? 0) + value);
+      }
     }
   }
 
   const series = {} as Record<SeriesKey, MonthlyPoint[]>;
   for (const key of Object.keys(sums) as SeriesKey[]) {
-    const points: MonthlyPoint[] = [];
-    for (const [mapKey, value] of sums[key].entries()) {
-      const [fiscalYear, month] = mapKey.split("|");
-      const monthNumber = MONTH_NUMBER[month];
-      if (!monthNumber) continue;
-      points.push({
-        fiscalYear,
-        month,
-        monthNumber,
-        calendarYear: calendarYearOf(fiscalYear, monthNumber),
-        value,
-      });
-    }
-    points.sort((a, b) => a.calendarYear - b.calendarYear || a.monthNumber - b.monthNumber);
-    series[key] = points;
+    series[key] = pointsFromMap(sums[key]);
   }
 
-  return { uploadedAt: new Date().toISOString(), sourceFilename: filename, series };
+  const breakdown = {} as Record<BreakdownSeriesKey, Record<string, MonthlyPoint[]>>;
+  for (const key of Object.keys(breakdownSums) as BreakdownSeriesKey[]) {
+    const perMeasure: Record<string, MonthlyPoint[]> = {};
+    for (const [measureName, map] of breakdownSums[key].entries()) {
+      perMeasure[measureName] = pointsFromMap(map);
+    }
+    breakdown[key] = perMeasure;
+  }
+
+  return { uploadedAt: new Date().toISOString(), sourceFilename: filename, series, breakdown };
 }
