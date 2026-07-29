@@ -24,7 +24,7 @@ export function ReportDownloadButton({ fiscalYears }: { fiscalYears: string[] })
         href={`/api/kpi/report?fy=${encodeURIComponent(fy)}`}
         className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
       >
-        보고서 다운로드 (PPT)
+        게시용 자료(PPT)
       </a>
     </div>
   );

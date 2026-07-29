@@ -57,9 +57,30 @@ function calendarYearOf(fiscalYearLabel: string, monthNumber: number): number {
   return monthNumber >= 4 ? first : second;
 }
 
-/** "Electricity (grid) [GJ]" -> "Electricity (grid)" 처럼 끝의 단위 표기를 정리한다. */
+// SPHERA/E MASTER 내보내기의 MEASURES 값은 영문이라, 화면/보고서에 그대로 노출하지 않고
+// 한국어로 번역해서 보여준다. 여기 없는 새 항목은 원문 그대로 폴백된다.
+const MEASURE_NAME_KO: Record<string, string> = {
+  "Electricity (grid)": "전력(그리드)",
+  "Stationary energy - Natural gas": "고정연소 - 천연가스",
+  "Mobile energy (own fleet) - Gasoline/petrol": "이동연소(자체차량) - 휘발유",
+  "Mobile energy (own fleet) - Diesel": "이동연소(자체차량) - 경유",
+  "Mobile energy (own fleet) - LPG": "이동연소(자체차량) - LPG",
+  "Steel": "고철",
+  "Recycled - non-hazardous waste resin": "재활용 - 비유해 폐수지",
+  "Wood": "목재",
+  "Paper": "종이",
+  "Other recyclable solid materials": "기타 재활용 고형물",
+  "Recycled - Waste organic solvent": "재활용 - 폐유기용제",
+  "Incineration (without energy recovery) - Waste organic solvent": "소각(에너지회수 없음) - 폐유기용제",
+  "Process plastics": "공정 폐플라스틱",
+  "Water withdrawal - Domestic use": "취수 - 생활용수",
+  "Water withdrawal - Process use": "취수 - 공정용수",
+};
+
+/** "Electricity (grid) [GJ]" -> "Electricity (grid)" 처럼 끝의 단위 표기를 정리한 뒤 한국어로 번역한다. */
 function cleanMeasureName(raw: string): string {
-  return raw.replace(/\s*\[[^\]]*\]\s*$/, "").trim() || raw.trim();
+  const cleaned = raw.replace(/\s*\[[^\]]*\]\s*$/, "").trim() || raw.trim();
+  return MEASURE_NAME_KO[cleaned] ?? cleaned;
 }
 
 function pointsFromMap(map: Map<string, number>): MonthlyPoint[] {
