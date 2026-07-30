@@ -35,8 +35,8 @@ export default async function KpiPage() {
       <KpiUploadForm lastUpdated={summary?.uploadedAt ?? null} sourceFilename={summary?.sourceFilename ?? null} />
 
       <SafetyPyramidCard
-        hasImage={safetyPyramid.hasImage}
         monthly={safetyPyramid.monthly}
+        targets={safetyPyramid.targets}
         updatedAt={safetyPyramid.updatedAt}
       />
 

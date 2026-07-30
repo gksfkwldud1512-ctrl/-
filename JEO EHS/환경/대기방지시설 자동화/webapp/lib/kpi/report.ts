@@ -4,7 +4,14 @@ import JSZip from "jszip";
 import PptxGenJS from "pptxgenjs";
 import { FISCAL_MONTHS, type KpiSummary, type MonthlyPoint } from "./parseDetails";
 import { computeIntensity } from "./intensity";
-import { getSafetyPyramidImageBuffer } from "./safetyPyramid";
+import {
+  loadSafetyPyramid,
+  computePyramidStats,
+  pyramidArrow,
+  pyramidColorHex,
+  pyramidWidthFrac,
+  type SafetyPyramidStat,
+} from "./safetyPyramid";
 
 // 올해 목표값 — 회계연도가 바뀌면 여기 숫자만 갱신하면 된다.
 export const INTENSITY_TARGETS = {
@@ -75,10 +82,11 @@ function addFooter(slide: PptxGenJS.Slide, pageNo: number) {
   });
 }
 
-function addTitle(slide: PptxGenJS.Slide, text: string, subtitle?: string) {
+function addTitle(slide: PptxGenJS.Slide, text: string) {
   // 공식 양식(slideLayout9)의 제목 줄 구성을 그대로 재현: 왼쪽에 오렌지 알약 그래픽,
   // 그 오른쪽에 검정 Helvetica 제목 텍스트(18~20pt 이내). 제목 텍스트 자체는 검정이다 —
-  // 오렌지는 텍스트 색이 아니라 옆의 그래픽 요소다.
+  // 오렌지는 텍스트 색이 아니라 옆의 그래픽 요소다. 회색 부제(예: "2026/2027 · 실적 · 목표 ...")는
+  // 사용자 요청으로 제거했다 — 그만큼 아래 컨텐츠 영역을 위로 당겨서 쓸 수 있다.
   const pillW = 1.233;
   const pillH = 0.267;
   const pillY = 0.44;
@@ -89,9 +97,6 @@ function addTitle(slide: PptxGenJS.Slide, text: string, subtitle?: string) {
     x: titleX, y: pillY, w: PAGE_W - MARGIN - titleX, h: pillH,
     fontSize: 20, bold: true, color: BLACK, fontFace: "Helvetica", valign: "middle",
   });
-  if (subtitle) {
-    slide.addText(subtitle, { x: MARGIN, y: pillY + pillH + 0.08, w: CONTENT_W, h: 0.225, fontSize: 10, color: "666666", fontFace: "Helvetica" });
-  }
 }
 
 function buildIntensityLineChart(
@@ -176,35 +181,158 @@ function buildIntensityLineChart(
   });
 }
 
+const ARROW_GLYPH: Record<"up" | "right" | "down", string> = { up: "▲", right: "▶", down: "▼" };
+
 /**
- * 슬라이드 1번(강도 지표): 왼쪽에 사용자가 매달 업로드하는 안전 피라미드 캡처 이미지,
- * 오른쪽에 에너지·폐기물·용수 강도 차트를 세로로 쌓아 보여준다.
+ * 안전 피라미드를 pptxgenjs 도형(계단형 색상 막대 + 대각선 외곽선)과 표 형태 수치로 직접 그린다 —
+ * 사용자가 제공한 원본 캡처(엑셀 SAFETY PYRAMID 대시보드)를 픽셀 단위로 분석해서 확정한 구조를
+ * 그대로 따른다:
+ *   - 오른쪽 변이 전체 높이에서 고정된 수직선이고, 왼쪽 변만 맨 위(중대재해)의 뾰족한 정점(폭 0)에서
+ *     맨 아래(선행지표)로 벌어지는 대각선이다(좌우 반전 — 이전 버전은 반대로 그려져 있었음).
+ *   - 라벨은 그 고정된 오른쪽 끝에 오른쪽 정렬로 겹쳐 그린다 — 폭이 좁은 위쪽 단에서는 도형 왼쪽
+ *     바깥 여백에, 넓은 아래쪽 단에서는 도형 위에 자연히 겹쳐진다(shape를 먼저 그리고 text를 나중에
+ *     추가해 z-order로 위에 오도록 함).
+ *   - 오른쪽에 실적·화살표·목표YTD·목표·목표%의 실제 표를 그린다 — 목표 개념이 있는 아차사고·
+ *     유해위험요인만 값이 채워지고 나머지 4개 카테고리는 실적만 있고 나머지 칸은 공란("-")이다.
+ * 도형은 pptxgenjs가 정확히 지원하는 rect/line만 사용한다(임의 다각형은 실제 PowerPoint 호환성이
+ * 검증되지 않아 쓰지 않는다). 색상(pyramidColorHex)·비율(pyramidWidthFrac)·화살표(pyramidArrow)
+ * 함수는 SafetyPyramidCard.tsx의 SVG 미리보기와 공유한다.
+ */
+function buildSafetyPyramidGraphic(
+  pres: PptxGenJS,
+  slide: PptxGenJS.Slide,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  stats: SafetyPyramidStat[]
+) {
+  const count = stats.length;
+  const headerH = 0.24;
+  const pyramidW = w * 0.4;
+  const rightX = x + pyramidW; // 피라미드의 고정된 오른쪽(수직) 변 x좌표
+  const tableX = rightX + 0.08;
+  const tableW = w - pyramidW - 0.08;
+  const contentY = y + headerH;
+  const contentH = h - headerH;
+  const bandH = contentH / count;
+  const gap = 0.02;
+
+  const cols: { key: "actual" | "arrow" | "ytd" | "target" | "pct"; label: string; frac: number }[] = [
+    { key: "actual", label: "실적", frac: 0.2 },
+    { key: "arrow", label: "", frac: 0.12 },
+    { key: "ytd", label: "목표YTD", frac: 0.24 },
+    { key: "target", label: "목표", frac: 0.22 },
+    { key: "pct", label: "목표%", frac: 0.22 },
+  ];
+
+  // 표 헤더 (피라미드 도형 위쪽 여백에 맞춰 한 줄로).
+  let hx = tableX;
+  for (const col of cols) {
+    const cw = tableW * col.frac;
+    slide.addText(col.label, {
+      x: hx, y, w: cw, h: headerH,
+      fontSize: 6, bold: true, color: "666666", align: "center", valign: "bottom", fontFace: "Helvetica",
+    });
+    hx += cw;
+  }
+
+  stats.forEach((s, i) => {
+    const bandW = pyramidW * pyramidWidthFrac(i + 1, count);
+    const bandY = contentY + i * bandH;
+
+    slide.addShape(pres.ShapeType.rect, {
+      x: rightX - bandW, y: bandY, w: bandW, h: bandH - gap,
+      fill: { color: pyramidColorHex(i) },
+      line: { color: "FFFFFF", width: 1 },
+    });
+    // 도형 위에 겹쳐 그려서(오른쪽 고정 변에 오른쪽 정렬) 원본과 동일한 라벨 배치를 만든다.
+    slide.addText(s.label, {
+      x, y: bandY, w: pyramidW - 0.04, h: bandH - gap,
+      align: "right", valign: "middle", fontFace: "Helvetica", fontSize: 8, bold: true, color: "222222",
+    });
+
+    const arrow = pyramidArrow(s.actual, s.targetYtd);
+    let cx = tableX;
+    const values: Record<(typeof cols)[number]["key"], { text: string; color: string }> = {
+      actual: { text: String(s.actual), color: "333333" },
+      arrow: { text: arrow ? ARROW_GLYPH[arrow.dir] : "", color: arrow ? arrow.color : "333333" },
+      ytd: { text: s.hasTarget ? String(s.targetYtd) : "-", color: "333333" },
+      target: { text: s.hasTarget ? String(s.target) : "-", color: "333333" },
+      pct: { text: s.hasTarget && s.achievedPct !== null ? `${s.achievedPct}%` : "-", color: "333333" },
+    };
+    for (const col of cols) {
+      const cw = tableW * col.frac;
+      const v = values[col.key];
+      slide.addText(v.text, {
+        x: cx, y: bandY, w: cw, h: bandH - gap,
+        fontSize: 8, bold: col.key === "arrow", color: v.color, align: "center", valign: "middle", fontFace: "Helvetica",
+      });
+      cx += cw;
+    }
+  });
+
+  // 계단형 막대들의 좌측 끝(대각선 쪽)을 잇는 대각선 — 맨 꼭대기(고정 오른쪽 변의 정점, 폭 0)에서
+  // 바닥 좌측 끝까지. pptxgenjs의 "line" 프리셋 도형(+flipH)은 실제 PowerPoint에서 안 보이는
+  // 것으로 확인돼서(계단만 남아 사각형처럼 보이는 원인), 훨씬 더 기본적이고 실제 PowerPoint에서
+  // 확실히 렌더링되는 "회전한 얇은 채움 사각형"으로 대체했다 — 도형 회전(rotate)은 아이콘/배너
+  // 등에서 흔히 쓰이는 표준 기능이라 훨씬 안전하다.
+  addDiagonalLine(pres, slide, rightX, contentY, x, contentY + contentH, "595959", 0.025);
+}
+
+/** 두 점을 잇는 얇은 대각선을, 회전시킨 채움 사각형으로 그린다(line 프리셋보다 호환성이 높음). */
+function addDiagonalLine(
+  pres: PptxGenJS,
+  slide: PptxGenJS.Slide,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  color: string,
+  thickness: number
+) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const length = Math.sqrt(dx * dx + dy * dy);
+  const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const midX = (x1 + x2) / 2;
+  const midY = (y1 + y2) / 2;
+  slide.addShape(pres.ShapeType.rect, {
+    x: midX - length / 2, y: midY - thickness / 2, w: length, h: thickness,
+    rotate: angleDeg,
+    fill: { color },
+    line: { type: "none" },
+  });
+}
+
+/**
+ * 슬라이드 1번(강도 지표): 왼쪽에 웹페이지에서 입력한 월별 실적/목표로 매번 새로 그리는 안전
+ * 피라미드 그래픽, 오른쪽에 에너지·폐기물·용수 강도 차트를 세로로 쌓아 보여준다.
  */
 function buildIntensitySlide(
   pres: PptxGenJS,
   summary: KpiSummary,
   fiscalYear: string,
-  safetyPyramidImageDataUrl: string | null
+  pyramidStats: SafetyPyramidStat[]
 ) {
   const slide = pres.addSlide();
-  addTitle(slide, "EHS KPI_환경강도지표", `${fiscalYear} · 실적(막대) · 목표(점선) 월별 추이`);
+  addTitle(slide, "EHS KPI_환경강도지표");
 
-  const contentTop = 1.49;
-  const contentBottom = 5.2;
+  // 부제(회색 문구)를 없앤 만큼 위로 당기고, 우측 하단 로고(y=5.017~)와 겹치지 않도록 아래도
+  // 살짝 줄였다 — 이전엔 용수 강도 차트 하단이 로고에 가려지는 문제가 있었다.
+  const contentTop = 0.85;
+  const contentBottom = 4.92;
 
   // 왼쪽: 안전 피라미드
   const leftW = 4.3;
   slide.addText("안전 피라미드 실적", {
     x: MARGIN, y: contentTop, w: leftW, h: 0.2, fontSize: 8, bold: true, color: NAVY, fontFace: "Helvetica",
   });
-  if (safetyPyramidImageDataUrl) {
-    slide.addImage({
-      data: safetyPyramidImageDataUrl,
-      x: MARGIN, y: contentTop + 0.22, w: leftW, h: contentBottom - (contentTop + 0.22),
-      sizing: { type: "contain", w: leftW, h: contentBottom - (contentTop + 0.22) },
-    });
+  const hasPyramidData = pyramidStats.some((s) => s.actual > 0 || (s.target ?? 0) > 0);
+  if (hasPyramidData) {
+    buildSafetyPyramidGraphic(pres, slide, MARGIN, contentTop + 0.22, leftW, contentBottom - (contentTop + 0.22), pyramidStats);
   } else {
-    slide.addText("웹페이지 안전환경 KPI 화면에서 안전 피라미드 이미지를 업로드하면 여기에 표시됩니다.", {
+    slide.addText("웹페이지 안전환경 KPI 화면에서 안전 피라미드 실적/목표를 입력하면 여기에 표시됩니다.", {
       x: MARGIN, y: contentTop + 0.6, w: leftW, h: 0.6, fontSize: 8, color: "999999", fontFace: "Helvetica", align: "center",
     });
   }
@@ -237,7 +365,7 @@ function buildBreakdownSlide(
   decimals: number
 ) {
   const slide = pres.addSlide();
-  addTitle(slide, title, `${fiscalYear} · 단위: ${unit} · 하단 표의 "목표"는 월 목표치입니다`);
+  addTitle(slide, title);
 
   // 항목이 너무 많으면 범례/막대가 어지러워지므로 값이 큰 순서로 표시한다.
   const measureNames = Object.entries(breakdown)
@@ -263,7 +391,25 @@ function buildBreakdownSlide(
 
   const numFmt = decimals === 0 ? "#,##0" : `#,##0.${"0".repeat(decimals)}`;
 
-  // 누적 막대(월별 실적) + 목표선(실선, 일자)을 콤보 차트로 함께 표시한다.
+  const totalByMonth = new Map<string, number>();
+  for (const name of measureNames) {
+    const m = monthValueMap(breakdown[name], fiscalYear);
+    for (const month of FISCAL_MONTHS) {
+      totalByMonth.set(month, (totalByMonth.get(month) ?? 0) + (m.get(month) ?? 0));
+    }
+  }
+  // 데이터가 없는 달은 0으로 라벨을 찍지 않도록 null로 비운다(막대 자체도 없는 달이라 라벨도 없어야 함).
+  const totalValues = FISCAL_MONTHS.map((m) => {
+    const v = totalByMonth.get(m) ?? 0;
+    return v > 0 ? v : (null as unknown as number);
+  });
+
+  // 부제(회색 문구)를 없앤 만큼 차트를 위로 당기고 높이도 살짝 늘렸다.
+  const chartY = 0.85;
+  const chartH = 3.5;
+
+  // 누적 막대(월별 실적) + 누적합계 라벨(보이지 않는 선 시리즈로 막대 위에 숫자만 표시) +
+  // 목표선(실선)을 콤보 차트로 함께 표시한다.
   slide.addChart(
     [
       {
@@ -281,6 +427,22 @@ function buildBreakdownSlide(
         },
       },
       {
+        // 흰색(투명하게 보이도록)·두께 0의 선이라 선 자체는 안 보이고, 누적 막대 상단에
+        // 월별 합계 숫자 라벨만 남는다(스택 막대에 "합계" 라벨을 다는 표준적인 트릭).
+        type: pres.ChartType.line,
+        data: [{ name: "합계", labels: [...KO_MONTHS], values: totalValues }],
+        options: {
+          chartColors: ["FFFFFF"],
+          lineSize: 0,
+          lineDataSymbol: "none",
+          showValue: true,
+          dataLabelPosition: "t",
+          dataLabelColor: "333333",
+          dataLabelFontSize: 7,
+          dataLabelFormatCode: numFmt,
+        },
+      },
+      {
         type: pres.ChartType.line,
         data: [{ name: "목표", labels: [...KO_MONTHS], values: FISCAL_MONTHS.map(() => target) }],
         options: {
@@ -294,7 +456,8 @@ function buildBreakdownSlide(
     // NOTE: pptxgenjs 콤보차트는 내부적으로 `data || options` 순서로 옵션을 찾기 때문에
     // 옵션 객체를 반드시 2번째 인자(data 자리)에 넘겨야 한다.
     {
-      x: MARGIN, y: 1.22, w: CONTENT_W, h: 3.2,
+      x: MARGIN, y: chartY, w: CONTENT_W, h: chartH,
+      displayBlanksAs: "gap",
       lineSize: 1.5,
       showLegend: true, legendPos: "b", legendFontSize: 7,
       catAxisLabelFontSize: 7, valAxisLabelFontSize: 7,
@@ -307,15 +470,14 @@ function buildBreakdownSlide(
     } as unknown as PptxGenJS.OptsChartData[]
   );
 
-  const fmtComma = (v: number) => v.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  // 목표 수치를 차트 우측 상단(목표선의 가장 오른쪽 끝 위쪽)에 한 번만 표시한다 — 슬라이드 1번
+  // 강도 지표 차트와 동일한 패턴. 목표선은 매달 동일한 값이라 지점마다 라벨을 달 필요가 없다.
+  slide.addText(`목표 ${target.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`, {
+    x: MARGIN + CONTENT_W - 1.6, y: chartY + 0.04, w: 1.5, h: 0.18,
+    fontSize: 7, bold: true, color: RED, fontFace: "Helvetica", align: "right",
+  });
 
-  const totalByMonth = new Map<string, number>();
-  for (const name of measureNames) {
-    const m = monthValueMap(breakdown[name], fiscalYear);
-    for (const month of FISCAL_MONTHS) {
-      totalByMonth.set(month, (totalByMonth.get(month) ?? 0) + (m.get(month) ?? 0));
-    }
-  }
+  const fmtComma = (v: number) => v.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 
   const rows: PptxGenJS.TableRow[] = [
     [
@@ -371,21 +533,15 @@ async function reorderForPowerPoint(buffer: Buffer): Promise<Buffer> {
   return out.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
 }
 
-/** 비공개 Blob에 저장된 안전 피라미드 이미지를 PPT에 넣을 수 있는 base64 데이터 URI로 가져온다. */
-async function fetchSafetyPyramidImageDataUrl(): Promise<string | null> {
-  const image = await getSafetyPyramidImageBuffer();
-  if (!image) return null;
-  return `${image.contentType};base64,${image.buffer.toString("base64")}`;
-}
-
 async function buildKpiReportPptxRaw(summary: KpiSummary, fiscalYear: string): Promise<Buffer> {
   const pres = new PptxGenJS();
   pres.defineLayout({ name: "EHS_WIDE", width: PAGE_W, height: PAGE_H });
   pres.layout = "EHS_WIDE";
 
-  const safetyPyramidImageDataUrl = await fetchSafetyPyramidImageDataUrl();
+  const pyramidData = await loadSafetyPyramid();
+  const pyramidStats = computePyramidStats(pyramidData);
 
-  buildIntensitySlide(pres, summary, fiscalYear, safetyPyramidImageDataUrl);
+  buildIntensitySlide(pres, summary, fiscalYear, pyramidStats);
   buildBreakdownSlide(pres, 2, "에너지 사용량", "GJ", summary.breakdown.energy, fiscalYear, TOTAL_TARGETS.energy, 0);
   buildBreakdownSlide(pres, 3, "폐기물 발생량", "ton", summary.breakdown.waste, fiscalYear, TOTAL_TARGETS.waste, 2);
   buildBreakdownSlide(pres, 4, "용수 사용량", "㎥", summary.breakdown.water, fiscalYear, TOTAL_TARGETS.water, 0);

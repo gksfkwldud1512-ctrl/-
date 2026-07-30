@@ -13,13 +13,25 @@ const EHS_MENU = [
     label: "안전",
     icon: "🦺",
     items: [
-      // 예: { name: "PIT 카메라 얼굴인식 도어락", url: "https://..." }
-    ],
-    plannedItems: [
       {
         name: "중처법 이행관리",
-        flow: { statusTone: "design", statusLabel: "계획됨 — 아직 착수 전" }
-      },
+        url: "https://jungcheobub-webapp.vercel.app",
+        flow: {
+          stack: "Next.js · Vercel Blob(비공개)",
+          statusTone: "live",
+          statusLabel: "운영중",
+          access: "공개",
+          input: ["법정 이행항목별 세부 이행점검 항목 입력", "증빙 파일(PDF/이미지) 첨부"],
+          processing: [
+            "중대재해처벌법 시행령 제4·5조(중대산업재해) 법정 13개 항목 고정 정의 (lib/complianceItems.ts)",
+            "증빙 파일 1개 이상 첨부돼야만 완료 처리(서버에서 강제) — API에서 재검증",
+            "항목별 이행율 = 완료 세부항목/전체, 종합 이행율 = 적용대상 항목 단순평균 (lib/complianceData.ts)"
+          ],
+          output: ["항목별 원형(도넛) 진행률 차트", "종합 이행율 게이지", "반기점검 기한 초과 경고 배지"]
+        }
+      }
+    ],
+    plannedItems: [
       {
         name: "위험성평가",
         flow: { statusTone: "design", statusLabel: "계획됨 — 아직 착수 전" }
