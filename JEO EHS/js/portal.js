@@ -263,6 +263,12 @@
   }
 
   function openApp(item, sourceBtn) {
+    // 비밀번호로 보호된 일부 하위 앱은 iframe(제3자 쿠키) 안에서 로그인 쿠키가
+    // 브라우저에 의해 차단되어 로그인이 계속 풀리는 문제가 있어, 새 탭에서 직접 연다.
+    if (item.openInNewTab) {
+      window.open(item.url, "_blank", "noopener");
+      return;
+    }
     appFrameEl.src = item.url;
     homeViewEl.classList.add("hidden");
     overviewViewEl.classList.add("hidden");

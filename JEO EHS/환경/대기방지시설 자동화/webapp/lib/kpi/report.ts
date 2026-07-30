@@ -4,6 +4,7 @@ import JSZip from "jszip";
 import PptxGenJS from "pptxgenjs";
 import { FISCAL_MONTHS, type KpiSummary, type MonthlyPoint } from "./parseDetails";
 import { computeIntensity } from "./intensity";
+import { getSafetyPyramidImageBuffer } from "./safetyPyramid";
 
 // 올해 목표값 — 회계연도가 바뀌면 여기 숫자만 갱신하면 된다.
 export const INTENSITY_TARGETS = {
@@ -97,7 +98,9 @@ function buildIntensityLineChart(
   pres: PptxGenJS,
   slide: PptxGenJS.Slide,
   x: number,
-  colW: number,
+  y: number,
+  w: number,
+  h: number,
   title: string,
   unit: string,
   map: Map<string, number>,
@@ -105,14 +108,14 @@ function buildIntensityLineChart(
   decimals: number,
   accentColor: string
 ) {
-  slide.addText(title, {
-    x, y: 1.04, w: colW, h: 0.225, fontSize: 9, bold: true, color: accentColor, fontFace: "Helvetica", align: "center",
-  });
-  slide.addText(`단위: ${unit}`, {
-    x, y: 1.25, w: colW, h: 0.1875, fontSize: 7, color: "888888", fontFace: "Helvetica", align: "center",
+  const titleH = 0.2;
+  slide.addText(`${title} (${unit})`, {
+    x, y, w, h: titleH, fontSize: 8, bold: true, color: accentColor, fontFace: "Helvetica", align: "left",
   });
 
   const numFmt = decimals === 0 ? "#,##0" : `#,##0.${"0".repeat(decimals)}`;
+  const chartY = y + titleH;
+  const chartH = h - titleH;
 
   // 에너지/폐기물/용수 구성내역 차트(buildBreakdownSlide)와 동일하게 4월~내년 3월 전체 12개월을
   // 항상 축에 표시한다. 다만 실적 막대는 아직 값이 없는 달(예: 6월 이후)은 0으로 채우지 않고
@@ -135,7 +138,7 @@ function buildIntensityLineChart(
           showValue: true,
           dataLabelPosition: "outEnd",
           dataLabelColor: "333333",
-          dataLabelFontSize: 6,
+          dataLabelFontSize: 5,
           dataLabelFormatCode: numFmt,
         },
       },
@@ -148,14 +151,14 @@ function buildIntensityLineChart(
     // NOTE: pptxgenjs 콤보차트는 내부적으로 `data || options` 순서로 옵션을 찾기 때문에
     // 옵션 객체를 반드시 2번째 인자(data 자리)에 넘겨야 한다.
     {
-      x, y: 1.49, w: colW, h: 3.0,
+      x, y: chartY, w, h: chartH,
       lineSize: 1,
       // OOXML c:marker/c:size는 정수(byte)만 허용한다 — 3.5처럼 소수를 넣으면 스키마 위반으로
       // 실제 PowerPoint가 "읽을 수 없음"으로 거부한다(LibreOffice/python-pptx는 관대해서 통과시킴).
       lineDataSymbolSize: 4,
       displayBlanksAs: "gap",
-      showLegend: true, legendPos: "b", legendFontSize: 7,
-      catAxisLabelFontSize: 6, valAxisLabelFontSize: 6,
+      showLegend: true, legendPos: "r", legendFontSize: 6,
+      catAxisLabelFontSize: 5, valAxisLabelFontSize: 5,
       catAxisLineColor: "cccccc", valAxisLineColor: "cccccc",
       valAxisLabelFormatCode: numFmt,
       // 배경 눈금선은 아주 얇고 희미하게 — 회사 양식(majorGridlines lumMod15/lumOff85)과 동일한 느낌.
@@ -169,28 +172,58 @@ function buildIntensityLineChart(
   // 목표선은 값이 전부 같은 수평 점선이라 매 지점마다 라벨을 달지 않고, 차트 우측 상단에
   // 목표 수치를 한 번만 표시한다.
   slide.addText(`목표 ${target.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`, {
-    x: x + colW - 1.1, y: 1.52, w: 1.0, h: 0.2, fontSize: 7, bold: true, color: NAVY, fontFace: "Helvetica", align: "right",
+    x: x + w - 1.5, y: chartY + 0.03, w: 1.4, h: 0.16, fontSize: 6, bold: true, color: NAVY, fontFace: "Helvetica", align: "right",
   });
-
-  addFooter(slide, 1);
 }
 
-function buildIntensitySlide(pres: PptxGenJS, summary: KpiSummary, fiscalYear: string) {
+/**
+ * 슬라이드 1번(강도 지표): 왼쪽에 사용자가 매달 업로드하는 안전 피라미드 캡처 이미지,
+ * 오른쪽에 에너지·폐기물·용수 강도 차트를 세로로 쌓아 보여준다.
+ */
+function buildIntensitySlide(
+  pres: PptxGenJS,
+  summary: KpiSummary,
+  fiscalYear: string,
+  safetyPyramidImageDataUrl: string | null
+) {
   const slide = pres.addSlide();
   addTitle(slide, "EHS KPI_환경강도지표", `${fiscalYear} · 실적(막대) · 목표(점선) 월별 추이`);
+
+  const contentTop = 1.49;
+  const contentBottom = 5.2;
+
+  // 왼쪽: 안전 피라미드
+  const leftW = 4.3;
+  slide.addText("안전 피라미드 실적", {
+    x: MARGIN, y: contentTop, w: leftW, h: 0.2, fontSize: 8, bold: true, color: NAVY, fontFace: "Helvetica",
+  });
+  if (safetyPyramidImageDataUrl) {
+    slide.addImage({
+      data: safetyPyramidImageDataUrl,
+      x: MARGIN, y: contentTop + 0.22, w: leftW, h: contentBottom - (contentTop + 0.22),
+      sizing: { type: "contain", w: leftW, h: contentBottom - (contentTop + 0.22) },
+    });
+  } else {
+    slide.addText("웹페이지 안전환경 KPI 화면에서 안전 피라미드 이미지를 업로드하면 여기에 표시됩니다.", {
+      x: MARGIN, y: contentTop + 0.6, w: leftW, h: 0.6, fontSize: 8, color: "999999", fontFace: "Helvetica", align: "center",
+    });
+  }
+
+  // 오른쪽: 에너지 → 폐기물 → 용수 강도를 위에서 아래로 세로 배치.
+  const rightX = MARGIN + leftW + 0.25;
+  const rightW = PAGE_W - MARGIN - rightX;
+  const gap = 0.08;
+  const rowH = (contentBottom - contentTop - gap * 2) / 3;
 
   const energyIntensity = monthValueMap(computeIntensity(summary.series.energy, summary.series.salesUSD), fiscalYear);
   const wasteIntensity = monthValueMap(computeIntensity(summary.series.waste, summary.series.salesUSD), fiscalYear);
   const waterIntensity = monthValueMap(computeIntensity(summary.series.water, summary.series.salesUSD), fiscalYear);
 
-  const colW = (CONTENT_W - MARGIN * 2) / 3;
-  const x0 = MARGIN;
-  const x1 = MARGIN + colW + MARGIN;
-  const x2 = MARGIN + (colW + MARGIN) * 2;
+  buildIntensityLineChart(pres, slide, rightX, contentTop, rightW, rowH, "에너지 강도", "GJ/MUSD", energyIntensity, INTENSITY_TARGETS.energy, 1, ENERGY_COLOR);
+  buildIntensityLineChart(pres, slide, rightX, contentTop + (rowH + gap), rightW, rowH, "폐기물 강도", "ton/MUSD", wasteIntensity, INTENSITY_TARGETS.waste, 2, WASTE_COLOR);
+  buildIntensityLineChart(pres, slide, rightX, contentTop + (rowH + gap) * 2, rightW, rowH, "용수 강도", "㎥/MUSD", waterIntensity, INTENSITY_TARGETS.water, 1, WATER_COLOR);
 
-  buildIntensityLineChart(pres, slide, x0, colW, "에너지 강도", "GJ/MUSD", energyIntensity, INTENSITY_TARGETS.energy, 1, ENERGY_COLOR);
-  buildIntensityLineChart(pres, slide, x1, colW, "폐기물 강도", "ton/MUSD", wasteIntensity, INTENSITY_TARGETS.waste, 2, WASTE_COLOR);
-  buildIntensityLineChart(pres, slide, x2, colW, "용수 강도", "㎥/MUSD", waterIntensity, INTENSITY_TARGETS.water, 1, WATER_COLOR);
+  addFooter(slide, 1);
 }
 
 function buildBreakdownSlide(
@@ -338,12 +371,21 @@ async function reorderForPowerPoint(buffer: Buffer): Promise<Buffer> {
   return out.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
 }
 
+/** 비공개 Blob에 저장된 안전 피라미드 이미지를 PPT에 넣을 수 있는 base64 데이터 URI로 가져온다. */
+async function fetchSafetyPyramidImageDataUrl(): Promise<string | null> {
+  const image = await getSafetyPyramidImageBuffer();
+  if (!image) return null;
+  return `${image.contentType};base64,${image.buffer.toString("base64")}`;
+}
+
 async function buildKpiReportPptxRaw(summary: KpiSummary, fiscalYear: string): Promise<Buffer> {
   const pres = new PptxGenJS();
   pres.defineLayout({ name: "EHS_WIDE", width: PAGE_W, height: PAGE_H });
   pres.layout = "EHS_WIDE";
 
-  buildIntensitySlide(pres, summary, fiscalYear);
+  const safetyPyramidImageDataUrl = await fetchSafetyPyramidImageDataUrl();
+
+  buildIntensitySlide(pres, summary, fiscalYear, safetyPyramidImageDataUrl);
   buildBreakdownSlide(pres, 2, "에너지 사용량", "GJ", summary.breakdown.energy, fiscalYear, TOTAL_TARGETS.energy, 0);
   buildBreakdownSlide(pres, 3, "폐기물 발생량", "ton", summary.breakdown.waste, fiscalYear, TOTAL_TARGETS.waste, 2);
   buildBreakdownSlide(pres, 4, "용수 사용량", "㎥", summary.breakdown.water, fiscalYear, TOTAL_TARGETS.water, 0);

@@ -60,6 +60,9 @@ const EHS_MENU = [
       {
         name: "배치전검진",
         url: "https://webapp-one-eta-66.vercel.app/placement-exam",
+        // 비밀번호 로그인 쿠키가 iframe(제3자 쿠키)에서 브라우저에 의해 차단되어 로그인이
+        // 계속 풀리는 문제 때문에, 이 항목만 새 탭에서 열도록 한다.
+        openInNewTab: true,
         flow: {
           stack: "Next.js · Neon Postgres · Vercel Blob",
           statusTone: "live",
@@ -121,7 +124,7 @@ const EHS_MENU = [
         }
       },
       {
-        name: "환경 KPI",
+        name: "안전환경 KPI",
         url: "https://daegi-bangji-webapp.vercel.app/kpi",
         flow: {
           stack: "Next.js · Vercel Blob(비공개)",
