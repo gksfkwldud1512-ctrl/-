@@ -9,13 +9,16 @@ const SEARCH_LINE_LIMIT = 40;
 // 그 줄에 product/trade/제품 같은 단어가 없을 때만 별도로 시도한다
 // (EOS Corp 포맷: "...Supplier's details Name: JFE Steel Corporation"처럼
 // 라벨과 값이 뒤섞여 한 줄에 렌더링되는 경우까지 잡기 위해 줄 시작 위치로 제한하지 않는다).
-const STRONG_INLINE_RE = /(?:제조자|제조사|공급자|Company|Supplier)\s*[:：]\s*(.+)/i;
+const STRONG_INLINE_RE = /(?:제조자|제조사|공급자|Company|Supplier|Manufacturer)\s*[:：]\s*(.+)/i;
 const NAME_ONLY_INLINE_RE = /Name\s*[:：]\s*(.+)/i;
 const NAME_FALSE_POSITIVE_RE = /product|trade|제품/i;
-const LABEL_ONLY_RE = /제조자|제조사|공급자|Supplier/i;
+const LABEL_ONLY_RE = /제조자|제조사|공급자|Supplier|Manufacturer/i;
 const NON_VALUE_RE = /^(주소|address|전화|tel|fax|팩스|phone|http|긴급)/i;
 // 값 자리에 라벨 단어만 덜렁 있는 줄(예: "Manufacturer")은 값이 아니라 다음 줄이 진짜 값이다.
 const LABEL_WORD_ONLY_RE = /^(manufacturer|supplier|distributor|제조자|공급자|제조사|공급업체)\s*$/i;
+// 라벨과 값이 콜론 없이 한 줄에 붙어있는 경우 (예: "1.2 Manufacturer Name JFE Steel Corp., ...").
+// 일본/영문 MSDS에서 자주 보이는 형식 — 앞의 두 패턴이 콜론을 요구해서 놓친다.
+const NO_COLON_INLINE_RE = /Manufacturer(?:'s)?\s+(?:Name\s+)?([A-Z가-힣][^\n]{2,})/;
 
 function cleanName(raw: string): string {
   return raw
@@ -43,6 +46,12 @@ export function extractManufacturerFromLines(lines: PdfLine[]): string | null {
   for (const line of searchLines) {
     if (NAME_FALSE_POSITIVE_RE.test(line.text)) continue;
     const m = NAME_ONLY_INLINE_RE.exec(line.text);
+    if (m && cleanName(m[1]).length > 1) return cleanName(m[1]);
+  }
+
+  // 2.5차: 콜론 없이 "Manufacturer Name 값"이 붙어있는 경우
+  for (const line of searchLines) {
+    const m = NO_COLON_INLINE_RE.exec(line.text);
     if (m && cleanName(m[1]).length > 1) return cleanName(m[1]);
   }
 

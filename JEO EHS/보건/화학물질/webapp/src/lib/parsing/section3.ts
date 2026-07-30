@@ -22,7 +22,11 @@ const EINECS_LIKE_RE = /\b\d{3}-\d{3}-\d\b/g;
 // 번호 접두사(3./３．/SECTION 3:)는 굳이 요구하지 않는다 — 전각 숫자, 중복 렌더링 등으로
 // 접두 매칭이 자주 깨지기 때문에 핵심 키워드 포함 여부만 본다.
 const START_RE =
-  /구성\s*성분\s*의?\s*(?:명칭\s*및\s*함유량|조성\s*\/?\s*정보)|화학물질\s*의?\s*명칭\s*및\s*함유량|composition\s*\/?\s*information\s*on\s*ingredients/i;
+  /구성\s*성분\s*의?\s*(?:명칭\s*및\s*함유량|조성\s*\/?\s*정보)|화학물질\s*의?\s*명칭\s*및\s*함유량|composition\s*\/?\s*information\s*on\s*ingredients|information\s*of\s*chemical\s*composition/i;
+
+// 성분표 행 앞에 붙는 "2.2" 같은 소절 번호가 함유량(%)으로 오인되지 않도록, CAS 앞부분에서
+// 퍼센트/이름을 찾기 전에 먼저 잘라낸다.
+const LEADING_SUBSECTION_NUMBER_RE = /^\s*\d{1,2}\.\d{1,2}\s+/;
 
 // "응급조치 요령" / "응급 조치 요령"(공백 변형) / 영문 "First-aid measures"/"First aid measures"
 const END_RE = /응급\s*조치\s*요령|응급조치|first[- ]?aid\s*measures/i;
@@ -46,12 +50,18 @@ function sliceSection3Lines(lines: PdfLine[]): PdfLine[] {
 /** "CAS:", "CAS-No.", "EINECS: 231-096-4" 같은 라벨/부등호 찌꺼기를 성분명에서 제거한다. */
 function cleanIngredientName(raw: string): string {
   return raw
+    .replace(LEADING_SUBSECTION_NUMBER_RE, "")
+    .replace(/\b(?:Ingredients?|성분명?|화학물질명)\s*[:.]?\s*/gi, " ")
     .replace(/\bCAS[\s-]*(?:No\.?|번호)?\s*[:.]?/gi, " ")
     .replace(/\bEINECS[\s-]*(?:No\.?)?\s*[:.]?\s*\d{2,3}-\d{3}-\d\b/gi, " ")
     .replace(/[≥≤<>~～]/g, " ")
     .replace(/\(\s*\)/g, " ")
     .replace(/\s+/g, " ")
     .replace(/^[\s,:;.\-/]+|[\s,:;.\-/]+$/g, "")
+    // "noneIron"처럼 PDF에서 체크박스성 "none"이 성분명에 공백 없이 붙어 나오는 경우 제거.
+    .replace(/^none(?=[A-Z가-힣])/i, "")
+    // "Iron (CAS-No. : ..."에서 CAS 라벨을 지우고 남는 짝 안 맞는 여는 괄호 제거.
+    .replace(/\(\s*$/, "")
     .trim();
 }
 
@@ -100,7 +110,9 @@ function reconstructIngredients(sectionLines: PdfLine[]): DraftIngredient[] {
     if (!casMatch) continue;
 
     const casNo = casMatch[0];
-    const beforeCas = line.text.slice(0, casMatch.index);
+    // "2.2 Ingredients : ..." 처럼 줄 맨 앞의 소절 번호가 함유량(%)으로 오인되지 않도록
+    // 함유량/이름 추출 전에 미리 잘라낸다(라벨 텍스트는 cleanIngredientName에서 별도 제거).
+    const beforeCas = line.text.slice(0, casMatch.index).replace(LEADING_SUBSECTION_NUMBER_RE, "");
     const afterCas = line.text.slice(casMatch.index + casNo.length);
     // EINECS/EC번호가 함유량으로 오인되지 않도록 검색용 사본에서만 지운다(이름 추출은 원문 사용).
     const beforeCasForPercent = blankOutEinecsLike(beforeCas);
