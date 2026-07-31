@@ -1,0 +1,72 @@
+diff --git a/node_modules/pptxgenjs/dist/pptxgen.cjs.js b/node_modules/pptxgenjs/dist/pptxgen.cjs.js
+index 55ae0b9..3af6774 100644
+--- a/node_modules/pptxgenjs/dist/pptxgen.cjs.js
++++ b/node_modules/pptxgenjs/dist/pptxgen.cjs.js
+@@ -3843,7 +3843,14 @@ function makeChartType(chartType, data, opts, valAxisId, catAxisId, isMultiTypeC
+                 strXml += '  <c:marker val="1"/>';
+             }
+             // 5: Add axisId (NOTE: order matters! (category comes first))
+-            strXml += `<c:axId val="${catAxisId}"/><c:axId val="${valAxisId}"/><c:axId val="${AXIS_ID_SERIES_PRIMARY}"/>`;
++            // PATCH(patch-package): upstream unconditionally emits a 3rd axId (the BAR3D series axis)
++            // for every chart type in this switch branch, but the matching <c:serAx> element is only
++            // ever written for BAR3D. For BAR/LINE/AREA/RADAR this leaves a dangling axId reference
++            // that PowerPoint flags as corrupt content ("repair" prompt / refuses to open).
++            strXml += `<c:axId val="${catAxisId}"/><c:axId val="${valAxisId}"/>`;
++            if (chartType === CHART_TYPE.BAR3D) {
++                strXml += `<c:axId val="${AXIS_ID_SERIES_PRIMARY}"/>`;
++            }
+             // 6: Close Chart tag
+             strXml += `</c:${chartType}Chart>`;
+             // end switch
+@@ -6349,8 +6356,14 @@ function makeXmlContTypes(slides, slideLayouts, masterSlide) {
+     // STEP 2: Add presentation and slide master(s)/slide(s)
+     strXml += '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>';
+     strXml += '<Override PartName="/ppt/notesMasters/notesMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml"/>';
++    // PATCH(patch-package): upstream registers one slideMaster{N}.xml Content_Types Override per
++    // SLIDE (using the slide index), but only a single ppt/slideMasters/slideMaster1.xml is ever
++    // actually written to the zip. For any deck with 2+ slides this leaves Content_Types declaring
++    // parts (slideMaster2.xml, slideMaster3.xml, ...) that don't exist in the package — a real OPC
++    // violation that PowerPoint's strict validator rejects as "unreadable content" (LibreOffice is
++    // lenient about it, which is why files opened fine there but not in real PowerPoint).
++    strXml += '<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>';
+     slides.forEach((slide, idx) => {
+-        strXml += `<Override PartName="/ppt/slideMasters/slideMaster${idx + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>`;
+         strXml += `<Override PartName="/ppt/slides/slide${idx + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`;
+         // Add charts if any
+         slide._relsChart.forEach(rel => {
+diff --git a/node_modules/pptxgenjs/dist/pptxgen.es.js b/node_modules/pptxgenjs/dist/pptxgen.es.js
+index cac9ba9..791aa0b 100644
+--- a/node_modules/pptxgenjs/dist/pptxgen.es.js
++++ b/node_modules/pptxgenjs/dist/pptxgen.es.js
+@@ -3841,7 +3841,14 @@ function makeChartType(chartType, data, opts, valAxisId, catAxisId, isMultiTypeC
+                 strXml += '  <c:marker val="1"/>';
+             }
+             // 5: Add axisId (NOTE: order matters! (category comes first))
+-            strXml += `<c:axId val="${catAxisId}"/><c:axId val="${valAxisId}"/><c:axId val="${AXIS_ID_SERIES_PRIMARY}"/>`;
++            // PATCH(patch-package): upstream unconditionally emits a 3rd axId (the BAR3D series axis)
++            // for every chart type in this switch branch, but the matching <c:serAx> element is only
++            // ever written for BAR3D. For BAR/LINE/AREA/RADAR this leaves a dangling axId reference
++            // that PowerPoint flags as corrupt content ("repair" prompt / refuses to open).
++            strXml += `<c:axId val="${catAxisId}"/><c:axId val="${valAxisId}"/>`;
++            if (chartType === CHART_TYPE.BAR3D) {
++                strXml += `<c:axId val="${AXIS_ID_SERIES_PRIMARY}"/>`;
++            }
+             // 6: Close Chart tag
+             strXml += `</c:${chartType}Chart>`;
+             // end switch
+@@ -6347,8 +6354,14 @@ function makeXmlContTypes(slides, slideLayouts, masterSlide) {
+     // STEP 2: Add presentation and slide master(s)/slide(s)
+     strXml += '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>';
+     strXml += '<Override PartName="/ppt/notesMasters/notesMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml"/>';
++    // PATCH(patch-package): upstream registers one slideMaster{N}.xml Content_Types Override per
++    // SLIDE (using the slide index), but only a single ppt/slideMasters/slideMaster1.xml is ever
++    // actually written to the zip. For any deck with 2+ slides this leaves Content_Types declaring
++    // parts (slideMaster2.xml, slideMaster3.xml, ...) that don't exist in the package — a real OPC
++    // violation that PowerPoint's strict validator rejects as "unreadable content" (LibreOffice is
++    // lenient about it, which is why files opened fine there but not in real PowerPoint).
++    strXml += '<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>';
+     slides.forEach((slide, idx) => {
+-        strXml += `<Override PartName="/ppt/slideMasters/slideMaster${idx + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>`;
+         strXml += `<Override PartName="/ppt/slides/slide${idx + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`;
+         // Add charts if any
+         slide._relsChart.forEach(rel => {

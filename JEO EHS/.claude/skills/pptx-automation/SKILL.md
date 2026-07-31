@@ -38,6 +38,8 @@ foreach (var e in validator.Validate(doc))
 
 **따라서 판단 기준은 "에러 개수가 0인가"가 아니라 "타입/값 위반(Byte에 소수, 등) 같은 하드 에러가 있는가"다.** 알려진 무해한 3종류를 빼고 남는 게 있으면 그게 진짜 원인이다. Byte/정수 타입 속성(`lineDataSymbolSize` 등 `*Size` 계열 옵션들)에 정수가 아닌 값을 넣지 않았는지 항상 먼저 의심할 것.
 
+**추가로 확인된 하드 에러 유형: `addText` 런(run) 배열에서 같은 문단(줄) 안에 서로 다른 포맷의 런 2개 이상.** `slide.addText([{text:"A", options:{color:"000000"}}, {text:"B", options:{color:"FF0000"}}], opts)`처럼 breakLine 없이(=같은 줄) 색상 등 포맷이 다른 런을 이어 붙이면, pptxgenjs가 그 문단의 `<a:pPr>`를 `<a:p>` 안 잘못된 위치에 끼워 넣어 "unexpected child element pPr" 스키마 위반이 난다(LibreOffice는 관대해서 통과, 실제 PowerPoint는 거부). **서로 다른 포맷의 런은 항상 각자 `breakLine: true`로 별도 문단이 되게 만들 것** — 같은 줄에 다른 색 텍스트를 섞어야 하면(예: "제목 (상태태그)") 상태 태그를 다음 줄로 내리는 등 레이아웃을 바꿔서 회피한다.
+
 ## 체크리스트 (코드 작성 전)
 
 1. **콤보차트(배열 addChart) 절대 금지**

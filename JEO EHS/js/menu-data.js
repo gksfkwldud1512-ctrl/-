@@ -162,5 +162,30 @@ const EHS_MENU = [
         flow: { statusTone: "design", statusLabel: "계획됨 — 아직 착수 전" }
       }
     ]
+  },
+  {
+    key: "meeting",
+    label: "회의자료 자동화",
+    icon: "📋",
+    items: [
+      {
+        name: "자동화생성",
+        url: "https://meeting-report-webapp.vercel.app",
+        flow: {
+          stack: "Next.js · Vercel Blob(비공개) · Vercel AI Gateway",
+          statusTone: "live",
+          statusLabel: "운영중",
+          access: "공개",
+          input: ["신규 이슈 7개 + 진행중인 업무 7개(제목/설명, 한국어)"],
+          processing: [
+            "AI Gateway로 한국어 → 영어 일괄 번역 (lib/translate.ts)",
+            "회사 실제 회의자료 양식(EHS Weekly meeting)에서 로고·색상·좌표 그대로 추출해 재현 (lib/pptBuilder.ts)",
+            "표지 → 개요(신규이슈/진행중업무 목록) → 진행중인 업무 항목별 상세 슬라이드 자동 생성"
+          ],
+          output: ["EHS Weekly Meeting 양식 영어 PPT 다운로드"]
+        }
+      }
+    ],
+    plannedItems: []
   }
 ];
