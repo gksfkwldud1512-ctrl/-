@@ -218,6 +218,7 @@ async function loadSummary() {
 
 function renderSummary(d) {
   const revenue = d.revenue || 0, profit = d.profit, expense = d.expense || 0, netProfit = d.netProfit;
+  const support = d.oilbankSupport || 0;
   const cost   = profit != null ? revenue - profit : null;
   const margin = netProfit != null && revenue > 0 ? (netProfit / revenue * 100).toFixed(1) + '%' : '-';
 
@@ -226,6 +227,7 @@ function renderSummary(d) {
     ['매입원가', fmtW(cost), ''],
     ['영업이익', fmtW(profit), profit == null ? '' : profit >= 0 ? 'pos' : 'neg'],
     ['지출', fmtW(expense), ''],
+    ['오일뱅크 지원금', fmtW(support), support > 0 ? 'pos' : ''],
     ['순이익', fmtW(netProfit), netProfit == null ? '' : netProfit >= 0 ? 'pos' : 'neg'],
     ['순이익률', margin, netProfit == null ? '' : netProfit >= 0 ? 'pos' : 'neg'],
   ];

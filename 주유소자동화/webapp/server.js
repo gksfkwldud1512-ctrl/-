@@ -15,7 +15,9 @@ const PORT = 3000;
 app.use(express.json());
 // 정적 파일 캐시 완전 방지 (HTML 포함 — 코드 업데이트 즉시 반영)
 app.use((req, res, next) => {
-  if (/\.(js|css|html)$/.test(req.path) || req.path === '/' || req.path === '') {
+  // API 응답도 포함 — 모바일 브라우저가 종합 데이터를 캐시해 옛 값이 보이던 문제 방지
+  if (/\.(js|css|html)$/.test(req.path) || req.path.startsWith('/api/')
+      || req.path === '/' || req.path === '') {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
@@ -286,6 +288,204 @@ app.post('/api/parse-delivery-excel', upload.single('file'), (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════
+// 업체별 단가 현황
+//   게시가 = 할인단가(BOS 실제 판매단가) + 할인가(수기 입력)
+// ══════════════════════════════════════════════════════════════
+const VENDOR_DISCOUNTS_FILE = path.join(DATA_DIR, 'vendor_discounts.json');
+const PRICE_FUELS   = ['휘발유', '경유', '등유'];
+// 단가 현황 대상 업체 (부분일치 — "(주)중앙안전유리" 처럼 접두어가 붙어도 매칭)
+const PRICE_VENDORS = ['중앙안전유리', '현대스크랩'];
+
+function ymKey(year, month) {
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+// 해당 월 할인가 조회 — 없으면 직전 월 값을 자동 승계
+function getDiscounts(year, month) {
+  const all = readJSON(VENDOR_DISCOUNTS_FILE, {});
+  const cur = all[ymKey(year, month)];
+  if (cur) return cur;
+  const pm = month === 1 ? { y: year - 1, m: 12 } : { y: year, m: month - 1 };
+  return all[ymKey(pm.y, pm.m)] || {};
+}
+
+// vendors_YYYY_MM.json → 대상 업체별 날짜×유종 판매단가 추출
+function buildVendorPrices(year, month) {
+  const vendors   = getVendors(year, month);
+  const discounts = getDiscounts(year, month);
+
+  return PRICE_VENDORS.map(keyword => {
+    const v = vendors.find(x => x.name.includes(keyword));
+    const disc = discounts[keyword] || {};
+    const dsc  = {};
+    PRICE_FUELS.forEach(f => { dsc[f] = Number(disc[f]) || 0; });
+
+    // 날짜 → 유종 → 단가별 거래건수 (같은 날 단가가 여러 개면 최빈값 채택)
+    const dateMap = {};
+    (v?.txs || []).forEach(t => {
+      if (!PRICE_FUELS.includes(t.product) || !t.unitPrice) return;
+      const d = String(t.date).replace(/-/g, '/');
+      ((dateMap[d] ??= {})[t.product] ??= {});
+      dateMap[d][t.product][t.unitPrice] = (dateMap[d][t.product][t.unitPrice] || 0) + 1;
+    });
+
+    const daily = Object.keys(dateMap).sort().map(date => {
+      const sold = {}, posted = {};
+      PRICE_FUELS.forEach(f => {
+        const counts = dateMap[date][f];
+        if (!counts) { sold[f] = null; posted[f] = null; return; }
+        // 최빈 단가 (동수면 높은 쪽) → 그날의 대표 판매단가
+        const best = Object.entries(counts).sort(
+          (a, b) => b[1] - a[1] || Number(b[0]) - Number(a[0])
+        )[0][0];
+        sold[f]   = Number(best);
+        posted[f] = Number(best) + dsc[f];
+      });
+      return { date, sold, posted };
+    });
+
+    return { keyword, name: v?.name || keyword, found: !!v, discounts: dsc, daily };
+  });
+}
+
+// GET /api/vendor-prices?year=&month=
+app.get('/api/vendor-prices', (req, res) => {
+  try {
+    const year  = Number(req.query.year)  || new Date().getFullYear();
+    const month = Number(req.query.month) || new Date().getMonth() + 1;
+    res.json({ ok: true, year, month, fuels: PRICE_FUELS, vendors: buildVendorPrices(year, month) });
+  } catch (e) {
+    console.error('[vendor-prices]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// POST /api/vendor-discounts  { year, month, keyword, discounts:{휘발유,경유,등유} }
+app.post('/api/vendor-discounts', (req, res) => {
+  try {
+    const { year, month, keyword, discounts } = req.body;
+    if (!year || !month || !keyword) {
+      return res.status(400).json({ ok: false, error: 'year/month/keyword 필요' });
+    }
+    const all = readJSON(VENDOR_DISCOUNTS_FILE, {});
+    const key = ymKey(year, month);
+    // 직전 월 승계본이 있으면 그 값을 기준으로 병합 (첫 저장 시 다른 업체 값 유실 방지)
+    all[key] ??= { ...getDiscounts(year, month) };
+    all[key][keyword] = PRICE_FUELS.reduce((o, f) => {
+      o[f] = Number(discounts?.[f]) || 0;
+      return o;
+    }, {});
+    writeJSON(VENDOR_DISCOUNTS_FILE, all);
+    res.json({ ok: true, vendors: buildVendorPrices(year, month) });
+  } catch (e) {
+    console.error('[vendor-discounts]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// GET /api/export-vendor-prices?year=&month=&keyword=업체
+//   업체 1곳만 내보냄 (타사 단가 노출 방지 — keyword 필수)
+//   단가가 바뀐 날만 기록 (동일 단가가 이어지면 변경 시점 1행만)
+app.get('/api/export-vendor-prices', async (req, res) => {
+  try {
+    const ExcelJS = require('exceljs');
+    const year    = Number(req.query.year)  || new Date().getFullYear();
+    const month   = Number(req.query.month) || new Date().getMonth() + 1;
+    const keyword = String(req.query.keyword || '').trim();
+
+    if (!keyword) return res.status(400).send('업체를 지정하세요 (keyword 필수)');
+    const v = buildVendorPrices(year, month).find(x => x.keyword === keyword);
+    if (!v) return res.status(404).send('대상 업체가 아닙니다: ' + keyword);
+
+    // ── 변경 시점 추출 ──────────────────────────────────────────
+    // 유종 중 하나라도 단가가 바뀐 날만 행 생성. 거래 없는 날(null)은 변화로 보지 않음.
+    // 행에는 그 시점의 유효 단가를 유종별로 모두 기록 (직전 값 이어쓰기).
+    const cur  = {};
+    const rows = [];
+    v.daily.forEach(d => {
+      let any = false;
+      PRICE_FUELS.forEach(f => {
+        const p = d.sold[f];
+        if (p == null) return;          // 그날 거래 없음 → 직전 단가 유지
+        if (cur[f] !== p) { any = true; cur[f] = p; }
+      });
+      if (any) rows.push({ date: d.date, sold: { ...cur } });
+    });
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet(`${year}년 ${month}월 단가`);
+
+    const THIN = { style: 'thin', color: { argb: 'FFCBD5E1' } };
+    const BORD = { top: THIN, left: THIN, bottom: THIN, right: THIN };
+
+    // 2단 헤더: 날짜 | 업체명 | 게시가(휘/경/등) | 할인단가(휘/경/등)
+    const LAST_COL = 8;
+    ws.mergeCells('A1:A2'); ws.getCell('A1').value = '날짜';
+    ws.mergeCells('B1:B2'); ws.getCell('B1').value = '업체명';
+    [['C', 'E', '게시가'], ['F', 'H', '할인단가']].forEach(([s, e, label]) => {
+      ws.mergeCells(`${s}1:${e}1`);
+      ws.getCell(`${s}1`).value = label;
+    });
+    PRICE_FUELS.forEach((f, i) => {
+      ws.getCell(2, 3 + i).value = f;
+      ws.getCell(2, 6 + i).value = f;
+    });
+    const HEAD_BG = { 게시가: 'FFFEF3C7', 할인단가: 'FFDCFCE7' };
+    for (let r = 1; r <= 2; r++) {
+      for (let c = 1; c <= LAST_COL; c++) {
+        const cell = ws.getCell(r, c);
+        cell.font      = { bold: true, size: 10 };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        cell.border    = BORD;
+        const g = c >= 6 ? '할인단가' : c >= 3 ? '게시가' : null;
+        cell.fill = { type: 'pattern', pattern: 'solid',
+                      fgColor: { argb: g ? HEAD_BG[g] : 'FFF1F5F9' } };
+      }
+    }
+    ws.columns = [{ width: 12 }, { width: 22 }, ...Array(6).fill({ width: 10 })];
+
+    // ── 데이터: 변경 시점만 ─────────────────────────────────────
+    let r = 3;
+    rows.forEach(row => {
+      ws.getCell(r, 1).value = row.date;
+      ws.getCell(r, 2).value = v.name;
+      PRICE_FUELS.forEach((f, i) => {
+        // 아직 한 번도 거래가 없던 유종은 공란, 그 외에는 현재 유효 단가
+        const s = row.sold[f];
+        ws.getCell(r, 3 + i).value = s == null ? '' : s + v.discounts[f];
+        ws.getCell(r, 6 + i).value = s == null ? '' : s;
+      });
+      for (let c = 1; c <= LAST_COL; c++) {
+        const cell = ws.getCell(r, c);
+        cell.border    = BORD;
+        cell.font      = { size: 10 };
+        cell.alignment = { horizontal: c <= 2 ? 'center' : 'right', vertical: 'middle' };
+        if (c >= 3) cell.numFmt = '#,##0';
+      }
+      r++;
+    });
+
+    if (!rows.length) {
+      ws.mergeCells('A3:H3');
+      ws.getCell('A3').value = '해당 월 거래 내역이 없습니다.';
+      ws.getCell('A3').alignment = { horizontal: 'center' };
+    }
+
+    ws.views = [{ state: 'frozen', xSplit: 2, ySplit: 2 }];
+
+    const safe  = v.name.replace(/[\\/:*?"<>|]/g, '_');
+    const fname = `단가현황_${safe}_${year}년${String(month).padStart(2, '0')}월.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fname)}`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (e) {
+    console.error('[export-vendor-prices]', e);
+    res.status(500).send(e.message);
+  }
+});
+
 // ── 거래명세서 생성 (외상 업체만) ────────────────────────────
 app.post('/api/generate', async (req, res) => {
   try {
@@ -333,7 +533,7 @@ app.get('/api/customers', (req, res) => {
 
 // ── 고객 저장 ────────────────────────────────────────────────
 app.post('/api/customers', (req, res) => {
-  const { name, bizNo, ceoName, contactName, email, taxEmail, phone, address, bizType, bizItem, printMethod, hometaxMethod, taxIssuance, splitDelivery } = req.body;
+  const { name, bizNo, ceoName, contactName, email, taxEmail, phone, address, bizType, bizItem, printMethod, hometaxMethod, taxIssuance, splitDelivery, mergeGasoline } = req.body;
   if (!name) return res.status(400).json({ ok: false, error: '업체명은 필수입니다.' });
   const customers = readJSON(CUSTOMERS_FILE, []);
   const idx = customers.findIndex(c => c.name === name);
@@ -356,6 +556,10 @@ app.post('/api/customers', (req, res) => {
     splitDelivery: splitDelivery !== undefined
       ? (splitDelivery === true || splitDelivery === 'true')
       : (existing.splitDelivery || false),
+    // 세금계산서 발행 시 휘발유를 경유로 합산
+    mergeGasoline: mergeGasoline !== undefined
+      ? (mergeGasoline === true || mergeGasoline === 'true')
+      : (existing.mergeGasoline || false),
   };
   if (idx >= 0) customers[idx] = customer;
   else customers.push(customer);
@@ -1336,6 +1540,116 @@ app.delete('/api/expenses/:idx', (req, res) => {
   res.json({ ok: true });
 });
 
+// ══════════════════════════════════════════════════════════════
+// 현대오일뱅크 지원금
+//   지원기간 + 지원단가(원/L)만 입력 → 그 기간 입고량으로 지원금 자동 산정
+// ══════════════════════════════════════════════════════════════
+const OILBANK_FILE = path.join(DATA_DIR, 'oilbank_supports.json');
+
+// 실제 입고분만 집계 — stock 스냅샷은 재고 기준점이므로 입고가 아님
+function isRealLot(l) {
+  return l.type !== 'stock' && !l.stock && (Number(l.qty) || 0) > 0;
+}
+
+// 기간 내 입고량 (유종별 + 합계). limitYm 지정 시 해당 월과 겹치는 부분만
+//   fuels: 지원 대상 유종 배열. 비어있으면 전체 유종
+function lotsQtyInRange(from, to, limitYm, fuels) {
+  const lots = readJSON(PURCHASE_LOTS_FILE, []);
+  const pick = Array.isArray(fuels) && fuels.length ? new Set(fuels) : null;
+  let start = from, end = to;
+  if (limitYm) {
+    // 지원기간이 여러 달에 걸칠 때 해당 월 몫만 계산
+    if (start.slice(0, 7) < limitYm) start = `${limitYm}-01`;
+    if (end.slice(0, 7)   > limitYm) end   = `${limitYm}-31`;
+    if (start.slice(0, 7) > limitYm || end.slice(0, 7) < limitYm) {
+      return { total: 0, byFuel: {} };
+    }
+  }
+  const byFuel = {};
+  let total = 0;
+  lots.forEach(l => {
+    if (!isRealLot(l)) return;
+    if (pick && !pick.has(l.fuel)) return;   // 체크된 유종만 집계
+    const d = String(l.date || '');
+    if (d < start || d > end) return;
+    const q = Number(l.qty) || 0;
+    byFuel[l.fuel] = (byFuel[l.fuel] || 0) + q;
+    total += q;
+  });
+  return { total, byFuel };
+}
+
+// 지원 대상 유종 (미지정 이전 데이터는 전체 유종으로 간주)
+function supportFuels(s) {
+  return Array.isArray(s.fuels) && s.fuels.length ? s.fuels : PRICE_FUELS;
+}
+
+// 지원 목록 + 산정 결과
+function buildSupports() {
+  return readJSON(OILBANK_FILE, []).map(s => {
+    const fuels = supportFuels(s);
+    const { total, byFuel } = lotsQtyInRange(s.from, s.to, null, fuels);
+    const unit = Number(s.unitAmount) || 0;
+    return { ...s, fuels, qty: total, byFuel, amount: Math.round(total * unit) };
+  }).sort((a, b) => String(b.from).localeCompare(String(a.from)));
+}
+
+// 특정 월에 귀속되는 지원금 합계 (종합 탭 반영용)
+function oilbankSupportForMonth(ym) {
+  return readJSON(OILBANK_FILE, []).reduce((sum, s) => {
+    const { total } = lotsQtyInRange(s.from, s.to, ym, supportFuels(s));
+    return sum + Math.round(total * (Number(s.unitAmount) || 0));
+  }, 0);
+}
+
+app.get('/api/oilbank-supports', (req, res) => {
+  try {
+    res.json({ ok: true, supports: buildSupports() });
+  } catch (e) {
+    console.error('[oilbank-supports]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// 추가/수정 — id 있으면 수정, 없으면 추가
+app.post('/api/oilbank-supports', (req, res) => {
+  try {
+    const { id, from, to, unitAmount, memo, fuels } = req.body;
+    if (!from || !to) return res.status(400).json({ ok: false, error: '지원기간을 입력하세요.' });
+    if (from > to)    return res.status(400).json({ ok: false, error: '시작일이 종료일보다 늦습니다.' });
+
+    const picked = Array.isArray(fuels) ? fuels.filter(f => PRICE_FUELS.includes(f)) : [];
+    if (!picked.length) return res.status(400).json({ ok: false, error: '지원 유종을 1개 이상 선택하세요.' });
+
+    const list = readJSON(OILBANK_FILE, []);
+    const rec  = {
+      id: id || `ob_${Date.now()}`,
+      from, to,
+      unitAmount: Number(unitAmount) || 0,
+      fuels: picked,
+      memo: memo || '',
+    };
+    const idx = list.findIndex(x => x.id === rec.id);
+    if (idx >= 0) list[idx] = rec; else list.push(rec);
+    writeJSON(OILBANK_FILE, list);
+    res.json({ ok: true, supports: buildSupports() });
+  } catch (e) {
+    console.error('[oilbank-supports:post]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.delete('/api/oilbank-supports/:id', (req, res) => {
+  try {
+    const list = readJSON(OILBANK_FILE, []).filter(x => x.id !== req.params.id);
+    writeJSON(OILBANK_FILE, list);
+    res.json({ ok: true, supports: buildSupports() });
+  } catch (e) {
+    console.error('[oilbank-supports:delete]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ── 종합 보고 (월별 요약) ────────────────────────────────────
 app.get('/api/summary/:yearMonth', (req, res) => {
   const ym = req.params.yearMonth;  // "2026-05"
@@ -1490,6 +1804,8 @@ app.get('/api/summary/:yearMonth', (req, res) => {
   }
 
   const totalRevenue = Object.values(totalSales).reduce((s,v)=>s+v, 0);
+  // 현대오일뱅크 지원금 — 해당 월에 귀속되는 금액 (순이익에 가산)
+  const oilbankSupport = oilbankSupportForMonth(ym);
 
   res.json({
     ok: true,
@@ -1506,7 +1822,8 @@ app.get('/api/summary/:yearMonth', (req, res) => {
     expenseTop5,
     customerTop5,
     cardTop5,
-    netProfit: hasPrices ? Math.round(totalProfit - totalExpense) : null,
+    oilbankSupport,
+    netProfit: hasPrices ? Math.round(totalProfit - totalExpense + oilbankSupport) : null,
   });
 });
 
@@ -1570,6 +1887,7 @@ app.get('/api/annual-summary', (req, res) => {
       .filter(e => e.month === ym)
       .reduce((s, e) => s + (e.amount||0), 0);
     const revenue = Object.values(sales).reduce((s,v)=>s+v, 0);
+    const support = oilbankSupportForMonth(ym);
 
     months.push({
       month: m, ym,
@@ -1578,7 +1896,8 @@ app.get('/api/annual-summary', (req, res) => {
       profit:    hasPrices ? Math.round(profit)            : null,
       cardFee,
       expense,
-      netProfit: hasPrices ? Math.round(profit - expense)  : null,
+      oilbankSupport: support,
+      netProfit: hasPrices ? Math.round(profit - expense + support) : null,
     });
   }
 
@@ -1838,7 +2157,8 @@ app.get('/api/export-html/:yearMonth', (req, res) => {
     const allExpenses = readJSON(EXPENSES_FILE, []).filter(e => e.month === ym);
     const totalExpense = allExpenses.reduce((s,e)=>s+(e.amount||0), 0);
     const totalRevenue = Object.values(totalSales).reduce((s,v)=>s+v, 0);
-    const netProfit    = Math.round(totalProfit - totalExpense);
+    const oilbankSupport = oilbankSupportForMonth(ym);
+    const netProfit    = Math.round(totalProfit - totalExpense + oilbankSupport);
     const hasPrices    = prices.length > 0;
 
     const custFile = path.join(DATA_DIR, `customer_sales_${ym.replace('-','_')}.json`);
@@ -1878,6 +2198,7 @@ app.get('/api/export-html/:yearMonth', (req, res) => {
       ['매입원가', W(cost), ''],
       ['영업이익', W(hasPrices?Math.round(totalProfit):null), hasPrices?(totalProfit>=0?'pos':'neg'):''],
       ['지출', W(totalExpense), ''],
+      ['오일뱅크 지원금', W(oilbankSupport), oilbankSupport>0?'pos':''],
       ['순이익', W(hasPrices?netProfit:null), hasPrices?(netProfit>=0?'pos':'neg'):''],
       ['순이익률', margin, hasPrices?(netProfit>=0?'pos':'neg'):''],
     ];

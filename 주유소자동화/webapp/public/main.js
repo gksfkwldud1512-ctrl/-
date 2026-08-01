@@ -44,6 +44,7 @@ window.addEventListener('DOMContentLoaded', () => {
   initYearMonth();
   initDailyYearMonth();
   initSummaryYearMonth();
+  initVendorPriceYearMonth();
   initTabs();
   // URL 파라미터로 시작 그룹 지정 가능 (?group=summary 등)
   const startGroup = new URLSearchParams(location.search).get('group') || 'monthly';
@@ -179,7 +180,7 @@ function switchDailySubTab(tab) {
   });
   if (tab === 'daily-expense')  window.location.href = '/expenses.html';
   if (tab === 'daily-customer') loadCustomerSales();
-  if (tab === 'daily-deposit')  loadDepositMatch();
+  if (tab === 'daily-deposit')  { loadDepositMatch(); loadOilbankSupports(); }
 }
 
 function switchSubTab(tab) {
@@ -193,6 +194,7 @@ function switchSubTab(tab) {
   });
   const section = document.getElementById(`tab-${tab}`);
   if (section) { section.style.display = 'block'; section.classList.add('active'); }
+  if (tab === 'vendorprices') loadVendorPrices();
   renderAll();
 }
 
@@ -926,9 +928,10 @@ async function saveCustomer() {
   const printMethod   = document.getElementById('c-print-method').value;
   const taxIssuance   = document.getElementById('c-tax-issuance').value;
   const splitDelivery = document.getElementById('c-split-delivery').value === 'true';
+  const mergeGasoline = document.getElementById('c-merge-gasoline').value === 'true';
   if (!name) return toast('업체명을 입력하세요.', 'warn');
 
-  const res = await api('POST', '/api/customers', { name, bizNo, ceoName, contactName, email, taxEmail, phone, address, bizType, bizItem, printMethod, taxIssuance, splitDelivery });
+  const res = await api('POST', '/api/customers', { name, bizNo, ceoName, contactName, email, taxEmail, phone, address, bizType, bizItem, printMethod, taxIssuance, splitDelivery, mergeGasoline });
   if (res.ok) {
     toast(`✅ ${name} 저장 완료`, 'success');
     closeCustomerForm();
@@ -956,6 +959,7 @@ function editCustomer(name) {
   document.getElementById('c-print-method').value   = c.printMethod || '';
   document.getElementById('c-tax-issuance').value   = c.taxIssuance || '합산';
   document.getElementById('c-split-delivery').value = c.splitDelivery ? 'true' : '';
+  document.getElementById('c-merge-gasoline').value = c.mergeGasoline ? 'true' : '';
   document.querySelector('[data-tab="customers"]').click();
   document.getElementById('customer-form-card').style.display = '';
   document.getElementById('customer-form-title').textContent  = `수정: ${name}`;
@@ -970,6 +974,7 @@ function closeCustomerForm() {
   document.getElementById('c-print-method').value   = '';
   document.getElementById('c-tax-issuance').value   = '합산';
   document.getElementById('c-split-delivery').value = '';
+  document.getElementById('c-merge-gasoline').value = '';
 }
 
 async function deleteCustomer(name) {
@@ -2944,6 +2949,8 @@ function renderSummary(data) {
   document.getElementById('kpi-cost-val').textContent    = won(cost);
   document.getElementById('kpi-profit-val').textContent  = won(data.profit);
   document.getElementById('kpi-expense-val').textContent = won(data.expense);
+  const obEl = document.getElementById('kpi-oilbank-val');
+  if (obEl) obEl.textContent = won(data.oilbankSupport || 0);
   document.getElementById('kpi-net-val').textContent     = won(data.netProfit);
   document.getElementById('kpi-margin-val').textContent  = pct(data.netProfit, data.revenue);
 
@@ -3526,4 +3533,264 @@ function printAnnualReport() {
   </style></head><body>${el.outerHTML}</body></html>`);
   w.document.close();
   setTimeout(()=>{ w.print(); }, 300);
+}
+
+// ════════════════════════════════════════════════════════════
+// 업체별 단가 현황 (월마감)
+//   게시가 = 할인단가(BOS 실제 판매단가) + 할인가(수기 입력)
+// ════════════════════════════════════════════════════════════
+
+const vendorPriceState = {
+  year:  new Date().getFullYear(),
+  month: new Date().getMonth() + 1,
+  fuels: ['휘발유', '경유', '등유'],
+  vendors: [],
+};
+
+function initVendorPriceYearMonth() {
+  const selYear  = document.getElementById('vp-year');
+  const selMonth = document.getElementById('vp-month');
+  if (!selYear || !selMonth) return;
+  const now = new Date();
+
+  for (let y = now.getFullYear() - 1; y <= now.getFullYear() + 1; y++) {
+    const o = document.createElement('option');
+    o.value = y; o.textContent = y;
+    if (y === vendorPriceState.year) o.selected = true;
+    selYear.appendChild(o);
+  }
+  for (let m = 1; m <= 12; m++) {
+    const o = document.createElement('option');
+    o.value = m; o.textContent = m;
+    if (m === vendorPriceState.month) o.selected = true;
+    selMonth.appendChild(o);
+  }
+  selYear.addEventListener('change',  e => { vendorPriceState.year  = +e.target.value; loadVendorPrices(); });
+  selMonth.addEventListener('change', e => { vendorPriceState.month = +e.target.value; loadVendorPrices(); });
+}
+
+async function loadVendorPrices() {
+  const { year, month } = vendorPriceState;
+  const res = await api('GET', `/api/vendor-prices?year=${year}&month=${month}`);
+  if (!res.ok) { toast(res.error || '단가 조회 실패', 'error'); return; }
+  vendorPriceState.fuels   = res.fuels;
+  vendorPriceState.vendors = res.vendors;
+  renderVendorPrices();
+}
+
+// 상단: 업체별 할인가 입력칸
+function renderVendorDiscountInputs() {
+  const box = document.getElementById('vp-discount-body');
+  if (!box) return;
+  const { fuels, vendors } = vendorPriceState;
+
+  box.innerHTML = vendors.map(v => `
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+      <strong style="min-width:150px;">${v.name}</strong>
+      ${!v.found ? '<span class="badge badge-warn">이 달 거래 없음</span>' : ''}
+      ${fuels.map(f => `
+        <label class="label-sm" style="display:flex;align-items:center;gap:4px;">
+          ${f}
+          <input type="number" step="1" style="width:80px;text-align:right;"
+                 value="${v.discounts[f] ?? 0}"
+                 data-vp-keyword="${v.keyword}" data-vp-fuel="${f}">
+          <span>원</span>
+        </label>`).join('')}
+      <button class="btn-primary" onclick="saveVendorDiscount('${v.keyword}')">저장</button>
+      <button onclick="exportVendorPrices('${v.keyword}')"
+              ${v.found ? '' : 'disabled'}>📤 이 업체 Excel</button>
+    </div>`).join('');
+}
+
+// 하단: 일별 단가 변동 표 (날짜별 1행, 업체×유종 셀)
+function renderVendorPrices() {
+  renderVendorDiscountInputs();
+  const thead = document.getElementById('vp-thead');
+  const tbody = document.getElementById('vp-tbody');
+  if (!thead || !tbody) return;
+
+  const { fuels, vendors } = vendorPriceState;
+
+  thead.innerHTML = `
+    <tr>
+      <th rowspan="3">날짜</th>
+      ${vendors.map(v => `<th colspan="${fuels.length * 2}">${v.name}</th>`).join('')}
+    </tr>
+    <tr>
+      ${vendors.map(() =>
+        `<th colspan="${fuels.length}">게시가</th><th colspan="${fuels.length}">할인단가</th>`).join('')}
+    </tr>
+    <tr>
+      ${vendors.map(() => fuels.map(f => `<th>${f}</th>`).join('').repeat(2)).join('')}
+    </tr>`;
+
+  // 전체 날짜 합집합
+  const allDates = [...new Set(vendors.flatMap(v => v.daily.map(d => d.date)))].sort();
+  if (!allDates.length) {
+    tbody.innerHTML = `<tr><td colspan="${1 + vendors.length * fuels.length * 2}"
+      style="text-align:center;padding:24px;color:#64748b;">
+      해당 월의 BOS 데이터가 없습니다. [거래명세서 발행] 탭에서 먼저 업로드하세요.</td></tr>`;
+    return;
+  }
+
+  const num = n => (n == null ? '<span style="color:#cbd5e1;">-</span>' : n.toLocaleString());
+  // 직전 행 대비 단가가 바뀌면 강조
+  const prev = {};
+
+  tbody.innerHTML = allDates.map(date => {
+    const cells = vendors.map(v => {
+      const d = v.daily.find(x => x.date === date);
+      const posted = fuels.map(f => {
+        const val = d?.posted[f] ?? null;
+        const k = `${v.keyword}|${f}|p`;
+        const changed = val != null && prev[k] != null && prev[k] !== val;
+        if (val != null) prev[k] = val;
+        return `<td style="text-align:right;${changed ? 'font-weight:700;color:#b45309;' : ''}">${num(val)}</td>`;
+      }).join('');
+      const sold = fuels.map(f => {
+        const val = d?.sold[f] ?? null;
+        return `<td style="text-align:right;">${num(val)}</td>`;
+      }).join('');
+      return posted + sold;
+    }).join('');
+    return `<tr><td style="text-align:center;white-space:nowrap;">${date}</td>${cells}</tr>`;
+  }).join('');
+}
+
+async function saveVendorDiscount(keyword) {
+  const inputs = document.querySelectorAll(`[data-vp-keyword="${keyword}"]`);
+  const discounts = {};
+  inputs.forEach(i => { discounts[i.dataset.vpFuel] = Number(i.value) || 0; });
+
+  const { year, month } = vendorPriceState;
+  const res = await api('POST', '/api/vendor-discounts', { year, month, keyword, discounts });
+  if (!res.ok) { toast(res.error || '저장 실패', 'error'); return; }
+  vendorPriceState.vendors = res.vendors;
+  renderVendorPrices();
+  toast(`${keyword} 할인가 저장 완료`, 'success');
+}
+
+// 업체 1곳만 내보내기 — 타사 단가가 섞이지 않도록 keyword 필수
+function exportVendorPrices(keyword) {
+  if (!keyword) { toast('업체를 지정하세요', 'error'); return; }
+  const { year, month } = vendorPriceState;
+  location.href = `/api/export-vendor-prices?year=${year}&month=${month}`
+                + `&keyword=${encodeURIComponent(keyword)}`;
+}
+
+// ════════════════════════════════════════════════════════════
+// 현대오일뱅크 지원금 (입금검증 탭 우측)
+//   지원기간 + 지원단가만 입력 → 그 기간 입고량으로 지원금 자동 산정
+// ════════════════════════════════════════════════════════════
+
+async function loadOilbankSupports() {
+  const res = await api('GET', '/api/oilbank-supports');
+  if (!res.ok) { toast(res.error || '지원 목록 조회 실패', 'error'); return; }
+  renderOilbankSupports(res.supports || []);
+}
+
+function renderOilbankSupports(list) {
+  const box = document.getElementById('ob-list');
+  if (!box) return;
+
+  if (!list.length) {
+    box.innerHTML = `<div style="padding:24px;text-align:center;color:#94a3b8;font-size:12px;">
+      등록된 지원 내역이 없습니다.</div>`;
+    return;
+  }
+
+  const n = v => (v || 0).toLocaleString();
+  const totQty = list.reduce((s, x) => s + (x.qty || 0), 0);
+  const totAmt = list.reduce((s, x) => s + (x.amount || 0), 0);
+
+  box.innerHTML = `
+    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+      <thead>
+        <tr style="background:#f1f5f9;">
+          <th style="padding:6px;text-align:center;">지원기간</th>
+          <th style="padding:6px;text-align:right;">지원단가</th>
+          <th style="padding:6px;text-align:right;">지원수량</th>
+          <th style="padding:6px;text-align:right;">지원금액</th>
+          <th style="padding:6px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${list.map(s => `
+          <tr style="border-bottom:1px solid #e2e8f0;">
+            <td style="padding:6px;text-align:center;white-space:nowrap;">
+              ${s.from} ~ ${s.to}
+              ${s.memo ? `<div style="color:#64748b;font-size:11px;">${s.memo}</div>` : ''}
+              <div style="font-size:10px;margin-top:2px;">
+                ${(s.fuels || []).map(f =>
+                  `<span style="display:inline-block;background:#e0f2fe;color:#0369a1;border-radius:3px;padding:0 4px;margin-right:2px;">${f}</span>`).join('')}
+              </div>
+              <div style="color:#94a3b8;font-size:10px;">
+                ${Object.entries(s.byFuel || {}).map(([f, q]) => `${f} ${n(Math.round(q))}L`).join(' · ') || '해당 유종 입고 없음'}
+              </div>
+            </td>
+            <td style="padding:6px;text-align:right;white-space:nowrap;">${n(s.unitAmount)}원</td>
+            <td style="padding:6px;text-align:right;white-space:nowrap;">${n(Math.round(s.qty))}L</td>
+            <td style="padding:6px;text-align:right;white-space:nowrap;font-weight:700;color:#0f766e;">${n(s.amount)}원</td>
+            <td style="padding:6px;text-align:center;white-space:nowrap;">
+              <button style="padding:2px 6px;font-size:11px;" onclick='editOilbankSupport(${JSON.stringify(s).replace(/'/g, "&#39;")})'>수정</button>
+              <button style="padding:2px 6px;font-size:11px;color:#dc2626;" onclick="deleteOilbankSupport('${s.id}')">삭제</button>
+            </td>
+          </tr>`).join('')}
+        <tr style="background:#f8fafc;font-weight:700;">
+          <td style="padding:6px;text-align:center;">합계</td>
+          <td></td>
+          <td style="padding:6px;text-align:right;">${n(Math.round(totQty))}L</td>
+          <td style="padding:6px;text-align:right;color:#0f766e;">${n(totAmt)}원</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-size:11px;color:#64748b;margin:8px 4px 0;">
+      * 입고이력(입고 등록분) 기준이며, 재고 스냅샷은 제외됩니다. 종합 탭 순이익에 가산됩니다.
+    </p>`;
+}
+
+async function saveOilbankSupport() {
+  const id   = document.getElementById('ob-id').value;
+  const from = document.getElementById('ob-from').value;
+  const to   = document.getElementById('ob-to').value;
+  const unitAmount = Number(document.getElementById('ob-unit').value) || 0;
+  const memo = document.getElementById('ob-memo').value.trim();
+  const fuels = [...document.querySelectorAll('.ob-fuel:checked')].map(x => x.value);
+
+  if (!from || !to)  return toast('지원기간을 입력하세요.', 'warn');
+  if (from > to)     return toast('시작일이 종료일보다 늦습니다.', 'warn');
+  if (!unitAmount)   return toast('지원단가를 입력하세요.', 'warn');
+  if (!fuels.length) return toast('지원 유종을 1개 이상 선택하세요.', 'warn');
+
+  const res = await api('POST', '/api/oilbank-supports', { id, from, to, unitAmount, memo, fuels });
+  if (!res.ok) return toast(res.error || '저장 실패', 'error');
+  resetOilbankForm();
+  renderOilbankSupports(res.supports || []);
+  toast('지원 내역 저장 완료', 'success');
+}
+
+function editOilbankSupport(s) {
+  document.getElementById('ob-id').value   = s.id;
+  document.getElementById('ob-from').value = s.from;
+  document.getElementById('ob-to').value   = s.to;
+  document.getElementById('ob-unit').value = s.unitAmount;
+  document.getElementById('ob-memo').value = s.memo || '';
+  const sel = new Set(s.fuels || []);
+  document.querySelectorAll('.ob-fuel').forEach(x => { x.checked = sel.has(x.value); });
+}
+
+function resetOilbankForm() {
+  ['ob-id', 'ob-from', 'ob-to', 'ob-unit', 'ob-memo'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.querySelectorAll('.ob-fuel').forEach(x => { x.checked = true; });
+}
+
+async function deleteOilbankSupport(id) {
+  if (!confirm('이 지원 내역을 삭제할까요?')) return;
+  const res = await api('DELETE', `/api/oilbank-supports/${id}`);
+  if (!res.ok) return toast(res.error || '삭제 실패', 'error');
+  renderOilbankSupports(res.supports || []);
+  toast('삭제 완료', 'success');
 }

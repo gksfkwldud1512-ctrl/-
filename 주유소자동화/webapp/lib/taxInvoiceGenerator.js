@@ -24,9 +24,11 @@ function getDay(issueDate) {
   return fmtDate(issueDate).slice(6, 8);
 }
 
-function calcProducts(vendor) {
+function calcProducts(vendor, customer) {
   const fuelMap = {};
   let nonFuelSupply = 0, nonFuelTax = 0;
+  // 업체 설정: 휘발유를 경유 항목으로 합산해 발행 (둘 다 L 단위라 수량 합산 가능)
+  const mergeGasoline = !!customer?.mergeGasoline;
 
   (vendor.txs || []).forEach(t => {
     const supply = t.taxType === '면세' ? t.amount : Math.round(t.amount / 1.1);
@@ -34,10 +36,11 @@ function calcProducts(vendor) {
     const qty    = Math.floor(t.qty);
 
     if (FUEL_PRODUCTS.has(t.product)) {
-      if (!fuelMap[t.product]) fuelMap[t.product] = { qty: 0, supply: 0, tax: 0 };
-      fuelMap[t.product].qty    += qty;
-      fuelMap[t.product].supply += supply;
-      fuelMap[t.product].tax    += tax;
+      const key = (mergeGasoline && t.product === '휘발유') ? '경유' : t.product;
+      if (!fuelMap[key]) fuelMap[key] = { qty: 0, supply: 0, tax: 0 };
+      fuelMap[key].qty    += qty;
+      fuelMap[key].supply += supply;
+      fuelMap[key].tax    += tax;
     } else {
       nonFuelSupply += supply;
       nonFuelTax    += tax;
@@ -135,7 +138,7 @@ function generateTaxInvoiceExcel(vendors, customers, issueDate, taxMethods, outp
     const customer = customers.find(c => c.name === vendor.name) || { name: vendor.name };
     if (!customer.bizNo) { skipped.push(vendor.name); continue; }
 
-    const products = calcProducts(vendor);
+    const products = calcProducts(vendor, customer);
     if (!products.length) continue;
 
     const method = taxMethods[vendor.name];

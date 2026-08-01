@@ -52,6 +52,11 @@ function mergeCell(ws, range, val, opts = {}) {
   return cell(ws, range.split(':')[0], val, opts);
 }
 
+// ─── 유종 분류 (taxInvoiceGenerator.calcProducts와 동일 규칙) ────
+const FUEL_ORDER = ['휘발유', '경유', '등유'];  // 유종 합계 행 출력 순서
+const FUEL_SET   = new Set(FUEL_ORDER);
+const ETC_LABEL  = '유외상품';                   // 유종 외 품목(유록스·세차 등) 통합
+
 // ─── 세금 계산 ──────────────────────────────────────────────────
 function calcTax(amount, taxType) {
   if (taxType === '면세') return { supply: amount, tax: 0 };
@@ -107,13 +112,11 @@ function organizeTransactions(txs, printMethod) {
   return groups;
 }
 
-// ─── 거래명세서 생성 ─────────────────────────────────────────────
-async function createStatement(cust, customer, outputDir, issueDate, year, month, printMethod, fileSuffix = '') {
-  const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('거래명세서', {
-    pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
-  });
+// 출력방법 전체 목록 — 거래명세서 1개 파일에 시트로 모두 수록
+const ALL_PRINT_METHODS = ['판매일자순', '유종별', '차량별-판매일자순', '차량별-유종별'];
 
+// ─── 시트 1장 작성 (지정한 출력방법으로 정렬) ────────────────────
+function buildStatementSheet(ws, cust, customer, issueDate, printMethod) {
   // ── 열 너비 ────────────────────────────────────────────────────
   COL_WIDTHS.forEach((w, i) => {
     const col = ws.getColumn(i + 1);
@@ -230,9 +233,9 @@ async function createStatement(cust, customer, outputDir, issueDate, year, month
   // ── 데이터 행 (출력방법 적용) ────────────────────────────────
   const groups        = organizeTransactions(cust.txs, printMethod);
   const showSubtotals = printMethod !== '판매일자순';
-  const trackByProd   = groups.some(g => g.product !== null);
 
-  const productTotals = {};
+  // 유종별 합계: 출력방법과 무관하게 거래 원본에서 직접 집계
+  const fuelTotals = {};  // { '경유': { qty, sup, tax, amt }, ... }
   let gQty = 0, gSup = 0, gTax = 0, gAmt = 0;
   let r = 9;
 
@@ -252,6 +255,15 @@ async function createStatement(cust, customer, outputDir, issueDate, year, month
       mergeCell(ws, `N${r}:O${r}`, tax,             { font: fntD(9), h: 'right', fmt: '#,##0' });
       cell(ws,      `P${r}`,       t.amount,        { font: fntD(9), h: 'right', fmt: '#,##0' });
       vQty += qty; vSup += supply; vTx += tax; vAmt += t.amount;
+
+      // 유종별 누적 — 위에서 쓴 값 그대로 재사용해야 총합계와 정확히 일치
+      const fk = FUEL_SET.has(t.product) ? t.product : ETC_LABEL;
+      if (!fuelTotals[fk]) fuelTotals[fk] = { qty: 0, sup: 0, tax: 0, amt: 0 };
+      fuelTotals[fk].qty += qty;
+      fuelTotals[fk].sup += supply;
+      fuelTotals[fk].tax += tax;
+      fuelTotals[fk].amt += t.amount;
+
       r++;
     });
 
@@ -268,28 +280,21 @@ async function createStatement(cust, customer, outputDir, issueDate, year, month
       r++;
     }
 
-    if (trackByProd && group.product) {
-      if (!productTotals[group.product]) productTotals[group.product] = { qty: 0, sup: 0, tax: 0, amt: 0 };
-      productTotals[group.product].qty += vQty;
-      productTotals[group.product].sup += vSup;
-      productTotals[group.product].tax += vTx;
-      productTotals[group.product].amt += vAmt;
-    }
     gQty += vQty; gSup += vSup; gTax += vTx; gAmt += vAmt;
   }
 
-  // ── 유종 합계 행 (차량별-유종별 모드에서만) ────────────────────
-  if (trackByProd) {
-    for (const [prod, tot] of Object.entries(productTotals)) {
-      ws.getRow(r).height = 17.25;
-      mergeCell(ws, `A${r}:G${r}`, `${prod} 합계`, { font: fntD(12, true) });
-      cell(ws,      `H${r}`,       tot.qty,         { font: fntD(12, true), fmt: '#,##0' });
-      mergeCell(ws, `I${r}:K${r}`, '',              { font: fntD(12, true) });
-      mergeCell(ws, `L${r}:M${r}`, tot.sup,        { font: fntD(12, true), h: 'right', fmt: '#,##0' });
-      mergeCell(ws, `N${r}:O${r}`, tot.tax,        { font: fntD(12, true), h: 'right', fmt: '#,##0' });
-      cell(ws,      `P${r}`,       tot.amt,        { font: fntD(12, true), h: 'right', fmt: '#,##0' });
-      r++;
-    }
+  // ── 유종별 합계 행 (거래가 있는 유종만, 총합계 바로 위) ─────────
+  for (const label of [...FUEL_ORDER, ETC_LABEL]) {
+    const tot = fuelTotals[label];
+    if (!tot) continue;
+    ws.getRow(r).height = 17.25;
+    mergeCell(ws, `A${r}:G${r}`, `${label} 합계`, { font: fntD(12, true) });
+    cell(ws,      `H${r}`,       tot.qty,          { font: fntD(12, true), fmt: '#,##0' });
+    mergeCell(ws, `I${r}:K${r}`, '',               { font: fntD(12, true) });
+    mergeCell(ws, `L${r}:M${r}`, tot.sup,         { font: fntD(12, true), h: 'right', fmt: '#,##0' });
+    mergeCell(ws, `N${r}:O${r}`, tot.tax,         { font: fntD(12, true), h: 'right', fmt: '#,##0' });
+    cell(ws,      `P${r}`,       tot.amt,         { font: fntD(12, true), h: 'right', fmt: '#,##0' });
+    r++;
   }
 
   // ── 총합계 행 ────────────────────────────────────────────────
@@ -300,6 +305,22 @@ async function createStatement(cust, customer, outputDir, issueDate, year, month
   mergeCell(ws, `L${r}:M${r}`, gSup,               { font: fntD(12, true), h: 'right', fmt: '#,##0' });
   mergeCell(ws, `N${r}:O${r}`, gTax,               { font: fntD(12, true), h: 'right', fmt: '#,##0' });
   cell(ws,      `P${r}`,       gAmt,               { font: fntD(12, true), h: 'right', fmt: '#,##0' });
+}
+
+// ─── 거래명세서 생성 (출력방법별 시트 전체 수록) ──────────────────
+async function createStatement(cust, customer, outputDir, issueDate, year, month, printMethod, fileSuffix = '') {
+  const wb = new ExcelJS.Workbook();
+
+  // 고객에 지정된 출력방법을 첫 시트로, 나머지 방식은 뒤에 순서대로
+  const primary = ALL_PRINT_METHODS.includes(printMethod) ? printMethod : '차량별-유종별';
+  const methods = [primary, ...ALL_PRINT_METHODS.filter(m => m !== primary)];
+
+  methods.forEach(m => {
+    const ws = wb.addWorksheet(m, {
+      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
+    });
+    buildStatementSheet(ws, cust, customer, issueDate, m);
+  });
 
   // ── 저장 ─────────────────────────────────────────────────────
   const safeName = cust.name.replace(/[\\/:*?"<>|]/g, '_');

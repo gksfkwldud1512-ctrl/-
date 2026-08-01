@@ -905,10 +905,10 @@
   "card": {
     "date": "2026-07-16",
     "totalAmount": 18479812,
-    "totalFee": 0,
-    "totalNet": 0,
+    "totalFee": 269779,
+    "totalNet": 17874061,
     "count": 90,
-    "depositDate": "",
+    "depositDate": "2026-07-21",
     "cardTxs": [
       {
         "approvalNo": "00591293",
@@ -1631,7 +1631,19 @@
         "transTime": "00:34:00"
       }
     ],
-    "depositExpected": {}
+    "depositExpected": {
+      "2026-07-22": {
+        "현대카드": 1911541,
+        "신한카드": 7466651,
+        "비씨카드": 3091106,
+        "KB국민카드": 4353369,
+        "농협카드": 334293,
+        "하나카드": 47280
+      },
+      "2026-07-21": {
+        "삼성카드": 669821
+      }
+    }
   },
   "matching": {
     "bosTotal": 18479812,
