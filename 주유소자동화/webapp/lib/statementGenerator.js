@@ -354,4 +354,4 @@ async function generateStatements(vendors, customers, outputDir, issueDate, year
   return files;
 }
 
-module.exports = { generateStatements };
+module.exports = { generateStatements, buildStatementSheet };
