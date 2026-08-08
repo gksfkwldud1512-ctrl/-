@@ -129,6 +129,7 @@ function generateTaxInvoiceExcel(vendors, customers, issueDate, taxMethods, outp
   // ── 데이터 행 생성 ────────────────────────────────────────────
   const dataRows = [];
   const skipped  = [];
+  const issued   = [];   // 실제로 세금계산서 행이 생성된 업체 (완료 상태 기록용)
   const selectedNames = Object.keys(taxMethods);
 
   for (const vendor of vendors) {
@@ -154,6 +155,7 @@ function generateTaxInvoiceExcel(vendors, customers, issueDate, taxMethods, outp
         dataRows.push(buildDataRow(issueDate, customer, products.slice(i, i + 4)));
       }
     }
+    issued.push(vendor.name);
   }
 
   // ── 데이터를 row 7(index 6)부터 삽입 ─────────────────────────
@@ -166,7 +168,7 @@ function generateTaxInvoiceExcel(vendors, customers, issueDate, taxMethods, outp
   const filename = `세금계산서_일괄발행_${ym}.xlsx`;
   XLSX.writeFile(wb, path.join(outputDir, filename));
 
-  return { filename, count: dataRows.length, skipped };
+  return { filename, count: dataRows.length, skipped, issued };
 }
 
 module.exports = { generateTaxInvoiceExcel, calcProducts };

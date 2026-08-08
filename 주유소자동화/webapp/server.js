@@ -690,6 +690,21 @@ app.post('/api/generate-tax-excel', (req, res) => {
 
     const { generateTaxInvoiceExcel } = require('./lib/taxInvoiceGenerator');
     const result = generateTaxInvoiceExcel(vendors, customers, issueDate, taxMethods || {}, OUTPUT_DIR);
+
+    // 완료 상태 기록 — 실제로 세금계산서 행이 생성된 업체만 (result.issued)
+    const issuedNames = result.issued || [];
+    if (issuedNames.length) {
+      const all = readJSON(COMPLETION_FILE, {});
+      const key = `${year}-${String(month).padStart(2, '0')}`;
+      const cur = all[key] || { statements: [], emails: [], taxInvoices: [] };
+      const today = new Date().toISOString().slice(0, 10);
+      const map = new Map((cur.taxInvoices || []).map(t => [t.name, t]));
+      issuedNames.forEach(name => map.set(name, { name, date: today }));
+      cur.taxInvoices = [...map.values()];
+      all[key] = cur;
+      writeJSON(COMPLETION_FILE, all);
+    }
+
     res.json({ ok: true, ...result });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });

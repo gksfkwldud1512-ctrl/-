@@ -702,9 +702,9 @@ function renderTaxInvoice() {
       <option value="분리" ${method === '분리' ? 'selected' : ''}>분리 (${products.length}장)</option>
     </select>`;
 
-    const taxDone    = state.completion.taxInvoices.includes(v.name);
-    const countBadge = taxDone
-      ? '<span class="badge badge-done">완료</span>'
+    const taxRecord  = state.completion.taxInvoices.find(t => t.name === v.name);
+    const countBadge = taxRecord
+      ? `<span class="badge badge-done">완료</span><div style="font-size:11px;color:#64748b;margin-top:2px;">${esc(taxRecord.date)}</div>`
       : `<span class="badge ${invoiceCount > 1 ? 'badge-warn' : 'badge-ok'}">${invoiceCount}장</span>`;
 
     return `<tr class="${hasBizNo ? '' : 'row-disabled'}">
