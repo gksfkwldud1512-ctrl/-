@@ -54,6 +54,7 @@ const EXPENSES_FILE         = path.join(DATA_DIR, 'expenses.json');
 const DAILY_DIR            = path.join(DATA_DIR, 'daily');
 const BANK_DEPOSITS_FILE   = path.join(DATA_DIR, 'bank_deposits.json');
 const COMPLETION_FILE      = path.join(DATA_DIR, 'completion.json');
+const AR_DEPOSITS_FILE     = path.join(DATA_DIR, 'ar_deposits.json');
 
 if (!fs.existsSync(DAILY_DIR)) fs.mkdirSync(DAILY_DIR, { recursive: true });
 
@@ -660,7 +661,7 @@ app.post('/api/import-customers', upload.single('file'), (req, res) => {
 // ── 메일 발송 ────────────────────────────────────────────────
 app.post('/api/send-email', async (req, res) => {
   try {
-    const { vendorName, email, filename, month, extraMemo } = req.body;
+    const { vendorName, email, filename, year, month, extraMemo } = req.body;
     const settings = readJSON(SETTINGS_FILE, {});
     if (!settings.smtpUser || !settings.smtpPass)
       return res.status(400).json({ ok: false, error: 'SMTP 설정 없음 — [설정] 탭에서 입력하세요.' });
@@ -671,6 +672,20 @@ app.post('/api/send-email', async (req, res) => {
 
     const { sendEmail } = require('./lib/emailSender');
     await sendEmail(settings, email, vendorName, fp, month, extraMemo || '');
+
+    // 완료 상태 기록 — 발송 성공 시 발송일자와 함께 저장
+    if (year && month) {
+      const all = readJSON(COMPLETION_FILE, {});
+      const key = `${year}-${String(month).padStart(2, '0')}`;
+      const cur = all[key] || { statements: [], emails: [], taxInvoices: [] };
+      const today = new Date().toISOString().slice(0, 10);
+      const map = new Map((cur.emails || []).map(t => [t.name, t]));
+      map.set(vendorName, { name: vendorName, date: today });
+      cur.emails = [...map.values()];
+      all[key] = cur;
+      writeJSON(COMPLETION_FILE, all);
+    }
+
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -1425,10 +1440,46 @@ app.post('/api/upload-expenses', upload.single('file'), (req, res) => {
 });
 
 // ── 수시입출예금 업로드 → 지출 자동 분류 ────────────────────────
+// 통장 적요1/날짜/금액이 같으면 같은 원본 거래로 간주 (재업로드 시 수동매칭 보존용 키)
+function arDepositKey(d) { return `${d.date}|${d.payer}|${d.amount}`; }
+
+// 통장 입금(비카드) → 외상 업체 자동매칭 후 병합 저장
+//   같은 달을 다시 업로드해도, 이전에 사람이 수동으로 지정해둔 매칭(manual:true)은 유지한다.
+function mergeArDeposits(rawDeposits) {
+  const { buildArMatrix, buildVendorAliasIndex, matchPayerToVendor } = require('./lib/arLedger');
+  const affectedMonths = [...new Set(rawDeposits.map(d => d.month))];
+
+  const all = readJSON(AR_DEPOSITS_FILE, []);
+  const manualMap = new Map();
+  all.forEach(d => {
+    if (d.manual && affectedMonths.includes(d.month)) manualMap.set(arDepositKey(d), d.matchedVendor);
+  });
+  const kept = all.filter(d => !affectedMonths.includes(d.month));
+
+  const arMatrix    = buildArMatrix(DATA_DIR);
+  const vendorNames = [...arMatrix.byVendor.keys()];
+  const customers   = readJSON(CUSTOMERS_FILE, []);
+  const aliasIndex  = buildVendorAliasIndex(vendorNames, customers);
+
+  let seq = 0;
+  const fresh = rawDeposits.map(d => {
+    const id = `${d.date}_${seq++}`;
+    const manualVendor = manualMap.get(arDepositKey(d));
+    if (manualVendor !== undefined) {
+      return { id, ...d, matchedVendor: manualVendor, score: 1, suggestion: null, manual: true };
+    }
+    const { name, score, suggestion } = matchPayerToVendor(d.payer, aliasIndex);
+    return { id, ...d, matchedVendor: name, score, suggestion, manual: false };
+  });
+
+  writeJSON(AR_DEPOSITS_FILE, kept.concat(fresh));
+  return { affectedMonths, count: fresh.length };
+}
+
 app.post('/api/upload-bank-expenses', upload.single('file'), (req, res) => {
   try {
     if (!req.file) return res.json({ ok: false, error: '파일이 없습니다.' });
-    const { parseBankExpenses } = require('./lib/bankExpenseParser');
+    const { parseBankExpenses, parseBankIncoming } = require('./lib/bankExpenseParser');
     // 기존 지출목록(이미 계정과목이 확정된 항목들)을 참조로 넘겨 자동 매칭
     const history = readJSON(EXPENSES_FILE, []);
     const newItems = parseBankExpenses(req.file.path, history);
@@ -1441,8 +1492,73 @@ app.post('/api/upload-bank-expenses', upload.single('file'), (req, res) => {
     list = list.concat(newItems);
     writeJSON(EXPENSES_FILE, list);
 
-    res.json({ ok: true, count: newItems.length, months: affectedMonths });
+    // 같은 파일의 "입금" 쪽 → 외상 미수금 회수 매칭 (월마감 → 설정 탭에 반영)
+    let arResult = { affectedMonths: [], count: 0 };
+    try {
+      const incoming = parseBankIncoming(req.file.path);
+      if (incoming.length) arResult = mergeArDeposits(incoming);
+    } catch (e) { console.error('[upload-bank-expenses] AR 입금 매칭 실패:', e.message); }
+
+    res.json({ ok: true, count: newItems.length, months: affectedMonths, ar: arResult });
   } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// 외상 미수금 입금 확인 (월마감 → 설정 탭 우측)
+// ══════════════════════════════════════════════════════════════
+
+// GET /api/ar/summary — 업체별 월별 거래대금·입금·FIFO 충당 결과 + 미매칭 입금 목록
+app.get('/api/ar/summary', (req, res) => {
+  try {
+    const { buildArMatrix, allocateFifo } = require('./lib/arLedger');
+    const arMatrix = buildArMatrix(DATA_DIR);
+    const deposits = readJSON(AR_DEPOSITS_FILE, []);
+    const alloc = allocateFifo(arMatrix, deposits);
+
+    const vendors = [...arMatrix.byVendor.keys()].sort((a, b) => a.localeCompare(b, 'ko')).map(name => {
+      const a = alloc[name];
+      return {
+        name,
+        months: a.months,               // [{month,charge,paid,remaining}]
+        allocations: a.allocations,      // [{depositId,date,amount,appliedTo}]
+        totalCharge: a.totalCharge,
+        totalPaid:   a.totalPaid,
+        remaining:   a.remaining,
+        surplus:     a.surplus,
+        matched:     a.remaining <= 0,
+      };
+    });
+
+    const unmatched = deposits
+      .filter(d => !d.matchedVendor)
+      .sort((a, b) => b.date.localeCompare(a.date));
+
+    res.json({ ok: true, months: arMatrix.months, vendors, unmatched });
+  } catch (e) {
+    console.error('[ar/summary]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// POST /api/ar/match — 미매칭 입금 건을 수동으로 업체에 지정 (vendorName=null이면 매칭 해제)
+app.post('/api/ar/match', (req, res) => {
+  try {
+    const { depositId, vendorName } = req.body;
+    if (!depositId) return res.status(400).json({ ok: false, error: 'depositId 필요' });
+
+    const list = readJSON(AR_DEPOSITS_FILE, []);
+    const dep  = list.find(d => d.id === depositId);
+    if (!dep) return res.status(404).json({ ok: false, error: '해당 입금 건을 찾을 수 없습니다.' });
+
+    dep.matchedVendor = vendorName || null;
+    dep.manual = !!vendorName;
+    dep.score  = vendorName ? 1 : 0;
+    writeJSON(AR_DEPOSITS_FILE, list);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[ar/match]', e);
     res.status(500).json({ ok: false, error: e.message });
   }
 });

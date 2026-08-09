@@ -676,7 +676,8 @@ document.getElementById('bank-expense-input').addEventListener('change', async e
     const data=await res.json();
     if (data.ok) {
       info.textContent=`✅ ${data.count}건 임포트 완료 (${(data.months||[]).map(m=>moLabel(m)).join(', ')})`;
-      showBanner(`✅ ${data.count}건 지출 데이터 임포트 완료`,'ok');
+      const arMsg = data.ar?.count ? ` · 외상입금 ${data.ar.count}건 중 자동매칭 반영(월마감→설정 탭에서 확인)` : '';
+      showBanner(`✅ ${data.count}건 지출 데이터 임포트 완료${arMsg}`,'ok');
       activeMonth=null; await loadData();
     } else { info.textContent='❌ '+data.error; showBanner('업로드 실패: '+data.error,'err'); }
   } catch(err) { info.textContent='❌ 서버 연결 실패'; showBanner(err.message,'err'); }

@@ -195,6 +195,7 @@ function switchSubTab(tab) {
   const section = document.getElementById(`tab-${tab}`);
   if (section) { section.style.display = 'block'; section.classList.add('active'); }
   if (tab === 'vendorprices') loadVendorPrices();
+  if (tab === 'settings')     loadArSummary();
   renderAll();
 }
 
@@ -592,11 +593,13 @@ function renderEmail() {
     const hasFile   = state.files.some(f => f.name === filename);
     const hasEmail  = !!customer?.email;
     const canSelect = hasFile && hasEmail;
-    const status    = state.emailStatus[v.name];
-    const emailDone = state.completion.emails.includes(v.name);
+    const status      = state.emailStatus[v.name];
+    const emailRecord = state.completion.emails.find(t => t.name === v.name);
 
     let statusBadge;
-    if (emailDone || status === 'sent') {
+    if (emailRecord) {
+      statusBadge = `<span class="badge badge-done">완료</span><div style="font-size:11px;color:#64748b;margin-top:2px;">${esc(emailRecord.date)}</div>`;
+    } else if (status === 'sent') {
       statusBadge = '<span class="badge badge-done">완료</span>';
     } else if (status === 'sending') {
       statusBadge = '<span class="badge badge-sending">발송중...</span>';
@@ -873,15 +876,17 @@ async function sendSelectedEmails() {
     });
 
     state.emailStatus[name] = res.ok ? 'sent' : 'fail';
-    if (res.ok && !state.completion.emails.includes(name)) {
-      state.completion.emails.push(name);
-    }
     renderEmail();
     if (!res.ok) toast(`${name} 발송 실패: ${res.error}`, 'error');
   }
 
   const sent = names.filter(n => state.emailStatus[n] === 'sent').length;
-  if (sent) toast(`✅ ${sent}개 업체 메일 발송 완료`, 'success');
+  if (sent) {
+    const compRes = await api('GET', `/api/completion?year=${state.year}&month=${state.month}`);
+    if (compRes.ok) state.completion = compRes.completion;
+    renderEmail();
+    toast(`✅ ${sent}개 업체 메일 발송 완료`, 'success');
+  }
 }
 
 
@@ -3793,4 +3798,227 @@ async function deleteOilbankSupport(id) {
   if (!res.ok) return toast(res.error || '삭제 실패', 'error');
   renderOilbankSupports(res.supports || []);
   toast('삭제 완료', 'success');
+}
+
+// ════════════════════════════════════════════════════════════
+// 외상 미수금 입금 확인 (월마감 → 설정 탭 우측)
+// ════════════════════════════════════════════════════════════
+
+const arState = { months: [], vendors: [], unmatched: [], expandedVendor: null };
+
+async function loadArSummary() {
+  const res = await api('GET', '/api/ar/summary');
+  if (!res.ok) { toast(res.error || '외상 입금 현황 조회 실패', 'error'); return; }
+  arState.months    = res.months;
+  arState.vendors   = res.vendors;
+  arState.unmatched = res.unmatched;
+  renderArSummaryCards();
+  renderArVendorTable();
+  renderArUnmatchedBadge();
+}
+
+function arNum(v) { return (v || 0).toLocaleString() + '원'; }
+
+function renderArSummaryCards() {
+  const box = document.getElementById('ar-summary-cards');
+  if (!box) return;
+  const totalCharge = arState.vendors.reduce((s, v) => s + v.totalCharge, 0);
+  const totalPaid   = arState.vendors.reduce((s, v) => s + v.totalPaid, 0);
+  const totalRemain = arState.vendors.reduce((s, v) => s + v.remaining, 0);
+
+  const card = (label, val, color) => `
+    <div style="flex:1;min-width:100px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;">
+      <div style="font-size:11px;color:#64748b;">${label}</div>
+      <div style="font-size:14px;font-weight:700;${color ? `color:${color};` : ''}">${arNum(val)}</div>
+    </div>`;
+
+  box.innerHTML =
+    card('총 거래대금', totalCharge) +
+    card('총 입금액', totalPaid, '#0f766e') +
+    card('총 미수잔액', totalRemain, totalRemain > 0 ? '#dc2626' : '#16a34a') +
+    `<div style="flex:1;min-width:100px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;">
+       <div style="font-size:11px;color:#64748b;">미매칭 입금</div>
+       <div style="font-size:14px;font-weight:700;${arState.unmatched.length ? 'color:#d97706;' : ''}">${arState.unmatched.length}건</div>
+     </div>`;
+}
+
+function renderArUnmatchedBadge() {
+  const badge = document.getElementById('ar-unmatched-badge');
+  if (!badge) return;
+  if (arState.unmatched.length) {
+    badge.textContent = arState.unmatched.length;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// 미수확인 표: 상단=월(거래금액/입금금액 2열씩), 왼쪽=업체명
+function renderArVendorTable() {
+  const box = document.getElementById('ar-monthly-table');
+  if (!box) return;
+
+  if (!arState.vendors.length) {
+    box.innerHTML = `<div style="padding:24px;text-align:center;color:#94a3b8;font-size:12px;">
+      아직 외상 거래 데이터가 없습니다.</div>`;
+    return;
+  }
+
+  const months = arState.months;
+  // 미수 있는 업체 우선 정렬(잔액 많은 순), 완납 업체는 뒤로
+  const sorted = arState.vendors.slice().sort((a, b) => b.remaining - a.remaining);
+
+  box.innerHTML = `
+    <table style="width:100%;font-size:12px;border-collapse:collapse;white-space:nowrap;">
+      <thead>
+        <tr style="background:#f1f5f9;position:sticky;top:0;z-index:2;">
+          <th rowspan="2" style="padding:6px;text-align:left;position:sticky;left:0;background:#f1f5f9;z-index:3;">업체명</th>
+          ${months.map(m => `<th colspan="2" style="padding:6px;text-align:center;border-left:1px solid #e2e8f0;">${m}</th>`).join('')}
+          <th rowspan="2" style="padding:6px;text-align:center;border-left:1px solid #e2e8f0;">상태</th>
+        </tr>
+        <tr style="background:#f8fafc;font-size:10px;color:#64748b;position:sticky;top:25px;z-index:2;">
+          ${months.map(() => '<th style="padding:2px 6px;font-weight:400;border-left:1px solid #e2e8f0;">거래금액</th><th style="padding:2px 6px;font-weight:400;">입금금액</th>').join('')}
+        </tr>
+      </thead>
+      <tbody>
+        ${sorted.map(v => {
+          const byMonth = {};
+          v.months.forEach(m => byMonth[m.month] = m);
+          const status = v.remaining <= 0
+            ? '<span class="badge badge-done">완납</span>'
+            : v.totalPaid > 0
+              ? '<span class="badge badge-warn">일부</span>'
+              : '<span class="badge badge-fail">미입금</span>';
+          return `<tr style="border-bottom:1px solid #f1f5f9;cursor:pointer;" onclick="toggleArVendorDetail('${esc(v.name)}')">
+            <td style="padding:6px;position:sticky;left:0;background:#fff;">${esc(v.name)}${v.surplus > 0 ? ` <span style="font-size:10px;color:#0369a1;">(초과 ${arNum(v.surplus)})</span>` : ''}</td>
+            ${months.map(m => {
+              const d = byMonth[m];
+              if (!d) return '<td colspan="2" style="text-align:center;color:#cbd5e1;border-left:1px solid #f1f5f9;">-</td>';
+              const paidColor = d.paid >= d.charge ? '#16a34a' : (d.paid > 0 ? '#d97706' : '#dc2626');
+              return `<td style="padding:4px 6px;text-align:right;border-left:1px solid #f1f5f9;">${(d.charge || 0).toLocaleString()}</td>
+                      <td style="padding:4px 6px;text-align:right;color:${paidColor};">${(d.paid || 0).toLocaleString()}</td>`;
+            }).join('')}
+            <td style="padding:6px;text-align:center;border-left:1px solid #f1f5f9;">${status}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+}
+
+// 행 클릭 → 월별 잔액 + "어느 입금이 몇월치를 충당했는지" 상세 펼치기
+function toggleArVendorDetail(name) {
+  arState.expandedVendor = (arState.expandedVendor === name) ? null : name;
+  renderArVendorDetail();
+}
+
+function renderArVendorDetail() {
+  const box = document.getElementById('ar-vendor-detail');
+  if (!box) return;
+  if (!arState.expandedVendor) { box.innerHTML = ''; return; }
+
+  const v = arState.vendors.find(x => x.name === arState.expandedVendor);
+  if (!v) { box.innerHTML = ''; return; }
+
+  const monthRows = v.months.map(m => `
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:4px 6px;">${m.month}</td>
+      <td style="padding:4px 6px;text-align:right;">${arNum(m.charge)}</td>
+      <td style="padding:4px 6px;text-align:right;">${arNum(m.paid)}</td>
+      <td style="padding:4px 6px;text-align:right;${m.remaining > 0 ? 'color:#dc2626;' : 'color:#16a34a;'}">${arNum(m.remaining)}</td>
+    </tr>`).join('');
+
+  const allocRows = v.allocations.length
+    ? v.allocations.map(a => `
+        <tr style="border-bottom:1px solid #f1f5f9;">
+          <td style="padding:4px 6px;">${a.date}</td>
+          <td style="padding:4px 6px;text-align:right;">${arNum(a.amount)}</td>
+          <td style="padding:4px 6px;">${a.appliedTo.map(x => `${x.month}(${arNum(x.amount)})`).join(', ') || '(미배정)'}</td>
+        </tr>`).join('')
+    : `<tr><td colspan="3" style="padding:8px;text-align:center;color:#94a3b8;">매칭된 입금 내역이 없습니다.</td></tr>`;
+
+  box.innerHTML = `
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;">
+      <strong style="font-size:13px;">${esc(v.name)} — 상세</strong>
+
+      <div style="font-size:11px;color:#64748b;margin:6px 0 2px;">월별 미수 현황</div>
+      <table style="width:100%;font-size:11px;border-collapse:collapse;margin-bottom:8px;">
+        <thead><tr style="color:#64748b;">
+          <th style="padding:4px 6px;text-align:left;">월</th>
+          <th style="padding:4px 6px;text-align:right;">거래대금</th>
+          <th style="padding:4px 6px;text-align:right;">충당액</th>
+          <th style="padding:4px 6px;text-align:right;">잔액</th>
+        </tr></thead>
+        <tbody>${monthRows}</tbody>
+      </table>
+
+      <div style="font-size:11px;color:#64748b;margin:6px 0 2px;">입금 → 충당 내역 (몇월 거래대금이 들어왔는지)</div>
+      <table style="width:100%;font-size:11px;border-collapse:collapse;">
+        <thead><tr style="color:#64748b;">
+          <th style="padding:4px 6px;text-align:left;">입금일</th>
+          <th style="padding:4px 6px;text-align:right;">입금액</th>
+          <th style="padding:4px 6px;text-align:left;">충당된 월</th>
+        </tr></thead>
+        <tbody>${allocRows}</tbody>
+      </table>
+    </div>`;
+}
+
+// ── 미매칭 입금 모달 (수동 지정) ──────────────────────────────
+function showArUnmatchedModal() {
+  renderArUnmatchedModalBody();
+  document.getElementById('ar-unmatched-modal').style.display = 'flex';
+}
+
+function renderArUnmatchedModalBody() {
+  const body = document.getElementById('ar-unmatched-body');
+  const vendorOptions = arState.vendors
+    .slice().sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+    .map(v => `<option value="${esc(v.name)}">${esc(v.name)}</option>`).join('');
+
+  if (!arState.unmatched.length) {
+    body.innerHTML = `<div style="padding:24px;text-align:center;color:#94a3b8;">미매칭 입금이 없습니다.</div>`;
+    return;
+  }
+
+  body.innerHTML = `
+    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+      <thead>
+        <tr style="background:#f1f5f9;">
+          <th style="padding:6px;text-align:left;">입금일</th>
+          <th style="padding:6px;text-align:left;">통장 적요(입금자명)</th>
+          <th style="padding:6px;text-align:right;">금액</th>
+          <th style="padding:6px;text-align:left;">업체 지정</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${arState.unmatched.map(u => `
+          <tr style="border-bottom:1px solid #f1f5f9;">
+            <td style="padding:6px;white-space:nowrap;">${u.date}</td>
+            <td style="padding:6px;">${esc(u.payer)}</td>
+            <td style="padding:6px;text-align:right;white-space:nowrap;">${arNum(u.amount)}</td>
+            <td style="padding:6px;">
+              <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
+                ${u.suggestion ? `<button style="font-size:11px;padding:2px 6px;"
+                    onclick="confirmArMatch('${u.id}','${esc(u.suggestion.name)}')">
+                    ${esc(u.suggestion.name)}? (${Math.round(u.suggestion.score * 100)}%) 확정</button>` : ''}
+                <select style="font-size:11px;padding:2px 4px;" id="ar-sel-${u.id}">
+                  <option value="">-- 업체 선택 --</option>
+                  ${vendorOptions}
+                </select>
+                <button style="font-size:11px;padding:2px 6px;"
+                        onclick="confirmArMatch('${u.id}', document.getElementById('ar-sel-${u.id}').value)">지정</button>
+              </div>
+            </td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+async function confirmArMatch(depositId, vendorName) {
+  if (!vendorName) return toast('업체를 선택하세요.', 'warn');
+  const res = await api('POST', '/api/ar/match', { depositId, vendorName });
+  if (!res.ok) return toast(res.error || '매칭 실패', 'error');
+  toast(`${vendorName}로 매칭 완료`, 'success');
+  await loadArSummary();
+  renderArUnmatchedModalBody();
 }

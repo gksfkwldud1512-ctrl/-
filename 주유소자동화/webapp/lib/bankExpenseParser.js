@@ -279,4 +279,69 @@ function parseBankExpenses(filePath, history = []) {
   return result;
 }
 
-module.exports = { parseBankExpenses, buildHistoryIndex, classifyVendor };
+/**
+ * 수시입출예금 입출금내역.xls "입금" 컬럼 파싱 (외상 대금 회수 매칭용)
+ * parseBankExpenses와 같은 파일을 읽되 col6(입금) 기준. 카드사 입금은 제외
+ * (bank_deposits.json에서 별도로 이미 추적하므로 중복/오매칭 방지).
+ * @param {string} filePath
+ * @returns {{ date:string, month:string, payer:string, amount:number }[]}
+ */
+function parseBankIncoming(filePath) {
+  const { normalizeCardName } = require('./bankParser');
+  const wb = XLSX.readFile(filePath, { type: 'file', cellDates: true, codepage: 949 });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+  let headerIdx = -1;
+  let colDate = -1, colVendor = -1, colIn = -1;
+
+  for (let i = 0; i < Math.min(rows.length, 11); i++) {
+    const row = rows[i].map(c => String(c).trim());
+    const dIdx = row.findIndex(c => c === '거래일자');
+    if (dIdx >= 0) {
+      headerIdx = i;
+      colDate   = dIdx;
+      colVendor = row.findIndex(c => c === '적요1');
+      colIn     = row.findIndex(c => c === '입금');
+      if (colIn < 0) colIn = 6;
+      break;
+    }
+  }
+  if (headerIdx < 0) throw new Error('헤더 행(거래일자)을 찾을 수 없습니다.');
+
+  const result = [];
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.length === 0) continue;
+
+    const rawIn  = row[colIn];
+    const inAmt  = typeof rawIn === 'number' ? rawIn : parseFloat(String(rawIn).replace(/,/g, '')) || 0;
+    if (inAmt <= 0) continue;
+
+    const payer = String(colVendor >= 0 ? (row[colVendor] || '') : '').trim();
+    if (!payer) continue;
+    if (normalizeCardName(payer)) continue;   // 카드사 입금은 별도 흐름(bank_deposits.json)에서 처리
+
+    const rawDate = row[colDate];
+    let dateStr = '';
+    if (rawDate instanceof Date) {
+      const y = rawDate.getFullYear();
+      const m = String(rawDate.getMonth() + 1).padStart(2, '0');
+      const d = String(rawDate.getDate()).padStart(2, '0');
+      dateStr = `${y}-${m}-${d}`;
+    } else {
+      const s = String(rawDate).trim().replace(/[./]/g, '-');
+      dateStr = /^\d{8}$/.test(s) ? `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}` : s.slice(0, 10);
+    }
+    const month = dateStr.slice(0, 7);
+    if (!month || month.length < 7) continue;
+
+    result.push({ date: dateStr, month, payer, amount: Math.round(inAmt) });
+  }
+  return result;
+}
+
+module.exports = {
+  parseBankExpenses, buildHistoryIndex, classifyVendor,
+  parseBankIncoming, normalize, vendorSimilarity,
+};
