@@ -284,8 +284,19 @@ function parseBankExpenses(filePath, history = []) {
  * parseBankExpenses와 같은 파일을 읽되 col6(입금) 기준. 카드사 입금은 제외
  * (bank_deposits.json에서 별도로 이미 추적하므로 중복/오매칭 방지).
  * @param {string} filePath
- * @returns {{ date:string, month:string, payer:string, amount:number }[]}
+ * @returns {{ date:string, month:string, payer:string, amount:number, note:string }[]}
  */
+// 통장 적요1의 흔한 은행 접미사("/타행이체" 등) 제거 — 업체명 매칭 정확도용
+function stripBankSuffix(s) {
+  return String(s || '').replace(/\/\s*(타행이체|대체|이체|입금)\s*$/, '').trim();
+}
+
+// "(주)"/"㈜"/"주식회사" 위치 차이로 매칭이 실패하는 것을 막기 위해 제거
+// (예: "디비엘(주)음성지점" ↔ "디비엘음성지점" 을 같은 업체로 인식)
+function stripCorpMarkers(s) {
+  return String(s || '').replace(/\(주\)/g, '').replace(/㈜/g, '').replace(/주식회사/g, '').trim();
+}
+
 function parseBankIncoming(filePath) {
   const { normalizeCardName } = require('./bankParser');
   const wb = XLSX.readFile(filePath, { type: 'file', cellDates: true, codepage: 949 });
@@ -293,7 +304,7 @@ function parseBankIncoming(filePath) {
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
   let headerIdx = -1;
-  let colDate = -1, colVendor = -1, colIn = -1;
+  let colDate = -1, colVendor = -1, colIn = -1, colNote = -1;
 
   for (let i = 0; i < Math.min(rows.length, 11); i++) {
     const row = rows[i].map(c => String(c).trim());
@@ -303,6 +314,7 @@ function parseBankIncoming(filePath) {
       colDate   = dIdx;
       colVendor = row.findIndex(c => c === '적요1');
       colIn     = row.findIndex(c => c === '입금');
+      colNote   = row.findIndex(c => c === '비고');
       if (colIn < 0) colIn = 6;
       break;
     }
@@ -321,6 +333,7 @@ function parseBankIncoming(filePath) {
     const payer = String(colVendor >= 0 ? (row[colVendor] || '') : '').trim();
     if (!payer) continue;
     if (normalizeCardName(payer)) continue;   // 카드사 입금은 별도 흐름(bank_deposits.json)에서 처리
+    if (isInternalTransfer(payer)) continue;  // 대표자/내부 계좌간 이체는 외상 회수가 아님
 
     const rawDate = row[colDate];
     let dateStr = '';
@@ -336,7 +349,8 @@ function parseBankIncoming(filePath) {
     const month = dateStr.slice(0, 7);
     if (!month || month.length < 7) continue;
 
-    result.push({ date: dateStr, month, payer, amount: Math.round(inAmt) });
+    const note = String(colNote >= 0 ? (row[colNote] || '') : '').trim();
+    result.push({ date: dateStr, month, payer, amount: Math.round(inAmt), note });
   }
   return result;
 }
@@ -344,4 +358,5 @@ function parseBankIncoming(filePath) {
 module.exports = {
   parseBankExpenses, buildHistoryIndex, classifyVendor,
   parseBankIncoming, normalize, vendorSimilarity,
+  stripBankSuffix, stripCorpMarkers,
 };

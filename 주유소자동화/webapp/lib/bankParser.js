@@ -2,17 +2,21 @@
 const XLSX = require('xlsx');
 
 // 카드사 이름 정규화 (은행 적요1 → 공통명)
+// 실제 카드 입금 적요는 "브랜드명+가맹점정산번호(숫자)" 형태(예: "삼성13929395")라
+// 브랜드명 뒤에 숫자가 바로 붙는 경우만 카드로 인정한다. 느슨하게 "현대"/"삼성"/"우리"
+// 등 단어 포함 여부만 보면 "현대스크랩", "(주)우리들푸드", "삼성냉난방기" 같은
+// 실제 거래처명까지 카드로 오판해 외상 입금 매칭에서 통째로 사라지는 문제가 있었음.
 function normalizeCardName(raw) {
   const s = String(raw || '').trim();
-  if (/KB|국민카드/i.test(s))   return 'KB국민카드';
-  if (/삼성/i.test(s))           return '삼성카드';
-  if (/NH|농협/i.test(s))        return '농협카드';
-  if (/롯데/i.test(s))           return '롯데카드';
-  if (/BC|비씨/i.test(s))        return '비씨카드';
-  if (/신한/i.test(s))           return '신한카드';
-  if (/현대/i.test(s))           return '현대카드';
-  if (/하나카드|하나체크|하나구외환|하나\d{6,}/i.test(s)) return '하나카드';
-  if (/우리/i.test(s))           return '우리카드';
+  if (/^KB\d|국민카드/i.test(s))   return 'KB국민카드';
+  if (/^삼성\d/i.test(s))           return '삼성카드';
+  if (/^NH\d|^농협\d/i.test(s))     return '농협카드';
+  if (/^롯데\d|롯데카드/i.test(s))  return '롯데카드';
+  if (/BC\/매출대금|비씨카드/i.test(s)) return '비씨카드';
+  if (/^신한\d/i.test(s))           return '신한카드';
+  if (/^현대\d/i.test(s))           return '현대카드';
+  if (/하나카드|하나체크|하나구외환|^하나\d{6,}/i.test(s)) return '하나카드';
+  if (/^우리\d/i.test(s))           return '우리카드';
   return null; // 카드사 아님
 }
 

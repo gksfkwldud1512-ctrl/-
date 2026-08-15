@@ -10,8 +10,8 @@
         "avgPrice": null
       },
       "경유": {
-        "qty": 26321,
-        "amount": 49067819,
+        "qty": 51426,
+        "amount": 95865819,
         "avgPrice": 1864
       },
       "등유": {
@@ -22,8 +22,8 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 26321,
-    "totalAmount": 49067819
+    "totalQty": 51426,
+    "totalAmount": 95865819
   },
   {
     "name": "건국유업",
@@ -36,8 +36,8 @@
         "avgPrice": 1940
       },
       "경유": {
-        "qty": 12964,
-        "amount": 23508630,
+        "qty": 22929,
+        "amount": 41574640,
         "avgPrice": 1813
       },
       "등유": {
@@ -48,8 +48,8 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 12998.02,
-    "totalAmount": 23574630
+    "totalQty": 22963.02,
+    "totalAmount": 41640640
   },
   {
     "name": "현금고객",
@@ -57,13 +57,13 @@
     "payType": "신용카드",
     "fuels": {
       "휘발유": {
-        "qty": 2461.64,
-        "amount": 4777515,
-        "avgPrice": 1941
+        "qty": 4132.62,
+        "amount": 8019273,
+        "avgPrice": 1940
       },
       "경유": {
-        "qty": 3889.13,
-        "amount": 7366697,
+        "qty": 7382.25,
+        "amount": 13983204,
         "avgPrice": 1894
       },
       "등유": {
@@ -74,8 +74,8 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 6350.77,
-    "totalAmount": 12144212
+    "totalQty": 11514.87,
+    "totalAmount": 22002477
   },
   {
     "name": "디비엘(주)음성지점",
@@ -88,20 +88,72 @@
         "avgPrice": null
       },
       "경유": {
-        "qty": 315.91,
-        "amount": 593595,
+        "qty": 665.35,
+        "amount": 1250193,
         "avgPrice": 1879
       },
       "등유": {
-        "qty": 3000,
-        "amount": 4740000,
+        "qty": 6000,
+        "amount": 9480000,
         "avgPrice": 1580
+      }
+    },
+    "carwash": 20000,
+    "others": 0,
+    "totalQty": 6665.35,
+    "totalAmount": 10750193
+  },
+  {
+    "name": "(주)중앙안전유리",
+    "custNo": "0000045",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 95,
+        "amount": 177650,
+        "avgPrice": 1870
+      },
+      "경유": {
+        "qty": 4790,
+        "amount": 8760910,
+        "avgPrice": 1829
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
       }
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 3315.91,
-    "totalAmount": 5333595
+    "totalQty": 4885,
+    "totalAmount": 8938560
+  },
+  {
+    "name": "대표현금고객",
+    "custNo": "4999203",
+    "payType": "신용카드",
+    "fuels": {
+      "휘발유": {
+        "qty": 1333.95,
+        "amount": 2588073,
+        "avgPrice": 1940
+      },
+      "경유": {
+        "qty": 2011.05,
+        "amount": 3799381,
+        "avgPrice": 1889
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 668000,
+    "others": 1665220,
+    "totalQty": 3345,
+    "totalAmount": 8720674
   },
   {
     "name": "풀무원",
@@ -114,9 +166,9 @@
         "avgPrice": null
       },
       "경유": {
-        "qty": 2402,
-        "amount": 4359120,
-        "avgPrice": 1815
+        "qty": 4173,
+        "amount": 7582340,
+        "avgPrice": 1817
       },
       "등유": {
         "qty": 0,
@@ -126,60 +178,8 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 2402,
-    "totalAmount": 4359120
-  },
-  {
-    "name": "대표현금고객",
-    "custNo": "4999203",
-    "payType": "신용카드",
-    "fuels": {
-      "휘발유": {
-        "qty": 805.6,
-        "amount": 1563073,
-        "avgPrice": 1940
-      },
-      "경유": {
-        "qty": 583.28,
-        "amount": 1108285,
-        "avgPrice": 1900
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 368000,
-    "others": 986150,
-    "totalQty": 1388.88,
-    "totalAmount": 4025508
-  },
-  {
-    "name": "현대스크랩",
-    "custNo": "0000070",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 119,
-        "amount": 224910,
-        "avgPrice": 1890
-      },
-      "경유": {
-        "qty": 2014,
-        "amount": 3724501,
-        "avgPrice": 1849
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 2133,
-    "totalAmount": 3949411
+    "totalQty": 4173,
+    "totalAmount": 7582340
   },
   {
     "name": "에스피로지스",
@@ -192,9 +192,9 @@
         "avgPrice": null
       },
       "경유": {
-        "qty": 1899.21,
-        "amount": 3426737,
-        "avgPrice": 1804
+        "qty": 3933.97,
+        "amount": 7090083,
+        "avgPrice": 1802
       },
       "등유": {
         "qty": 0,
@@ -204,23 +204,23 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 1899.21,
-    "totalAmount": 3426737
+    "totalQty": 3933.97,
+    "totalAmount": 7090083
   },
   {
-    "name": "(주)중앙안전유리",
-    "custNo": "0000045",
+    "name": "현대스크랩",
+    "custNo": "0000070",
     "payType": "외상",
     "fuels": {
       "휘발유": {
-        "qty": 45,
-        "amount": 84150,
-        "avgPrice": 1870
+        "qty": 241.62,
+        "amount": 456662,
+        "avgPrice": 1890
       },
       "경유": {
-        "qty": 1731,
-        "amount": 3165999,
-        "avgPrice": 1829
+        "qty": 3570,
+        "amount": 6601545,
+        "avgPrice": 1849
       },
       "등유": {
         "qty": 0,
@@ -230,60 +230,8 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 1776,
-    "totalAmount": 3250149
-  },
-  {
-    "name": "문수관광",
-    "custNo": "0000124",
-    "payType": "신용카드",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 1244,
-        "amount": 2283756,
-        "avgPrice": 1836
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 1244,
-    "totalAmount": 2283756
-  },
-  {
-    "name": "대신택배",
-    "custNo": "0000024",
-    "payType": "신용카드",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 1218,
-        "amount": 2219250,
-        "avgPrice": 1822
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 1218,
-    "totalAmount": 2219250
+    "totalQty": 3811.62,
+    "totalAmount": 7058207
   },
   {
     "name": "신성기업주식회사",
@@ -296,8 +244,8 @@
         "avgPrice": null
       },
       "경유": {
-        "qty": 1165,
-        "amount": 2130785,
+        "qty": 2412,
+        "amount": 4411548,
         "avgPrice": 1829
       },
       "등유": {
@@ -308,12 +256,12 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 1165,
-    "totalAmount": 2130785
+    "totalQty": 2412,
+    "totalAmount": 4411548
   },
   {
-    "name": "하이포크개인",
-    "custNo": "0000093",
+    "name": "대신택배",
+    "custNo": "0000024",
     "payType": "신용카드",
     "fuels": {
       "휘발유": {
@@ -322,9 +270,9 @@
         "avgPrice": null
       },
       "경유": {
-        "qty": 1104,
-        "amount": 2042400,
-        "avgPrice": 1850
+        "qty": 2269.98,
+        "amount": 4140468,
+        "avgPrice": 1824
       },
       "등유": {
         "qty": 0,
@@ -334,268 +282,8 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 1104,
-    "totalAmount": 2042400
-  },
-  {
-    "name": "(주)하나항공여행사",
-    "custNo": "0000046",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 1044,
-        "amount": 1951986,
-        "avgPrice": 1870
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 64050,
-    "totalQty": 1044,
-    "totalAmount": 2016036
-  },
-  {
-    "name": "에스피씨",
-    "custNo": "0000073",
-    "payType": "신용카드",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 986,
-        "amount": 1833960,
-        "avgPrice": 1860
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 986,
-    "totalAmount": 1833960
-  },
-  {
-    "name": "풀무원외상6576",
-    "custNo": "0000082",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 929,
-        "amount": 1704715,
-        "avgPrice": 1835
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 96000,
-    "totalQty": 929,
-    "totalAmount": 1800715
-  },
-  {
-    "name": "하나물류",
-    "custNo": "0000104",
-    "payType": "신용카드",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 986,
-        "amount": 1794520,
-        "avgPrice": 1820
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 986,
-    "totalAmount": 1794520
-  },
-  {
-    "name": "특별화물",
-    "custNo": "0000116",
-    "payType": "신용카드",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 971,
-        "amount": 1786230,
-        "avgPrice": 1840
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 971,
-    "totalAmount": 1786230
-  },
-  {
-    "name": "동현로지스",
-    "custNo": "0000010",
-    "payType": "신용카드",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 926,
-        "amount": 1693858,
-        "avgPrice": 1829
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 926,
-    "totalAmount": 1693858
-  },
-  {
-    "name": "태성화학주식회사",
-    "custNo": "0000006",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 843,
-        "amount": 1588362,
-        "avgPrice": 1884
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 843,
-    "totalAmount": 1588362
-  },
-  {
-    "name": "동주산업",
-    "custNo": "0000120",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 843,
-        "amount": 1575567,
-        "avgPrice": 1869
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 843,
-    "totalAmount": 1575567
-  },
-  {
-    "name": "(주)나람",
-    "custNo": "0000077",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 800,
-        "amount": 1519200,
-        "avgPrice": 1899
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 800,
-    "totalAmount": 1519200
-  },
-  {
-    "name": "대표화물2",
-    "custNo": "0000114",
-    "payType": "신용카드",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 801.66,
-        "amount": 1502333,
-        "avgPrice": 1874
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 801.66,
-    "totalAmount": 1502333
+    "totalQty": 2269.98,
+    "totalAmount": 4140468
   },
   {
     "name": "삼동(주)",
@@ -608,8 +296,8 @@
         "avgPrice": null
       },
       "경유": {
-        "qty": 797,
-        "amount": 1473653,
+        "qty": 1980,
+        "amount": 3661020,
         "avgPrice": 1849
       },
       "등유": {
@@ -620,8 +308,242 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 797,
-    "totalAmount": 1473653
+    "totalQty": 1980,
+    "totalAmount": 3661020
+  },
+  {
+    "name": "특별화물",
+    "custNo": "0000116",
+    "payType": "신용카드",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 1976,
+        "amount": 3636120,
+        "avgPrice": 1840
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 1976,
+    "totalAmount": 3636120
+  },
+  {
+    "name": "문수관광",
+    "custNo": "0000124",
+    "payType": "신용카드",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 1974,
+        "amount": 3623306,
+        "avgPrice": 1836
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 1974,
+    "totalAmount": 3623306
+  },
+  {
+    "name": "에스피씨",
+    "custNo": "0000073",
+    "payType": "신용카드",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 1891.56,
+        "amount": 3520695,
+        "avgPrice": 1861
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 1891.56,
+    "totalAmount": 3520695
+  },
+  {
+    "name": "(주)하나항공여행사",
+    "custNo": "0000046",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 1706.94,
+        "amount": 3191021,
+        "avgPrice": 1869
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 90050,
+    "totalQty": 1706.94,
+    "totalAmount": 3281071
+  },
+  {
+    "name": "태성화학주식회사",
+    "custNo": "0000006",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 1731,
+        "amount": 3256914,
+        "avgPrice": 1882
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 1731,
+    "totalAmount": 3256914
+  },
+  {
+    "name": "하이포크개인",
+    "custNo": "0000093",
+    "payType": "신용카드",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 1732,
+        "amount": 3204200,
+        "avgPrice": 1850
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 1732,
+    "totalAmount": 3204200
+  },
+  {
+    "name": "동주산업",
+    "custNo": "0000120",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 1590,
+        "amount": 2971710,
+        "avgPrice": 1869
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 1590,
+    "totalAmount": 2971710
+  },
+  {
+    "name": "대표화물2",
+    "custNo": "0000114",
+    "payType": "신용카드",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 1533.99,
+        "amount": 2874663,
+        "avgPrice": 1874
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 1533.99,
+    "totalAmount": 2874663
+  },
+  {
+    "name": "하나물류",
+    "custNo": "0000104",
+    "payType": "신용카드",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 1457,
+        "amount": 2651740,
+        "avgPrice": 1820
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 1457,
+    "totalAmount": 2651740
   },
   {
     "name": "영진물산(주)",
@@ -629,13 +551,13 @@
     "payType": "외상",
     "fuels": {
       "휘발유": {
-        "qty": 215,
-        "amount": 417100,
+        "qty": 373,
+        "amount": 723620,
         "avgPrice": 1940
       },
       "경유": {
-        "qty": 526,
-        "amount": 986250,
+        "qty": 950,
+        "amount": 1781250,
         "avgPrice": 1875
       },
       "등유": {
@@ -645,24 +567,50 @@
       }
     },
     "carwash": 0,
-    "others": 32000,
-    "totalQty": 741,
-    "totalAmount": 1435350
+    "others": 45000,
+    "totalQty": 1323,
+    "totalAmount": 2549870
   },
   {
-    "name": "명성레이저",
-    "custNo": "0000004",
+    "name": "풀무원외상6576",
+    "custNo": "0000082",
     "payType": "외상",
     "fuels": {
       "휘발유": {
-        "qty": 70,
-        "amount": 136080,
-        "avgPrice": 1944
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
       },
       "경유": {
-        "qty": 650,
-        "amount": 1204450,
-        "avgPrice": 1853
+        "qty": 1147,
+        "amount": 2104745,
+        "avgPrice": 1835
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 128000,
+    "totalQty": 1147,
+    "totalAmount": 2232745
+  },
+  {
+    "name": "동현로지스",
+    "custNo": "0000010",
+    "payType": "신용카드",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 1166,
+        "amount": 2135218,
+        "avgPrice": 1831
       },
       "등유": {
         "qty": 0,
@@ -672,34 +620,8 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 720,
-    "totalAmount": 1340530
-  },
-  {
-    "name": "(주)에이치스틸",
-    "custNo": "0000041",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 655,
-        "amount": 1230745,
-        "avgPrice": 1879
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 655,
-    "totalAmount": 1230745
+    "totalQty": 1166,
+    "totalAmount": 2135218
   },
   {
     "name": "진영로지스",
@@ -712,60 +634,8 @@
         "avgPrice": null
       },
       "경유": {
-        "qty": 618.31,
-        "amount": 1136489,
-        "avgPrice": 1838
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 618.31,
-    "totalAmount": 1136489
-  },
-  {
-    "name": "일반화물2731",
-    "custNo": "0000011",
-    "payType": "신용카드",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 603,
-        "amount": 1102732,
-        "avgPrice": 1829
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 603,
-    "totalAmount": 1102732
-  },
-  {
-    "name": "풀무원 8470",
-    "custNo": "0000030",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 587,
-        "amount": 1077625,
+        "qty": 1145.66,
+        "amount": 2103683,
         "avgPrice": 1836
       },
       "등유": {
@@ -776,8 +646,60 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 587,
-    "totalAmount": 1077625
+    "totalQty": 1145.66,
+    "totalAmount": 2103683
+  },
+  {
+    "name": "(주)나람",
+    "custNo": "0000077",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 1104,
+        "amount": 2096496,
+        "avgPrice": 1899
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 1104,
+    "totalAmount": 2096496
+  },
+  {
+    "name": "(주)에이치스틸",
+    "custNo": "0000041",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 1069,
+        "amount": 2008651,
+        "avgPrice": 1879
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 32000,
+    "totalQty": 1069,
+    "totalAmount": 2040651
   },
   {
     "name": "특별화물A",
@@ -790,8 +712,8 @@
         "avgPrice": null
       },
       "경유": {
-        "qty": 586,
-        "amount": 1067272,
+        "qty": 1115,
+        "amount": 2030052,
         "avgPrice": 1821
       },
       "등유": {
@@ -802,90 +724,12 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 586,
-    "totalAmount": 1067272
+    "totalQty": 1115,
+    "totalAmount": 2030052
   },
   {
-    "name": "(주)가이아글로벌",
-    "custNo": "0000036",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 183.37,
-        "amount": 356000,
-        "avgPrice": 1941
-      },
-      "경유": {
-        "qty": 349.14,
-        "amount": 663000,
-        "avgPrice": 1899
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 532.51,
-    "totalAmount": 1019000
-  },
-  {
-    "name": "(주)제론텍",
-    "custNo": "0000044",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 338.68,
-        "amount": 657000,
-        "avgPrice": 1940
-      },
-      "경유": {
-        "qty": 188.52,
-        "amount": 358000,
-        "avgPrice": 1899
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 527.2,
-    "totalAmount": 1015000
-  },
-  {
-    "name": "조광페인트(주)",
-    "custNo": "0000069",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 495,
-        "amount": 925155,
-        "avgPrice": 1869
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 495,
-    "totalAmount": 925155
-  },
-  {
-    "name": "에스로지스",
-    "custNo": "0000013",
+    "name": "일반화물2731",
+    "custNo": "0000011",
     "payType": "신용카드",
     "fuels": {
       "휘발유": {
@@ -894,9 +738,9 @@
         "avgPrice": null
       },
       "경유": {
-        "qty": 505,
-        "amount": 918738,
-        "avgPrice": 1819
+        "qty": 1108,
+        "amount": 2023852,
+        "avgPrice": 1827
       },
       "등유": {
         "qty": 0,
@@ -906,23 +750,23 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 505,
-    "totalAmount": 918738
+    "totalQty": 1108,
+    "totalAmount": 2023852
   },
   {
-    "name": "주식회사 명신",
-    "custNo": "0000117",
+    "name": "명성레이저",
+    "custNo": "0000004",
     "payType": "외상",
     "fuels": {
       "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
+        "qty": 157,
+        "amount": 304860,
+        "avgPrice": 1942
       },
       "경유": {
-        "qty": 484,
-        "amount": 894916,
-        "avgPrice": 1849
+        "qty": 904,
+        "amount": 1674096,
+        "avgPrice": 1852
       },
       "등유": {
         "qty": 0,
@@ -932,60 +776,8 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 484,
-    "totalAmount": 894916
-  },
-  {
-    "name": "한누리투어(주)",
-    "custNo": "0000034",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 431,
-        "amount": 805539,
-        "avgPrice": 1869
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 16000,
-    "totalQty": 431,
-    "totalAmount": 821539
-  },
-  {
-    "name": "두원종합개발주식회사",
-    "custNo": "0000083",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 434,
-        "amount": 806806,
-        "avgPrice": 1859
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 434,
-    "totalAmount": 806806
+    "totalQty": 1061,
+    "totalAmount": 1978956
   },
   {
     "name": "주식회사 하나관광여행사",
@@ -998,8 +790,8 @@
         "avgPrice": null
       },
       "경유": {
-        "qty": 414,
-        "amount": 773766,
+        "qty": 1024,
+        "amount": 1913856,
         "avgPrice": 1869
       },
       "등유": {
@@ -1009,14 +801,14 @@
       }
     },
     "carwash": 0,
-    "others": 12210,
-    "totalQty": 414,
-    "totalAmount": 785976
+    "others": 58150,
+    "totalQty": 1024,
+    "totalAmount": 1972006
   },
   {
-    "name": "일반화물",
-    "custNo": "0000052",
-    "payType": "신용카드",
+    "name": "조광페인트(주)",
+    "custNo": "0000069",
+    "payType": "외상",
     "fuels": {
       "휘발유": {
         "qty": 0,
@@ -1024,9 +816,9 @@
         "avgPrice": null
       },
       "경유": {
-        "qty": 391,
-        "amount": 727190,
-        "avgPrice": 1860
+        "qty": 995,
+        "amount": 1859655,
+        "avgPrice": 1869
       },
       "등유": {
         "qty": 0,
@@ -1036,12 +828,64 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 391,
-    "totalAmount": 727190
+    "totalQty": 995,
+    "totalAmount": 1859655
   },
   {
-    "name": "중앙산업",
-    "custNo": "0000031",
+    "name": "(주)가이아글로벌",
+    "custNo": "0000036",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 397.8,
+        "amount": 772000,
+        "avgPrice": 1941
+      },
+      "경유": {
+        "qty": 513.97,
+        "amount": 976000,
+        "avgPrice": 1899
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 911.77,
+    "totalAmount": 1748000
+  },
+  {
+    "name": "(주)제론텍",
+    "custNo": "0000044",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 631.04,
+        "amount": 1224180,
+        "avgPrice": 1940
+      },
+      "경유": {
+        "qty": 273.31,
+        "amount": 519000,
+        "avgPrice": 1899
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 904.35,
+    "totalAmount": 1743180
+  },
+  {
+    "name": "한누리투어(주)",
+    "custNo": "0000034",
     "payType": "외상",
     "fuels": {
       "휘발유": {
@@ -1050,9 +894,9 @@
         "avgPrice": null
       },
       "경유": {
-        "qty": 372.83,
-        "amount": 708000,
-        "avgPrice": 1899
+        "qty": 834,
+        "amount": 1558746,
+        "avgPrice": 1869
       },
       "등유": {
         "qty": 0,
@@ -1062,12 +906,12 @@
     },
     "carwash": 0,
     "others": 16000,
-    "totalQty": 372.83,
-    "totalAmount": 724000
+    "totalQty": 834,
+    "totalAmount": 1574746
   },
   {
-    "name": "홍창엠앤티(주)",
-    "custNo": "0000005",
+    "name": "풀무원 8470",
+    "custNo": "0000030",
     "payType": "외상",
     "fuels": {
       "휘발유": {
@@ -1076,9 +920,9 @@
         "avgPrice": null
       },
       "경유": {
-        "qty": 325,
-        "amount": 610675,
-        "avgPrice": 1879
+        "qty": 770,
+        "amount": 1413430,
+        "avgPrice": 1836
       },
       "등유": {
         "qty": 0,
@@ -1088,86 +932,8 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 325,
-    "totalAmount": 610675
-  },
-  {
-    "name": "(주)다성산업",
-    "custNo": "0000038",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 303,
-        "amount": 587960,
-        "avgPrice": 1940
-      },
-      "경유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 303,
-    "totalAmount": 587960
-  },
-  {
-    "name": "다올이앤씨(주)보수보강",
-    "custNo": "0000122",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 306.69,
-        "amount": 586000,
-        "avgPrice": 1911
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 306.69,
-    "totalAmount": 586000
-  },
-  {
-    "name": "동일농장",
-    "custNo": "0000078",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 30,
-        "amount": 58200,
-        "avgPrice": 1940
-      },
-      "경유": {
-        "qty": 271.08,
-        "amount": 514780,
-        "avgPrice": 1899
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 301.08,
-    "totalAmount": 572980
+    "totalQty": 770,
+    "totalAmount": 1413430
   },
   {
     "name": "개별화물",
@@ -1180,9 +946,9 @@
         "avgPrice": null
       },
       "경유": {
-        "qty": 301,
-        "amount": 550228,
-        "avgPrice": 1828
+        "qty": 735,
+        "amount": 1341844,
+        "avgPrice": 1826
       },
       "등유": {
         "qty": 0,
@@ -1192,8 +958,86 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 301,
-    "totalAmount": 550228
+    "totalQty": 735,
+    "totalAmount": 1341844
+  },
+  {
+    "name": "두원종합개발주식회사",
+    "custNo": "0000083",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 56.19,
+        "amount": 106761,
+        "avgPrice": 1900
+      },
+      "경유": {
+        "qty": 662,
+        "amount": 1230658,
+        "avgPrice": 1859
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 718.19,
+    "totalAmount": 1337419
+  },
+  {
+    "name": "일반화물4159",
+    "custNo": "0000127",
+    "payType": "신용카드",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 727,
+        "amount": 1315870,
+        "avgPrice": 1810
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 727,
+    "totalAmount": 1315870
+  },
+  {
+    "name": "주식회사 명신",
+    "custNo": "0000117",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 708,
+        "amount": 1309092,
+        "avgPrice": 1849
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 708,
+    "totalAmount": 1309092
   },
   {
     "name": "(주)메탈링크",
@@ -1206,8 +1050,8 @@
         "avgPrice": null
       },
       "경유": {
-        "qty": 290,
-        "amount": 542010,
+        "qty": 691,
+        "amount": 1291479,
         "avgPrice": 1869
       },
       "등유": {
@@ -1218,22 +1062,178 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 290,
-    "totalAmount": 542010
+    "totalQty": 691,
+    "totalAmount": 1291479
   },
   {
-    "name": "재상플랜트",
-    "custNo": "0000002",
+    "name": "홍창엠앤티(주)",
+    "custNo": "0000005",
     "payType": "외상",
     "fuels": {
       "휘발유": {
-        "qty": 102.57,
-        "amount": 199000,
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 653,
+        "amount": 1226987,
+        "avgPrice": 1879
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 32000,
+    "totalQty": 653,
+    "totalAmount": 1258987
+  },
+  {
+    "name": "에스로지스",
+    "custNo": "0000013",
+    "payType": "신용카드",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 690,
+        "amount": 1254328,
+        "avgPrice": 1818
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 690,
+    "totalAmount": 1254328
+  },
+  {
+    "name": "중앙산업",
+    "custNo": "0000031",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 620.33,
+        "amount": 1178000,
+        "avgPrice": 1899
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 16000,
+    "totalQty": 620.33,
+    "totalAmount": 1194000
+  },
+  {
+    "name": "일반화물",
+    "custNo": "0000052",
+    "payType": "신용카드",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 612,
+        "amount": 1139355,
+        "avgPrice": 1862
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 612,
+    "totalAmount": 1139355
+  },
+  {
+    "name": "대소수영장",
+    "custNo": "0000065",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 521,
+        "amount": 989379,
+        "avgPrice": 1899
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 30000,
+    "totalQty": 521,
+    "totalAmount": 1019379
+  },
+  {
+    "name": "태양종합물류",
+    "custNo": "0000023",
+    "payType": "신용카드",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 546,
+        "amount": 1017744,
+        "avgPrice": 1864
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 546,
+    "totalAmount": 1017744
+  },
+  {
+    "name": "(주)유성이엔지",
+    "custNo": "0000043",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 71.13,
+        "amount": 138000,
         "avgPrice": 1940
       },
       "경유": {
-        "qty": 175.88,
-        "amount": 334000,
+        "qty": 455,
+        "amount": 864045,
         "avgPrice": 1899
       },
       "등유": {
@@ -1244,8 +1244,294 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 278.45,
-    "totalAmount": 533000
+    "totalQty": 526.13,
+    "totalAmount": 1002045
+  },
+  {
+    "name": "(주)미래산업",
+    "custNo": "0000040",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 510,
+        "amount": 968490,
+        "avgPrice": 1899
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 510,
+    "totalAmount": 968490
+  },
+  {
+    "name": "다올이앤씨(주)보수보강",
+    "custNo": "0000122",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 504.69,
+        "amount": 962002,
+        "avgPrice": 1906
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 504.69,
+    "totalAmount": 962002
+  },
+  {
+    "name": "동일농장",
+    "custNo": "0000078",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 77.11,
+        "amount": 149600,
+        "avgPrice": 1940
+      },
+      "경유": {
+        "qty": 426.08,
+        "amount": 809125,
+        "avgPrice": 1899
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 503.19,
+    "totalAmount": 958725
+  },
+  {
+    "name": "재상플랜트",
+    "custNo": "0000002",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 223.7,
+        "amount": 434000,
+        "avgPrice": 1940
+      },
+      "경유": {
+        "qty": 215.38,
+        "amount": 409000,
+        "avgPrice": 1899
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 439.08,
+    "totalAmount": 843000
+  },
+  {
+    "name": "대소대형렉카",
+    "custNo": "0000022",
+    "payType": "신용카드",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 437.66,
+        "amount": 813600,
+        "avgPrice": 1859
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 437.66,
+    "totalAmount": 813600
+  },
+  {
+    "name": "일진다이아몬드",
+    "custNo": "0000128",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 183,
+        "amount": 355020,
+        "avgPrice": 1940
+      },
+      "경유": {
+        "qty": 202,
+        "amount": 383598,
+        "avgPrice": 1899
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 385,
+    "totalAmount": 738618
+  },
+  {
+    "name": "대창폴리마",
+    "custNo": "0000060",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 147,
+        "amount": 285180,
+        "avgPrice": 1940
+      },
+      "경유": {
+        "qty": 220,
+        "amount": 417780,
+        "avgPrice": 1899
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 367,
+    "totalAmount": 702960
+  },
+  {
+    "name": "(주)다성산업",
+    "custNo": "0000038",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 303,
+        "amount": 587960,
+        "avgPrice": 1940
+      },
+      "경유": {
+        "qty": 40,
+        "amount": 75960,
+        "avgPrice": 1899
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 343,
+    "totalAmount": 663920
+  },
+  {
+    "name": "현금고객",
+    "custNo": "4996000",
+    "payType": "현금",
+    "fuels": {
+      "휘발유": {
+        "qty": 157.74,
+        "amount": 306000,
+        "avgPrice": 1940
+      },
+      "경유": {
+        "qty": 115.77,
+        "amount": 220000,
+        "avgPrice": 1900
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 273.51,
+    "totalAmount": 526000
+  },
+  {
+    "name": "CW소방",
+    "custNo": "0000047",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 259,
+        "amount": 491841,
+        "avgPrice": 1899
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 259,
+    "totalAmount": 491841
+  },
+  {
+    "name": "다올이앤씨",
+    "custNo": "0000025",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 41.24,
+        "amount": 80000,
+        "avgPrice": 1940
+      },
+      "경유": {
+        "qty": 208.08,
+        "amount": 396000,
+        "avgPrice": 1903
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 249.32,
+    "totalAmount": 476000
   },
   {
     "name": "한누리관광(주)",
@@ -1274,34 +1560,8 @@
     "totalAmount": 471000
   },
   {
-    "name": "대소대형렉카",
-    "custNo": "0000022",
-    "payType": "신용카드",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 237.66,
-        "amount": 441800,
-        "avgPrice": 1859
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 237.66,
-    "totalAmount": 441800
-  },
-  {
-    "name": "대소수영장",
-    "custNo": "0000065",
+    "name": "지성중공업",
+    "custNo": "0000072",
     "payType": "외상",
     "fuels": {
       "휘발유": {
@@ -1310,8 +1570,8 @@
         "avgPrice": null
       },
       "경유": {
-        "qty": 221,
-        "amount": 419679,
+        "qty": 230.65,
+        "amount": 438000,
         "avgPrice": 1899
       },
       "등유": {
@@ -1322,12 +1582,64 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 221,
-    "totalAmount": 419679
+    "totalQty": 230.65,
+    "totalAmount": 438000
   },
   {
-    "name": "일반화물4159",
-    "custNo": "0000127",
+    "name": "대표현금고객",
+    "custNo": "4999203",
+    "payType": "현금",
+    "fuels": {
+      "휘발유": {
+        "qty": 129.9,
+        "amount": 252000,
+        "avgPrice": 1940
+      },
+      "경유": {
+        "qty": 68.12,
+        "amount": 130000,
+        "avgPrice": 1908
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 5000,
+    "others": 0,
+    "totalQty": 198.02,
+    "totalAmount": 387000
+  },
+  {
+    "name": "상공회의소",
+    "custNo": "0000064",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 103.1,
+        "amount": 200000,
+        "avgPrice": 1940
+      },
+      "경유": {
+        "qty": 94.79,
+        "amount": 180000,
+        "avgPrice": 1899
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 197.89,
+    "totalAmount": 380000
+  },
+  {
+    "name": "오미관광(주)",
+    "custNo": "0000059",
     "payType": "신용카드",
     "fuels": {
       "휘발유": {
@@ -1336,9 +1648,9 @@
         "avgPrice": null
       },
       "경유": {
-        "qty": 219,
-        "amount": 396390,
-        "avgPrice": 1810
+        "qty": 200,
+        "amount": 379800,
+        "avgPrice": 1899
       },
       "등유": {
         "qty": 0,
@@ -1348,23 +1660,23 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 219,
-    "totalAmount": 396390
+    "totalQty": 200,
+    "totalAmount": 379800
   },
   {
-    "name": "다올이앤씨",
-    "custNo": "0000025",
+    "name": "(주)보정골재",
+    "custNo": "0000037",
     "payType": "외상",
     "fuels": {
       "휘발유": {
-        "qty": 41.24,
-        "amount": 80000,
-        "avgPrice": 1940
+        "qty": 199,
+        "amount": 374120,
+        "avgPrice": 1880
       },
       "경유": {
-        "qty": 148.05,
-        "amount": 282000,
-        "avgPrice": 1905
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
       },
       "등유": {
         "qty": 0,
@@ -1374,8 +1686,8 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 189.29,
-    "totalAmount": 362000
+    "totalQty": 199,
+    "totalAmount": 374120
   },
   {
     "name": "원6881",
@@ -1404,108 +1716,30 @@
     "totalAmount": 348753
   },
   {
-    "name": "상공회의소",
-    "custNo": "0000064",
-    "payType": "외상",
+    "name": "포인트",
+    "custNo": "4901006",
+    "payType": "포인트",
     "fuels": {
       "휘발유": {
-        "qty": 103.1,
-        "amount": 200000,
+        "qty": 97.94,
+        "amount": 190000,
         "avgPrice": 1940
       },
       "경유": {
-        "qty": 68.46,
-        "amount": 130000,
-        "avgPrice": 1899
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 171.56,
-    "totalAmount": 330000
-  },
-  {
-    "name": "(주)유성이엔지",
-    "custNo": "0000043",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 35.05,
-        "amount": 68000,
-        "avgPrice": 1940
-      },
-      "경유": {
-        "qty": 126,
-        "amount": 239274,
-        "avgPrice": 1899
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 161.05,
-    "totalAmount": 307274
-  },
-  {
-    "name": "(주)보정골재",
-    "custNo": "0000037",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 110,
-        "amount": 206800,
-        "avgPrice": 1880
-      },
-      "경유": {
         "qty": 0,
         "amount": 0,
         "avgPrice": null
       },
       "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
+        "qty": 40,
+        "amount": 64000,
+        "avgPrice": 1600
       }
     },
     "carwash": 0,
-    "others": 0,
-    "totalQty": 110,
-    "totalAmount": 206800
-  },
-  {
-    "name": "현금고객",
-    "custNo": "4996000",
-    "payType": "현금",
-    "fuels": {
-      "휘발유": {
-        "qty": 94.85,
-        "amount": 184000,
-        "avgPrice": 1940
-      },
-      "경유": {
-        "qty": 10.45,
-        "amount": 20000,
-        "avgPrice": 1914
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 105.3,
-    "totalAmount": 204000
+    "others": 91000,
+    "totalQty": 137.94,
+    "totalAmount": 345000
   },
   {
     "name": "이형찬",
@@ -1513,8 +1747,8 @@
     "payType": "외상",
     "fuels": {
       "휘발유": {
-        "qty": 70.62,
-        "amount": 137000,
+        "qty": 133,
+        "amount": 258000,
         "avgPrice": 1940
       },
       "경유": {
@@ -1530,138 +1764,8 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 100.62,
-    "totalAmount": 193970
-  },
-  {
-    "name": "태양종합물류",
-    "custNo": "0000023",
-    "payType": "신용카드",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 102,
-        "amount": 190128,
-        "avgPrice": 1864
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 102,
-    "totalAmount": 190128
-  },
-  {
-    "name": "일진다이아몬드",
-    "custNo": "0000128",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 19,
-        "amount": 36860,
-        "avgPrice": 1940
-      },
-      "경유": {
-        "qty": 69,
-        "amount": 131031,
-        "avgPrice": 1899
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 88,
-    "totalAmount": 167891
-  },
-  {
-    "name": "포인트",
-    "custNo": "4901006",
-    "payType": "포인트",
-    "fuels": {
-      "휘발유": {
-        "qty": 46.39,
-        "amount": 90000,
-        "avgPrice": 1940
-      },
-      "경유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 63000,
-    "totalQty": 46.39,
-    "totalAmount": 153000
-  },
-  {
-    "name": "대표현금고객",
-    "custNo": "4999203",
-    "payType": "현금",
-    "fuels": {
-      "휘발유": {
-        "qty": 32.99,
-        "amount": 64000,
-        "avgPrice": 1940
-      },
-      "경유": {
-        "qty": 41.79,
-        "amount": 80000,
-        "avgPrice": 1914
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 5000,
-    "others": 0,
-    "totalQty": 74.78,
-    "totalAmount": 149000
-  },
-  {
-    "name": "대창폴리마",
-    "custNo": "0000060",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 75,
-        "amount": 145500,
-        "avgPrice": 1940
-      },
-      "경유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 75,
-    "totalAmount": 145500
+    "totalQty": 163,
+    "totalAmount": 314970
   },
   {
     "name": "(학)건국대학교건국유업.건국햄",
@@ -1674,9 +1778,9 @@
         "avgPrice": null
       },
       "경유": {
-        "qty": 75,
-        "amount": 137925,
-        "avgPrice": 1839
+        "qty": 155,
+        "amount": 284725,
+        "avgPrice": 1837
       },
       "등유": {
         "qty": 0,
@@ -1686,8 +1790,8 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 75,
-    "totalAmount": 137925
+    "totalQty": 155,
+    "totalAmount": 284725
   },
   {
     "name": "경성물류",
@@ -1700,8 +1804,8 @@
         "avgPrice": null
       },
       "경유": {
-        "qty": 58.98,
-        "amount": 112000,
+        "qty": 116.91,
+        "amount": 222000,
         "avgPrice": 1899
       },
       "등유": {
@@ -1712,8 +1816,8 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 58.98,
-    "totalAmount": 112000
+    "totalQty": 116.91,
+    "totalAmount": 222000
   },
   {
     "name": "중앙복층유리 주식회사",
@@ -1721,8 +1825,8 @@
     "payType": "외상",
     "fuels": {
       "휘발유": {
-        "qty": 54,
-        "amount": 100980,
+        "qty": 108,
+        "amount": 201960,
         "avgPrice": 1870
       },
       "경유": {
@@ -1738,8 +1842,60 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 54,
-    "totalAmount": 100980
+    "totalQty": 108,
+    "totalAmount": 201960
+  },
+  {
+    "name": "성원트렌스",
+    "custNo": "0000017",
+    "payType": "신용카드",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 105.32,
+        "amount": 192630,
+        "avgPrice": 1829
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 105.32,
+    "totalAmount": 192630
+  },
+  {
+    "name": "(주)지주",
+    "custNo": "0000129",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 70,
+        "amount": 135800,
+        "avgPrice": 1940
+      },
+      "경유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 70,
+    "totalAmount": 135800
   },
   {
     "name": "디지털상품권",
@@ -1768,19 +1924,19 @@
     "totalAmount": 96000
   },
   {
-    "name": "지성중공업",
-    "custNo": "0000072",
+    "name": "금강어린이집",
+    "custNo": "0000079",
     "payType": "외상",
     "fuels": {
       "휘발유": {
+        "qty": 36.08,
+        "amount": 70000,
+        "avgPrice": 1940
+      },
+      "경유": {
         "qty": 0,
         "amount": 0,
         "avgPrice": null
-      },
-      "경유": {
-        "qty": 41.6,
-        "amount": 79000,
-        "avgPrice": 1899
       },
       "등유": {
         "qty": 0,
@@ -1790,7 +1946,33 @@
     },
     "carwash": 0,
     "others": 0,
-    "totalQty": 41.6,
-    "totalAmount": 79000
+    "totalQty": 36.08,
+    "totalAmount": 70000
+  },
+  {
+    "name": "디지털쿠폰",
+    "custNo": "4901002",
+    "payType": "디지털쿠폰",
+    "fuels": {
+      "휘발유": {
+        "qty": 2.58,
+        "amount": 5000,
+        "avgPrice": 1938
+      },
+      "경유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 2.58,
+    "totalAmount": 5000
   }
 ]

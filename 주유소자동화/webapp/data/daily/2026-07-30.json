@@ -977,10 +977,10 @@
   "card": {
     "date": "2026-07-30",
     "totalAmount": 25276669,
-    "totalFee": 0,
-    "totalNet": 0,
+    "totalFee": 352718,
+    "totalNet": 23607590,
     "count": 106,
-    "depositDate": "",
+    "depositDate": "2026-08-03",
     "cardTxs": [
       {
         "approvalNo": "36454236",
@@ -1831,7 +1831,15 @@
         "transTime": "00:05:15"
       }
     ],
-    "depositExpected": {}
+    "depositExpected": {
+      "2026-08-04": {
+        "KB국민카드": 6966141,
+        "비씨카드": 5368388
+      },
+      "2026-08-03": {
+        "하나카드": 164589
+      }
+    }
   },
   "matching": {
     "bosTotal": 20157329,
