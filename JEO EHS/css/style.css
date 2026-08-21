@@ -256,7 +256,7 @@ button { font-family: inherit; cursor: pointer; }
 .overview-view h2 { font-size: 24px; font-weight: 700; margin-bottom: 8px; color: white; }
 
 .overview-view-inner {
-  max-width: 1100px;
+  max-width: 1300px;
   margin: 0 auto;
 }
 
@@ -344,6 +344,35 @@ button { font-family: inherit; cursor: pointer; }
 .org-drop--3 { left: calc(var(--org-col-w) * 2 + var(--org-col-gap) * 2 + var(--org-col-w) / 2); }
 
 .org-categories {
+  display: flex;
+  gap: var(--org-col-gap);
+}
+
+/* 트렁크(안전/보건/환경)와 그 옆에 따로 떨어져 나온 독립 카테고리를 나란히 배치.
+   폭이 부족하면(좁은 화면) 자동으로 아래 줄로 넘어간다(flex-wrap). */
+.overview-layout {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 56px;
+  flex-wrap: wrap;
+}
+
+/* 트렁크 점선과 이어지지 않는 독립 카테고리 영역 — org-apex+org-trunk-h 높이만큼
+   위쪽에 여백을 줘서 org-categories 컬럼과 세로 위치가 맞도록 한다. */
+.org-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 78px;
+}
+.org-side-label {
+  font-size: 12px;
+  color: rgba(255,255,255,0.45);
+  margin-bottom: 10px;
+  letter-spacing: 0.02em;
+}
+.org-side-categories {
   display: flex;
   gap: var(--org-col-gap);
 }
@@ -680,4 +709,7 @@ button { font-family: inherit; cursor: pointer; }
   .org-apex { margin-bottom: 20px; }
   .org-categories { flex-direction: column; align-items: center; gap: 36px; }
   .org-column { width: 100%; max-width: 340px; }
+  .overview-layout { gap: 36px; }
+  .org-side { padding-top: 0; }
+  .org-side-categories { flex-direction: column; align-items: center; gap: 36px; }
 }

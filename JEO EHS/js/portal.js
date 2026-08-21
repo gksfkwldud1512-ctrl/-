@@ -4,6 +4,12 @@
   const homeViewEl = document.getElementById("homeView");
   const overviewViewEl = document.getElementById("overviewView");
   const orgCategoriesEl = document.getElementById("orgCategories");
+  const orgSideCategoriesEl = document.getElementById("orgSideCategories");
+  // org-trunk-h(로고 아래 가로/세로 점선)는 정확히 3개 컬럼(안전/보건/환경) 폭에 맞춰
+  // CSS에 고정 계산돼 있다(.org-drop--1/2/3). 이 3개는 트렁크에 연결해서 그리고,
+  // 그 외 카테고리(예: 회의자료 자동화)는 트렁크 폭 계산을 깨뜨리지 않도록 별도
+  // 영역(org-side)에 연결선 없이 따로 그린다.
+  const TRUNK_CATEGORY_KEYS = ["safety", "health", "environment"];
   const overviewNavBtn = document.getElementById("overviewNavBtn");
   const appFrameEl = document.getElementById("appFrame");
   const sidebarEl = document.getElementById("sidebar");
@@ -209,51 +215,61 @@
     return wrap;
   }
 
-  // 카테고리 노드 -> 항목1 -> 항목2 -> ... 를 짧은 세로선으로 잇는 단순 체인 구조.
-  // 항목이 몇 개든(0개~N개) 컬럼 한가운데를 그대로 따라가므로 늘어지거나 어긋나지 않고,
-  // menu-data.js에 항목을 추가/삭제하면 다음 렌더링에서 선도 자동으로 다시 그려진다.
+  // 카테고리 1개 -> 컬럼(노드+요약+세부항목 체인) DOM을 만든다. 트렁크에 붙는 카테고리든
+  // 옆으로 뺀 독립 카테고리든 컬럼 내부 구조(카테고리 노드 -> 항목1 -> 항목2 -> ...)는 동일하다.
+  function buildCategoryColumn(category) {
+    const items = category.items || [];
+    const planned = category.plannedItems || [];
+    const allItems = [...items.map((i) => [i, false]), ...planned.map((i) => [i, true])];
+
+    const col = document.createElement("div");
+    col.className = "org-column";
+
+    const nodeBtn = document.createElement("button");
+    nodeBtn.type = "button";
+    nodeBtn.className = "org-category-node";
+    nodeBtn.innerHTML = `<span class="org-category-icon">${category.icon}</span><span>${category.label}</span><span class="org-category-caret">▾</span>`;
+
+    const summary = buildCategorySummary(category, allItems);
+    summary.classList.add("hidden");
+    nodeBtn.addEventListener("click", () => {
+      summary.classList.toggle("hidden");
+      nodeBtn.classList.toggle("open");
+    });
+
+    col.appendChild(nodeBtn);
+    col.appendChild(summary);
+
+    const itemsWrap = document.createElement("ul");
+    itemsWrap.className = "org-items-wrap";
+
+    if (allItems.length === 0) {
+      itemsWrap.appendChild(buildConnector());
+      const emptyLi = document.createElement("li");
+      emptyLi.className = "org-item org-item--empty";
+      emptyLi.textContent = "준비 중";
+      itemsWrap.appendChild(emptyLi);
+    } else {
+      allItems.forEach(([item, isPlanned]) => {
+        itemsWrap.appendChild(buildConnector());
+        itemsWrap.appendChild(buildOrgItem(category, item, isPlanned));
+      });
+    }
+
+    col.appendChild(itemsWrap);
+    return col;
+  }
+
+  // 안전/보건/환경 3개는 트렁크(로고 아래 가로/세로 점선, .org-drop--1/2/3에 폭이 고정됨)에
+  // 이어서 그리고, 그 외 카테고리는 트렁크 폭 계산이 깨지지 않도록 옆(org-side)에 따로 그린다.
   function buildOverview() {
     EHS_MENU.forEach((category) => {
-      const items = category.items || [];
-      const planned = category.plannedItems || [];
-      const allItems = [...items.map((i) => [i, false]), ...planned.map((i) => [i, true])];
-
-      const col = document.createElement("div");
-      col.className = "org-column";
-
-      const nodeBtn = document.createElement("button");
-      nodeBtn.type = "button";
-      nodeBtn.className = "org-category-node";
-      nodeBtn.innerHTML = `<span class="org-category-icon">${category.icon}</span><span>${category.label}</span><span class="org-category-caret">▾</span>`;
-
-      const summary = buildCategorySummary(category, allItems);
-      summary.classList.add("hidden");
-      nodeBtn.addEventListener("click", () => {
-        summary.classList.toggle("hidden");
-        nodeBtn.classList.toggle("open");
-      });
-
-      col.appendChild(nodeBtn);
-      col.appendChild(summary);
-
-      const itemsWrap = document.createElement("ul");
-      itemsWrap.className = "org-items-wrap";
-
-      if (allItems.length === 0) {
-        itemsWrap.appendChild(buildConnector());
-        const emptyLi = document.createElement("li");
-        emptyLi.className = "org-item org-item--empty";
-        emptyLi.textContent = "준비 중";
-        itemsWrap.appendChild(emptyLi);
+      const col = buildCategoryColumn(category);
+      if (TRUNK_CATEGORY_KEYS.includes(category.key)) {
+        orgCategoriesEl.appendChild(col);
       } else {
-        allItems.forEach(([item, isPlanned]) => {
-          itemsWrap.appendChild(buildConnector());
-          itemsWrap.appendChild(buildOrgItem(category, item, isPlanned));
-        });
+        orgSideCategoriesEl.appendChild(col);
       }
-
-      col.appendChild(itemsWrap);
-      orgCategoriesEl.appendChild(col);
     });
   }
 

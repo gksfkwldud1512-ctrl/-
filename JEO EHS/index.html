@@ -56,19 +56,25 @@
       <div class="overview-view-inner">
         <h2>종합화면</h2>
         <p class="overview-sub">세부 항목을 누르면 입력→처리→출력 로직을 볼 수 있습니다.</p>
-        <div class="org-tree">
-          <div class="org-apex">
-            <img src="assets/logo.png" class="org-apex-logo" alt="">
-            <span>JEO EH&amp;S</span>
+        <div class="overview-layout">
+          <div class="org-tree">
+            <div class="org-apex">
+              <img src="assets/logo.png" class="org-apex-logo" alt="">
+              <span>JEO EH&amp;S</span>
+            </div>
+            <div class="org-trunk-h" aria-hidden="true">
+              <span class="org-trunk-up org-line-v"></span>
+              <span class="org-trunk-bar org-line-h"></span>
+              <span class="org-drop org-drop--1 org-line-v"></span>
+              <span class="org-drop org-drop--2 org-line-v"></span>
+              <span class="org-drop org-drop--3 org-line-v"></span>
+            </div>
+            <div class="org-categories" id="orgCategories"></div>
           </div>
-          <div class="org-trunk-h" aria-hidden="true">
-            <span class="org-trunk-up org-line-v"></span>
-            <span class="org-trunk-bar org-line-h"></span>
-            <span class="org-drop org-drop--1 org-line-v"></span>
-            <span class="org-drop org-drop--2 org-line-v"></span>
-            <span class="org-drop org-drop--3 org-line-v"></span>
+          <div class="org-side">
+            <div class="org-side-label">독립 운영 항목</div>
+            <div class="org-side-categories" id="orgSideCategories"></div>
           </div>
-          <div class="org-categories" id="orgCategories"></div>
         </div>
       </div>
     </section>
