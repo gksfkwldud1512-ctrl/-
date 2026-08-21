@@ -101,16 +101,69 @@ function pointsFromMap(map: Map<string, number>): MonthlyPoint[] {
   return points;
 }
 
-export async function parseKpiDetailsWorkbook(buffer: Buffer, filename: string): Promise<KpiSummary> {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buffer as unknown as ExcelJS.Buffer);
-  const ws = wb.worksheets[0];
-  if (!ws) throw new Error("워크시트를 찾을 수 없습니다.");
+const REQUIRED_HEADERS = ["MEASURES LEVEL0", "MEASURES LEVEL1", "MEASURES", "MONTH", "YEAR", "VALUE"] as const;
 
+/** 파일 앞부분이 zip(PK) 시그니처인지 확인. .xlsx는 zip 컨테이너이므로, 이게 아니면
+ *  구버전 .xls이거나 손상된 파일 — exceljs가 알아듣기 힘든 저수준 에러를 던지기 전에 미리 걸러낸다. */
+function looksLikeZip(buffer: Buffer): boolean {
+  if (buffer.length < 4) return false;
+  return buffer[0] === 0x50 && buffer[1] === 0x4b && (buffer[2] === 0x03 || buffer[2] === 0x05 || buffer[2] === 0x07);
+}
+
+function readHeaderRow(ws: ExcelJS.Worksheet): string[] {
   const headers: string[] = [];
   ws.getRow(1).eachCell((cell, col) => {
     headers[col] = String(cell.value ?? "").trim();
   });
+  return headers;
+}
+
+export async function parseKpiDetailsWorkbook(buffer: Buffer, filename: string): Promise<KpiSummary> {
+  if (!looksLikeZip(buffer)) {
+    throw new Error(
+      "업로드한 파일이 표준 Excel(.xlsx) 형식이 아닌 것 같습니다. 예전 형식(.xls)이거나 파일이 손상됐을 수 있습니다. " +
+        "Excel에서 파일을 열어 '다른 이름으로 저장 → Excel 통합 문서(.xlsx)'로 다시 저장한 뒤 업로드해 주세요."
+    );
+  }
+
+  const wb = new ExcelJS.Workbook();
+  try {
+    await wb.xlsx.load(buffer as unknown as ExcelJS.Buffer);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      "엑셀 파일을 여는 데 실패했습니다. 암호로 보호되어 있거나 손상된 파일일 수 있습니다. " +
+        `암호가 걸려 있다면 해제한 뒤 다시 저장해서 업로드해 주세요. (상세: ${detail})`
+    );
+  }
+
+  if (wb.worksheets.length === 0) throw new Error("워크시트를 찾을 수 없습니다.");
+
+  // 필요한 헤더를 모두 가진 시트를 자동으로 찾는다 (기존: 무조건 첫 번째 시트만 봄 —
+  // 새 내보내기 파일에 표지/요약 시트가 추가되면 엉뚱한 시트를 읽어서 깨졌었다).
+  let ws: ExcelJS.Worksheet | undefined;
+  let headers: string[] = [];
+  const sheetReport: { name: string; headers: string[] }[] = [];
+  for (const candidate of wb.worksheets) {
+    const h = readHeaderRow(candidate);
+    sheetReport.push({ name: candidate.name, headers: h.filter(Boolean) });
+    if (REQUIRED_HEADERS.every((req) => h.includes(req))) {
+      ws = candidate;
+      headers = h;
+      break;
+    }
+  }
+
+  if (!ws) {
+    const found = sheetReport
+      .map((s) => `- [${s.name}] 시트에서 찾은 헤더: ${s.headers.length ? s.headers.join(", ") : "(헤더 없음)"}`)
+      .join("\n");
+    throw new Error(
+      `필요한 컬럼(${REQUIRED_HEADERS.join("/")})을 어떤 시트에서도 찾지 못했습니다. ` +
+        `SPHERA/E MASTER 내보내기 형식인지 확인해 주세요.\n\n[파일에서 실제로 찾은 헤더]\n${found}`
+    );
+  }
+
   const colIndex = (name: string) => headers.findIndex((h) => h === name);
 
   const iLevel0 = colIndex("MEASURES LEVEL0");
@@ -119,12 +172,6 @@ export async function parseKpiDetailsWorkbook(buffer: Buffer, filename: string):
   const iMonth = colIndex("MONTH");
   const iYear = colIndex("YEAR");
   const iValue = colIndex("VALUE");
-
-  if ([iLevel0, iLevel1, iMeasure, iMonth, iYear, iValue].some((i) => i < 1)) {
-    throw new Error(
-      "필요한 컬럼(MEASURES LEVEL0/LEVEL1/MEASURES/MONTH/YEAR/VALUE)을 찾을 수 없습니다. SPHERA/E MASTER 내보내기 형식인지 확인해 주세요."
-    );
-  }
 
   // key: seriesKey -> "fiscalYear|month" -> 합계
   const sums: Record<SeriesKey, Map<string, number>> = {
