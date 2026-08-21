@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   CYCLE_OPTIONS,
   computeDDay,
@@ -46,8 +46,10 @@ export function EducationTracker({ initialData }: { initialData: EducationData }
   const [items, setItems] = useState<EducationItem[]>(initialData.items);
   const [updatedAt, setUpdatedAt] = useState(initialData.updatedAt);
   const [form, setForm] = useState(emptyForm);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const formRef = useRef<HTMLDivElement>(null);
 
   const sorted = useMemo(() => sortByUrgency(items), [items]);
   const summary = useMemo(() => {
@@ -79,35 +81,55 @@ export function EducationTracker({ initialData }: { initialData: EducationData }
     }
   }
 
-  function addItem() {
+  function submitForm() {
     if (!form.name.trim()) {
       setError("법정교육명을 입력해 주세요.");
       return;
     }
-    const item: EducationItem = {
-      id: crypto.randomUUID(),
+    const patch = {
       name: form.name.trim(),
       target: form.target.trim(),
       cycleMonths: form.cycleMonths,
       lastDate: form.lastDate || null,
       qualification: form.qualification.trim(),
     };
-    const next = [...items, item];
+    const next = editingId
+      ? items.map((it) => (it.id === editingId ? { ...it, ...patch } : it))
+      : [...items, { id: crypto.randomUUID(), ...patch }];
     setItems(next);
     setForm(emptyForm);
-    void persist(next);
-  }
-
-  function updateItem(id: string, patch: Partial<EducationItem>) {
-    const next = items.map((it) => (it.id === id ? { ...it, ...patch } : it));
-    setItems(next);
+    setEditingId(null);
     void persist(next);
   }
 
   function removeItem(id: string) {
     const next = items.filter((it) => it.id !== id);
     setItems(next);
+    if (editingId === id) {
+      setEditingId(null);
+      setForm(emptyForm);
+    }
     void persist(next);
+  }
+
+  // 최근 교육일 수정 등 — 수강 완료 시 이 항목을 상단 입력폼에 불러와 이어서 편집한다.
+  function startEdit(item: EducationItem) {
+    setError(null);
+    setEditingId(item.id);
+    setForm({
+      name: item.name,
+      target: item.target,
+      cycleMonths: item.cycleMonths,
+      lastDate: item.lastDate ?? "",
+      qualification: item.qualification,
+    });
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setForm(emptyForm);
+    setError(null);
   }
 
   return (
@@ -121,8 +143,10 @@ export function EducationTracker({ initialData }: { initialData: EducationData }
       </div>
 
       {/* 상단: 입력 폼 */}
-      <div className="rounded-lg border border-zinc-200 bg-white p-4">
-        <p className="mb-3 text-sm font-medium text-zinc-700">새 법정교육 등록</p>
+      <div ref={formRef} className={`rounded-lg border bg-white p-4 ${editingId ? "border-orange-400 ring-1 ring-orange-400" : "border-zinc-200"}`}>
+        <p className="mb-3 text-sm font-medium text-zinc-700">
+          {editingId ? "법정교육 수정 — 수강 완료 시 최근교육일을 갱신하세요" : "새 법정교육 등록"}
+        </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <label className="flex flex-col gap-1 text-xs text-zinc-500">
             법정교육명
@@ -181,12 +205,17 @@ export function EducationTracker({ initialData }: { initialData: EducationData }
         <div className="mt-3 flex items-center gap-3">
           <button
             type="button"
-            onClick={addItem}
+            onClick={submitForm}
             disabled={saving}
             className="rounded-md bg-orange-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
           >
-            {saving ? "저장 중..." : "+ 추가"}
+            {saving ? "저장 중..." : editingId ? "수정 저장" : "+ 추가"}
           </button>
+          {editingId && (
+            <button type="button" onClick={cancelEdit} className="rounded-md border border-zinc-300 px-4 py-1.5 text-sm text-zinc-600">
+              취소
+            </button>
+          )}
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
       </div>
@@ -237,27 +266,44 @@ export function EducationTracker({ initialData }: { initialData: EducationData }
               const due = computeDueDate(item);
               const dday = computeDDay(item);
               const cycleLabel = CYCLE_OPTIONS.find((c) => c.months === item.cycleMonths)?.label ?? `${item.cycleMonths}개월`;
+              const isEditing = editingId === item.id;
               return (
-                <tr key={item.id} className={`border-b border-zinc-100 last:border-0 ${style.row}`}>
+                <tr
+                  key={item.id}
+                  onDoubleClick={() => startEdit(item)}
+                  title="더블클릭하면 상단 폼에서 수정할 수 있습니다"
+                  className={`cursor-pointer border-b border-zinc-100 last:border-0 ${isEditing ? "bg-orange-50" : style.row}`}
+                >
                   <td className="px-3 py-2 font-medium text-zinc-800">{item.name}</td>
                   <td className="px-3 py-2 text-zinc-600">{item.target || "-"}</td>
                   <td className="px-3 py-2 text-zinc-600">{cycleLabel}</td>
-                  <td className="px-3 py-2 text-zinc-600">
-                    <input
-                      type="date"
-                      value={item.lastDate ?? ""}
-                      onChange={(e) => updateItem(item.id, { lastDate: e.target.value || null })}
-                      className="rounded border border-transparent bg-transparent px-1 py-0.5 text-xs hover:border-zinc-300 focus:border-zinc-300"
-                    />
-                  </td>
+                  <td className="px-3 py-2 text-zinc-600">{formatDate(item.lastDate)}</td>
                   <td className="px-3 py-2 text-zinc-600">{item.qualification || "-"}</td>
                   <td className="px-3 py-2 text-zinc-600">{formatDate(due)}</td>
                   <td className="px-3 py-2 font-medium text-zinc-700">{formatDDay(dday)}</td>
                   <td className="px-3 py-2">
                     <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${style.badge}`}>{style.label}</span>
                   </td>
-                  <td className="px-3 py-2 text-right">
-                    <button type="button" onClick={() => removeItem(item.id)} className="text-xs text-red-500 hover:underline">
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startEdit(item);
+                      }}
+                      className="text-xs text-orange-600 hover:underline"
+                    >
+                      수정
+                    </button>
+                    <span className="mx-1.5 text-zinc-300">|</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeItem(item.id);
+                      }}
+                      className="text-xs text-red-500 hover:underline"
+                    >
                       삭제
                     </button>
                   </td>
