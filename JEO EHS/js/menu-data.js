@@ -29,6 +29,19 @@ const EHS_MENU = [
           ],
           output: ["항목별 원형(도넛) 진행률 차트", "종합 이행율 게이지", "반기점검 기한 초과 경고 배지"]
         }
+      },
+      {
+        name: "고열환경",
+        url: "https://board-seven-rho.vercel.app/summary.html",
+        flow: {
+          stack: "정적 HTML · Supabase(읽기전용 anon key)",
+          statusTone: "live",
+          statusLabel: "운영중",
+          access: "공개",
+          input: ["Air365 IoT 체감온도계 8개 공정 측정값(10분마다 GitHub Actions가 자동 수집)"],
+          processing: ["판정 시각별(하루 9회) 쉬는시간 부여 여부를 Supabase decisions 테이블에서 주 단위로 집계"],
+          output: ["전광판 화면 바로가기", "주별 쉬는시간 부여 현황 테이블"]
+        }
       }
     ],
     plannedItems: [
