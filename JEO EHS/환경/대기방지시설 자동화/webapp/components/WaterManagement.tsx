@@ -62,17 +62,19 @@ function ArrowDown({ x, y, color }: { x: number; y: number; color: string }) {
 }
 
 type Group = { columns: number[]; dest: "하수처리장" | "우수" | "폐수"; annotation?: string };
-type Item = { icon: string; label: string; sub?: string };
+type Item = { icon: string; label: string; sub?: string[] };
 
 function PipelineLane({
   sourceIcon,
   sourceLabel,
+  sourceSub,
   supplyColor,
   items,
   groups,
 }: {
   sourceIcon: string;
   sourceLabel: string;
+  sourceSub?: string;
   supplyColor: string;
   items: Item[];
   groups: Group[];
@@ -126,6 +128,7 @@ function PipelineLane({
       >
         <span className="text-xl leading-none">{sourceIcon}</span>
         <span className="text-xs font-semibold text-zinc-800">{sourceLabel}</span>
+        {sourceSub && <span className="text-[10px] font-medium text-zinc-500">{sourceSub}</span>}
       </div>
 
       {/* 사용처 박스 4개 */}
@@ -137,7 +140,11 @@ function PipelineLane({
         >
           <span className="text-xl leading-none">{it.icon}</span>
           <span className="text-[11px] font-medium leading-tight text-zinc-700">{it.label}</span>
-          {it.sub && <span className="text-[9px] leading-tight text-zinc-400">{it.sub}</span>}
+          {it.sub?.map((line) => (
+            <span key={line} className="text-[9px] leading-tight text-zinc-400">
+              {line}
+            </span>
+          ))}
         </div>
       ))}
 
@@ -192,6 +199,9 @@ function FacilityLayout({
     industrialTotal !== undefined && effluentActual !== undefined ? Math.max(industrialTotal - effluentActual, 0) : undefined;
   const evapBySpec = selectedYM ? coolingTowerEvaporationMonthly(selectedYM) : undefined;
   const evapRatePercent = evaporationRatePercentOfCirculation();
+  // 폐수 추정치 = 공업용수 총사용량 - 스펙 기준 이론 증발량 (실측 폐수량과 교차 비교용).
+  const effluentEstimated =
+    industrialTotal !== undefined && evapBySpec !== undefined ? Math.max(industrialTotal - evapBySpec, 0) : undefined;
 
   return (
     <div className="flex flex-col gap-6 rounded-lg border border-zinc-200 bg-white p-5">
@@ -221,12 +231,13 @@ function FacilityLayout({
       <PipelineLane
         sourceIcon="🚰"
         sourceLabel="일반용수 (구경 100mm)"
+        sourceSub={generalTotal !== undefined ? `${fmtM3(generalTotal)}㎥/월` : undefined}
         supplyColor={PIPE_COLOR.supplyGeneral}
         items={[
           { icon: "🚻", label: "화장실" },
           { icon: "🚿", label: "샤워장" },
           { icon: "🍽️", label: "식당" },
-          { icon: "🔥", label: "보일러", sub: `${BOILER_FLOW_RATE_LPH}L/hr` },
+          { icon: "🔥", label: "보일러", sub: [`${BOILER_FLOW_RATE_LPH}L/hr`, `${fmtM3(BOILER_MONTHLY_MAKEUP_M3, 2)}㎥/월`] },
         ]}
         groups={[
           {
@@ -237,23 +248,38 @@ function FacilityLayout({
                 ? `계산 ${fmtM3(sewageComputed)}㎥${sewageActual !== undefined ? ` · 실측 ${fmtM3(sewageActual)}㎥` : ""}`
                 : undefined,
           },
-          { columns: [3], dest: "우수" },
+          { columns: [3], dest: "우수", annotation: `보일러 보충 ${fmtM3(BOILER_MONTHLY_MAKEUP_M3, 2)}㎥` },
         ]}
       />
 
       <PipelineLane
         sourceIcon="🏭"
         sourceLabel="공업용수"
+        sourceSub={industrialTotal !== undefined ? `${fmtM3(industrialTotal)}㎥/월` : undefined}
         supplyColor={PIPE_COLOR.supplyIndustrial}
         items={[
-          { icon: "🌀", label: "쿨링타워", sub: `${COOLING_TOWER_CAPACITY_KCAL_HR.toLocaleString("ko-KR")}kcal/hr` },
+          { icon: "🌀", label: "쿨링타워", sub: [`${COOLING_TOWER_CAPACITY_KCAL_HR.toLocaleString("ko-KR")}kcal/hr`, `${COOLING_TOWER_FLOW_LPM.toLocaleString("ko-KR")}LPM`] },
           { icon: "🔧", label: "피스톤세척기" },
           { icon: "🛢️", label: "바렐세척기" },
           { icon: "📦", label: "박스세척기" },
         ]}
         groups={[
-          { columns: [0], dest: "우수", annotation: evapByBalance !== undefined ? `≈${fmtM3(evapByBalance)}㎥ (증발추정)` : undefined },
-          { columns: [1, 2, 3], dest: "폐수", annotation: effluentActual !== undefined ? `${fmtM3(effluentActual)}㎥ (실측)` : undefined },
+          {
+            columns: [0],
+            dest: "우수",
+            annotation:
+              evapByBalance !== undefined || evapBySpec !== undefined
+                ? `실사용 ${fmtM3(evapByBalance)}㎥ · 스펙 ${fmtM3(evapBySpec)}㎥ (증발)`
+                : undefined,
+          },
+          {
+            columns: [1, 2, 3],
+            dest: "폐수",
+            annotation:
+              effluentActual !== undefined || effluentEstimated !== undefined
+                ? `실측 ${fmtM3(effluentActual)}㎥ · 추정 ${fmtM3(effluentEstimated)}㎥`
+                : undefined,
+          },
         ]}
       />
 
@@ -279,8 +305,12 @@ function FacilityLayout({
           580kcal/kg × 24시간 × {selectedYM ? "해당월 일수" : "-"} ≈ <b>{fmtM3(evapBySpec)}㎥/월</b>{" "}
           <span className="text-zinc-400">(순환수 {COOLING_TOWER_FLOW_LPM.toLocaleString("ko-KR")}LPM 대비 증발률 약 {evapRatePercent.toFixed(2)}% — 통상 0.5~1.5% 범위와 비슷하면 추정이 합리적)</span>
         </p>
+        <p className="mt-1">
+          🧪 폐수 = 실측(업로드 파일) <b>{fmtM3(effluentActual)}㎥</b> · 추정(공업용수 {fmtM3(industrialTotal)}㎥ − 스펙기준 증발량{" "}
+          {fmtM3(evapBySpec)}㎥) <b>{fmtM3(effluentEstimated)}㎥</b>
+        </p>
         <p className="mt-1.5 text-zinc-400">
-          * 두 증발량 계산치가 비슷한 범위로 나오면 서로 교차검증이 되는 것이고, 크게 어긋나면 폐수 실측값이나 가동시간 가정을 다시 확인해야 합니다.
+          * 증발량·폐수 모두 두 가지 계산치가 비슷한 범위로 나오면 서로 교차검증이 되는 것이고, 크게 어긋나면 폐수 실측값이나 가동시간 가정을 다시 확인해야 합니다.
         </p>
       </div>
     </div>
