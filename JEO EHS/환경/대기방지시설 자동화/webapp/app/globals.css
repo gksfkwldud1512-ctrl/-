@@ -24,3 +24,15 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* 용수관리 시설배치도 파이프라인 — 흐르는 점선 애니메이션(배관 위에서 데이터가 실시간으로
+   이동하는 듯한 느낌을 주기 위함). stroke-dasharray/-dashoffset만 움직이므로 가벼움. */
+@keyframes pipe-flow {
+  to {
+    stroke-dashoffset: -32;
+  }
+}
+.pipe-flow {
+  stroke-dasharray: 14 9;
+  animation: pipe-flow 0.9s linear infinite;
+}

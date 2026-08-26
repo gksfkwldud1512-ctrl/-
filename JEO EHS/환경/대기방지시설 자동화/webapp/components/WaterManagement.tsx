@@ -15,10 +15,12 @@ import {
   BOILER_TANK_MONTHLY_M3,
   COOLING_TOWER_CAPACITY_KCAL_HR,
   COOLING_TOWER_FLOW_LPM,
+  LATENT_HEAT_KCAL_PER_KG,
   boilerOwnMonthlyM3,
   boilerTotalMonthlyM3,
   coolingTowerEvaporationMonthly,
   evaporationRatePercentOfCirculation,
+  expectedFlowLpmFromCapacity,
 } from "@/lib/kpi/waterCalc";
 
 // -------------------------------------------
@@ -63,7 +65,7 @@ function ArrowDown({ x, y, color }: { x: number; y: number; color: string }) {
   return <polygon points={`${x - s},${y - s} ${x + s},${y - s} ${x},${y + s}`} fill={color} />;
 }
 
-type Group = { columns: number[]; dest: "하수처리장" | "우수" | "폐수"; annotation?: string };
+type Group = { columns: number[]; dest: "하수처리장" | "우수" | "폐수"; annotation?: string[] };
 type Item = { icon: string; label: string; sub?: string[] };
 
 function PipelineLane({
@@ -85,11 +87,11 @@ function PipelineLane({
     <div className="relative w-full" style={{ aspectRatio: `${VB_W} / ${VB_H}` }}>
       <svg viewBox={`0 0 ${VB_W} ${VB_H}`} className="absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMid meet">
         {/* 공급원 -> 헤더 배관 */}
-        <line x1={VB_W / 2} y1={SOURCE_Y + 24} x2={VB_W / 2} y2={HEADER_Y} stroke={supplyColor} strokeWidth={PIPE_W} strokeLinecap="round" />
-        <line x1={COLS[0]} y1={HEADER_Y} x2={COLS[COLS.length - 1]} y2={HEADER_Y} stroke={supplyColor} strokeWidth={PIPE_W} strokeLinecap="round" />
+        <line className="pipe-flow" x1={VB_W / 2} y1={SOURCE_Y + 24} x2={VB_W / 2} y2={HEADER_Y} stroke={supplyColor} strokeWidth={PIPE_W} strokeLinecap="round" />
+        <line className="pipe-flow" x1={COLS[0]} y1={HEADER_Y} x2={COLS[COLS.length - 1]} y2={HEADER_Y} stroke={supplyColor} strokeWidth={PIPE_W} strokeLinecap="round" />
         {/* 헤더 -> 각 사용처 분기 배관 */}
         {COLS.map((x, i) => (
-          <line key={i} x1={x} y1={HEADER_Y} x2={x} y2={ICON_Y - ICON_HALF_H - 6} stroke={supplyColor} strokeWidth={PIPE_W} strokeLinecap="round" />
+          <line className="pipe-flow" key={i} x1={x} y1={HEADER_Y} x2={x} y2={ICON_Y - ICON_HALF_H - 6} stroke={supplyColor} strokeWidth={PIPE_W} strokeLinecap="round" />
         ))}
         {COLS.map((x, i) => (
           <ArrowDown key={`ah-${i}`} x={x} y={ICON_Y - ICON_HALF_H - 4} color={supplyColor} />
@@ -102,7 +104,7 @@ function PipelineLane({
           if (xs.length === 1) {
             return (
               <g key={gi}>
-                <line x1={xs[0]} y1={ICON_Y + ICON_HALF_H} x2={xs[0]} y2={DISCHARGE_Y - DISCHARGE_HALF_H - 6} stroke={color} strokeWidth={PIPE_W} strokeLinecap="round" />
+                <line className="pipe-flow" x1={xs[0]} y1={ICON_Y + ICON_HALF_H} x2={xs[0]} y2={DISCHARGE_Y - DISCHARGE_HALF_H - 6} stroke={color} strokeWidth={PIPE_W} strokeLinecap="round" />
                 <ArrowDown x={xs[0]} y={DISCHARGE_Y - DISCHARGE_HALF_H - 4} color={color} />
               </g>
             );
@@ -113,10 +115,10 @@ function PipelineLane({
           return (
             <g key={gi}>
               {xs.map((x) => (
-                <line key={x} x1={x} y1={ICON_Y + ICON_HALF_H} x2={x} y2={COLLECTOR_Y} stroke={color} strokeWidth={PIPE_W} strokeLinecap="round" />
+                <line className="pipe-flow" key={x} x1={x} y1={ICON_Y + ICON_HALF_H} x2={x} y2={COLLECTOR_Y} stroke={color} strokeWidth={PIPE_W} strokeLinecap="round" />
               ))}
-              <line x1={minX} y1={COLLECTOR_Y} x2={maxX} y2={COLLECTOR_Y} stroke={color} strokeWidth={PIPE_W} strokeLinecap="round" />
-              <line x1={midX} y1={COLLECTOR_Y} x2={midX} y2={DISCHARGE_Y - DISCHARGE_HALF_H - 6} stroke={color} strokeWidth={PIPE_W} strokeLinecap="round" />
+              <line className="pipe-flow" x1={minX} y1={COLLECTOR_Y} x2={maxX} y2={COLLECTOR_Y} stroke={color} strokeWidth={PIPE_W} strokeLinecap="round" />
+              <line className="pipe-flow" x1={midX} y1={COLLECTOR_Y} x2={midX} y2={DISCHARGE_Y - DISCHARGE_HALF_H - 6} stroke={color} strokeWidth={PIPE_W} strokeLinecap="round" />
               <ArrowDown x={midX} y={DISCHARGE_Y - DISCHARGE_HALF_H - 4} color={color} />
             </g>
           );
@@ -129,21 +131,21 @@ function PipelineLane({
         style={{ left: pct(VB_W / 2, VB_W), top: pct(SOURCE_Y, VB_H) }}
       >
         <span className="text-xl leading-none">{sourceIcon}</span>
-        <span className="text-xs font-semibold text-zinc-800">{sourceLabel}</span>
-        {sourceSub && <span className="text-[10px] font-medium text-zinc-500">{sourceSub}</span>}
+        <span className="text-sm font-semibold text-zinc-800">{sourceLabel}</span>
+        {sourceSub && <span className="text-xs font-medium text-zinc-500">{sourceSub}</span>}
       </div>
 
       {/* 사용처 박스 4개 */}
       {items.map((it, i) => (
         <div
           key={it.label}
-          className="absolute flex w-[112px] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 rounded-lg border border-zinc-200 bg-white px-2 py-2 text-center shadow-sm"
+          className="absolute flex w-[130px] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 rounded-lg border border-zinc-200 bg-white px-2 py-2 text-center shadow-sm"
           style={{ left: pct(COLS[i], VB_W), top: pct(ICON_Y, VB_H) }}
         >
           <span className="text-xl leading-none">{it.icon}</span>
-          <span className="text-[11px] font-medium leading-tight text-zinc-700">{it.label}</span>
+          <span className="text-xs font-medium leading-tight text-zinc-700">{it.label}</span>
           {it.sub?.map((line) => (
-            <span key={line} className="text-[9px] leading-tight text-zinc-400">
+            <span key={line} className="text-[11px] leading-tight text-zinc-500">
               {line}
             </span>
           ))}
@@ -157,11 +159,15 @@ function PipelineLane({
         return (
           <div
             key={gi}
-            className={`absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-lg border px-3 py-1.5 text-center shadow-sm ${DEST_BADGE[g.dest]}`}
+            className={`absolute max-w-[220px] -translate-x-1/2 -translate-y-1/2 rounded-lg border px-3 py-2 text-center shadow-sm ${DEST_BADGE[g.dest]}`}
             style={{ left: pct(x, VB_W), top: pct(DISCHARGE_Y, VB_H) }}
           >
-            <div className="text-xs font-semibold">{g.dest}</div>
-            {g.annotation && <div className="text-[10px] font-normal opacity-80">{g.annotation}</div>}
+            <div className="text-sm font-bold">{g.dest}</div>
+            {g.annotation?.map((line) => (
+              <div key={line} className="mt-0.5 text-sm font-semibold leading-snug opacity-90">
+                {line}
+              </div>
+            ))}
           </div>
         );
       })}
@@ -254,10 +260,17 @@ function FacilityLayout({
             dest: "하수처리장",
             annotation:
               sewageComputed !== undefined
-                ? `계산 ${fmtM3(sewageComputed)}㎥${sewageActual !== undefined ? ` · 실측 ${fmtM3(sewageActual)}㎥` : ""}`
+                ? [
+                    `계산 ${fmtM3(sewageComputed)}㎥`,
+                    ...(sewageActual !== undefined ? [`실측 ${fmtM3(sewageActual)}㎥`] : []),
+                  ]
                 : undefined,
           },
-          { columns: [3], dest: "우수", annotation: boilerTotal !== undefined ? `보일러 계열 합계 ${fmtM3(boilerTotal)}㎥` : undefined },
+          {
+            columns: [3],
+            dest: "우수",
+            annotation: boilerTotal !== undefined ? [`보일러 계열 ${fmtM3(boilerTotal)}㎥`] : undefined,
+          },
         ]}
       />
 
@@ -278,7 +291,7 @@ function FacilityLayout({
             dest: "우수",
             annotation:
               evapByBalance !== undefined || evapBySpec !== undefined
-                ? `실사용 ${fmtM3(evapByBalance)}㎥ · 스펙 ${fmtM3(evapBySpec)}㎥ (증발)`
+                ? [`실사용 ${fmtM3(evapByBalance)}㎥`, `스펙 ${fmtM3(evapBySpec)}㎥`]
                 : undefined,
           },
           {
@@ -286,7 +299,7 @@ function FacilityLayout({
             dest: "폐수",
             annotation:
               effluentActual !== undefined || effluentEstimated !== undefined
-                ? `실측 ${fmtM3(effluentActual)}㎥ · 추정 ${fmtM3(effluentEstimated)}㎥`
+                ? [`실측 ${fmtM3(effluentActual)}㎥`, `추정 ${fmtM3(effluentEstimated)}㎥`]
                 : undefined,
           },
         ]}
@@ -311,9 +324,15 @@ function FacilityLayout({
           <b>{fmtM3(evapByBalance)}㎥</b>
         </p>
         <p className="mt-1">
-          🌀 쿨링타워 증발량(설비 스펙 기준) = 냉각용량 {COOLING_TOWER_CAPACITY_KCAL_HR.toLocaleString("ko-KR")}kcal/hr ÷ 증발잠열
-          580kcal/kg × 24시간 × {selectedYM ? "해당월 일수" : "-"} ≈ <b>{fmtM3(evapBySpec)}㎥/월</b>{" "}
+          🌀 쿨링타워 증발량(설비 스펙 기준) = 냉각용량 {COOLING_TOWER_CAPACITY_KCAL_HR.toLocaleString("ko-KR")}kcal/hr ÷ 증발잠열{" "}
+          {LATENT_HEAT_KCAL_PER_KG}kcal/kg(국내 냉각탑 설계 표준값) × 24시간 × {selectedYM ? "해당월 일수" : "-"} ≈{" "}
+          <b>{fmtM3(evapBySpec)}㎥/월</b>{" "}
           <span className="text-zinc-400">(순환수 {COOLING_TOWER_FLOW_LPM.toLocaleString("ko-KR")}LPM 대비 증발률 약 {evapRatePercent.toFixed(2)}% — 통상 0.5~1.5% 범위와 비슷하면 추정이 합리적)</span>
+        </p>
+        <p className="mt-1 text-zinc-400">
+          * 스펙 정합성 참고: &quot;냉각능력 1톤당 순환수 3GPM&quot;이라는 국내외 공통 설계기준으로
+          역산하면 이 냉각탑은 이론상 약 {expectedFlowLpmFromCapacity().toLocaleString("ko-KR", { maximumFractionDigits: 0 })}
+          LPM 순환이 기대되는데, 실제 스펙({COOLING_TOWER_FLOW_LPM.toLocaleString("ko-KR")}LPM)과 비슷해 입력한 스펙 자체가 서로 정합적입니다.
         </p>
         <p className="mt-1">
           🧪 폐수 = 실측(업로드 파일) <b>{fmtM3(effluentActual)}㎥</b> · 추정(공업용수 {fmtM3(industrialTotal)}㎥ − 스펙기준 증발량{" "}

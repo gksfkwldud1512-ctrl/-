@@ -27,13 +27,39 @@ export function boilerTotalMonthlyM3(ym: string): number {
 /** 냉각탑(쿨링타워) 1대 스펙. */
 export const COOLING_TOWER_CAPACITY_KCAL_HR = 1_170_000;
 export const COOLING_TOWER_FLOW_LPM = 3900;
-/** 냉각탑 증발량 추정에 흔히 쓰는 물의 증발잠열 근사값(kcal/kg). */
-export const LATENT_HEAT_KCAL_PER_KG = 580;
+
+// 증발잠열 상수 재검증(웹 조사 결과, 2026-08):
+// - 국제적으로 흔히 쓰는 근사식(Delta Cooling Towers 등)은 물의 끓는점(100℃) 기준 잠열
+//   540 kcal/kg을 쓴다: 증발량 = 냉각열량(Q) / 540
+// - 반면 국내 냉각탑 실무 자료(turbosolution 등 HVAC 엔지니어링 레퍼런스)는 냉각탑의 실제
+//   운전온도(통상 20~35℃) 기준 잠열로 600 kcal/kg을 표준으로 쓴다: WE = Q/600
+//   (물의 증발잠열은 온도가 낮을수록 커지므로, 100℃ 기준인 540보다 상온 기준인 600이
+//   냉각탑 실제 운전조건에 더 가깝다 — 국내 냉각탑 설계 실무 관행을 그대로 채택)
+// 이 사이트가 국내 사업장 설비라 국내 냉각탑 설계 표준값인 600을 기본값으로 쓴다.
+// (국제 일반식 540을 쓰고 싶으면 이 상수만 540으로 바꾸면 됨 — 나머지 계산은 동일)
+export const LATENT_HEAT_KCAL_PER_KG = 600;
 
 /** 냉각탑 스펙(냉각용량 ÷ 증발잠열) 기준 이론 증발량 — 시간당 ㎥. */
 export function coolingTowerEvaporationM3PerHour(): number {
   const kgPerHour = COOLING_TOWER_CAPACITY_KCAL_HR / LATENT_HEAT_KCAL_PER_KG;
   return kgPerHour / 1000; // 물 밀도 1000kg/㎥
+}
+
+// 스펙 정합성 교차검증용: 냉각탑은 통상 "냉각능력 1톤(냉동톤)당 순환수량 3GPM"을 표준으로
+// 설계한다(국내외 냉각탑 실무 공통 기준). 국내 냉동톤 = 3,320 kcal/hr(KS 표준)로 환산하면,
+// 이 설비의 냉각용량(1,170,000kcal/hr)에서 기대되는 순환유량을 역산해 스펙표의 3,900LPM과
+// 비교할 수 있다 — 두 값이 비슷하면 입력한 스펙 자체가 서로 정합적이라는 뜻.
+const REFRIGERATION_TON_KCAL_HR = 3320;
+const GPM_PER_TON = 3;
+const LITERS_PER_GALLON = 3.785;
+
+export function coolingTowerRefrigerationTons(): number {
+  return COOLING_TOWER_CAPACITY_KCAL_HR / REFRIGERATION_TON_KCAL_HR;
+}
+
+/** "냉각능력 1톤당 3GPM" 표준 설계기준으로 역산한 기대 순환유량(LPM) — 실제 스펙(3,900LPM)과 비교용. */
+export function expectedFlowLpmFromCapacity(): number {
+  return coolingTowerRefrigerationTons() * GPM_PER_TON * LITERS_PER_GALLON;
 }
 
 /** "YYYY-MM" -> 그 달의 일수. */
