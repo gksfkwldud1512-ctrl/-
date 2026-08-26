@@ -12,9 +12,11 @@ import {
 } from "@/lib/kpi/waterUsage";
 import {
   BOILER_FLOW_RATE_LPH,
-  BOILER_MONTHLY_MAKEUP_M3,
+  BOILER_TANK_MONTHLY_M3,
   COOLING_TOWER_CAPACITY_KCAL_HR,
   COOLING_TOWER_FLOW_LPM,
+  boilerOwnMonthlyM3,
+  boilerTotalMonthlyM3,
   coolingTowerEvaporationMonthly,
   evaporationRatePercentOfCirculation,
 } from "@/lib/kpi/waterCalc";
@@ -189,8 +191,11 @@ function FacilityLayout({
   sewageActual?: number;
   effluentActual?: number;
 }) {
-  // 일반용수 계열: 보일러+온수탱크 보충수(월평균 고정값)를 제외한 나머지가 하수처리장으로 간다고 계산.
-  const sewageComputed = generalTotal !== undefined ? Math.max(generalTotal - BOILER_MONTHLY_MAKEUP_M3, 0) : undefined;
+  // 일반용수 계열: 온수탱크 보충(월 360㎥ 고정) + 보일러 자체 사용량(500L/hr×가동시간, 별도 계산)을
+  // 뺀 나머지가 화장실·샤워장·식당을 거쳐 하수처리장으로 간다고 계산.
+  const boilerOwn = selectedYM ? boilerOwnMonthlyM3(selectedYM) : undefined;
+  const boilerTotal = selectedYM ? boilerTotalMonthlyM3(selectedYM) : undefined;
+  const sewageComputed = generalTotal !== undefined && boilerTotal !== undefined ? Math.max(generalTotal - boilerTotal, 0) : undefined;
 
   // 공업용수 계열: 쿨링타워 증발량을 두 가지 방식으로 교차 계산한다.
   // ① 실사용 기준: 공업용수 총사용량 - 실측 폐수 배출량
@@ -237,7 +242,11 @@ function FacilityLayout({
           { icon: "🚻", label: "화장실" },
           { icon: "🚿", label: "샤워장" },
           { icon: "🍽️", label: "식당" },
-          { icon: "🔥", label: "보일러", sub: [`${BOILER_FLOW_RATE_LPH}L/hr`, `${fmtM3(BOILER_MONTHLY_MAKEUP_M3, 2)}㎥/월`] },
+          {
+            icon: "🔥",
+            label: "보일러",
+            sub: [`탱크 ${fmtM3(BOILER_TANK_MONTHLY_M3)}㎥/월`, `자체 ${fmtM3(boilerOwn)}㎥/월(${BOILER_FLOW_RATE_LPH}L/hr)`],
+          },
         ]}
         groups={[
           {
@@ -248,7 +257,7 @@ function FacilityLayout({
                 ? `계산 ${fmtM3(sewageComputed)}㎥${sewageActual !== undefined ? ` · 실측 ${fmtM3(sewageActual)}㎥` : ""}`
                 : undefined,
           },
-          { columns: [3], dest: "우수", annotation: `보일러 보충 ${fmtM3(BOILER_MONTHLY_MAKEUP_M3, 2)}㎥` },
+          { columns: [3], dest: "우수", annotation: boilerTotal !== undefined ? `보일러 계열 합계 ${fmtM3(boilerTotal)}㎥` : undefined },
         ]}
       />
 
@@ -286,12 +295,13 @@ function FacilityLayout({
       <div className="rounded-md border border-zinc-200 bg-zinc-50 px-4 py-3 text-xs leading-relaxed text-zinc-600">
         <p className="font-medium text-zinc-700">계산 방식 ({selectedYM || "선택 월 없음"} 기준)</p>
         <p className="mt-1.5">
-          🔥 보일러+온수탱크 월평균 보충수 <b>{fmtM3(BOILER_MONTHLY_MAKEUP_M3, 2)}㎥(360L)</b> — 순환유량 {BOILER_FLOW_RATE_LPH}L/hr와는 별개로 실제
-          채워주는 보충수 실측 고정값
+          🔥 보일러 계열은 서로 다른 두 계통이라 따로 계산: 옆 온수탱크 보충수 <b>{fmtM3(BOILER_TANK_MONTHLY_M3)}㎥(360톤, 실측 고정값)</b> +
+          보일러 자체 <b>{fmtM3(boilerOwn)}㎥</b>(유량 {BOILER_FLOW_RATE_LPH}L/hr × 24시간 × 해당월 일수, 24시간 연속가동 가정) ={" "}
+          <b>{fmtM3(boilerTotal)}㎥</b>
         </p>
         <p className="mt-1">
-          🚻 하수처리장 = 일반용수 {fmtM3(generalTotal)}㎥ − 보일러 보충수 {fmtM3(BOILER_MONTHLY_MAKEUP_M3, 2)}㎥ ={" "}
-          <b>{fmtM3(sewageComputed)}㎥</b> (화장실·샤워장·식당 합산분){" "}
+          🚻 하수처리장 = 일반용수 {fmtM3(generalTotal)}㎥ − 보일러 계열 합계 {fmtM3(boilerTotal)}㎥ = <b>{fmtM3(sewageComputed)}㎥</b>{" "}
+          (화장실·샤워장·식당 합산분){" "}
           {sewageActual !== undefined && (
             <span className="text-zinc-400">— 실측값(업로드 파일 배출 데이터)은 {fmtM3(sewageActual)}㎥</span>
           )}
