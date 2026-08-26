@@ -29,10 +29,13 @@ export function classifyConsumption(measureName: string): ConsumptionCategory {
 }
 
 // breakdown.waterDischarge는 아직 번역 사전이 없어 대부분 원문 영어 그대로 들어온다.
+// 실제 DETAILS 파일 확인 결과(사용자 확인): "Domestic wastewater discharged" = 하수처리장,
+// "Process waste water discharged" = 폐수. domestic/process 키워드로 우선 매칭하고,
+// 혹시 다른 표현이 섞여 있어도 놓치지 않도록 sewage/effluent 계열 키워드도 보조로 둔다.
 export function classifyDischarge(measureName: string): DischargeCategory {
   const s = measureName.toLowerCase();
-  if (/(sewage|wwtp|treatment plant|treatment facility|하수)/.test(s)) return "sewage";
-  if (/(effluent|waste ?water discharge|폐수)/.test(s)) return "effluent";
+  if (/(domestic|sewage|wwtp|treatment plant|treatment facility|하수)/.test(s)) return "sewage";
+  if (/(process|effluent|waste ?water discharge|폐수)/.test(s)) return "effluent";
   return "other";
 }
 
