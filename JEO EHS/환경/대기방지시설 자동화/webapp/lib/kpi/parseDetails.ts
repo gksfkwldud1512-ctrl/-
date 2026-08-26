@@ -9,14 +9,15 @@ const MONTH_NUMBER: Record<string, number> = {
   Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12,
 };
 
-export type SeriesKey = "energy" | "waste" | "water" | "scope1" | "scope2" | "salesUSD";
+export type SeriesKey = "energy" | "waste" | "water" | "waterDischarge" | "scope1" | "scope2" | "salesUSD";
 // 하위 항목(구성 내역)까지 조회 가능한 지표만 별도로 세분화해서 보관한다.
-export type BreakdownSeriesKey = "energy" | "waste" | "water";
+export type BreakdownSeriesKey = "energy" | "waste" | "water" | "waterDischarge";
 
 export const SERIES_META: Record<SeriesKey, { label: string; unit: string }> = {
   energy: { label: "에너지 사용량", unit: "GJ" },
   waste: { label: "폐기물 발생량", unit: "ton" },
   water: { label: "용수 사용량", unit: "㎥" },
+  waterDischarge: { label: "용수 배출량", unit: "㎥" },
   scope1: { label: "Scope 1 배출량", unit: "tCO2e" },
   scope2: { label: "Scope 2 배출량", unit: "tCO2e" },
   salesUSD: { label: "매출액", unit: "USD" },
@@ -24,13 +25,14 @@ export const SERIES_META: Record<SeriesKey, { label: string; unit: string }> = {
 
 // SPHERA/E MASTER 내보내기(DETAILS 파일)의 MEASURES LEVEL0/LEVEL1 조합으로 각 지표를 식별한다.
 // 주의: "Total Water Withdrawal [m3]" LEVEL0에는 취수량(b) 항목과 배출량(c) 항목이 섞여 있어
-// LEVEL1이 "b)"로 시작하는 취수량만 골라야 하고, "Carbon emission [tCO2e]"에는 Scope1/2를 합산한
-// "Scope 1 + 2 Emissions" 행이 별도로 더 있어 그대로 다 더하면 중복 집계된다 — Scope1/Scope2는
-// 반드시 LEVEL1을 정확히 지정해서 골라야 한다.
+// LEVEL1이 "b)"로 시작하면 취수(소비)량, "c)"로 시작하면 배출량이다(용수관리 화면에서 사용).
+// "Carbon emission [tCO2e]"에는 Scope1/2를 합산한 "Scope 1 + 2 Emissions" 행이 별도로 더 있어
+// 그대로 다 더하면 중복 집계된다 — Scope1/Scope2는 반드시 LEVEL1을 정확히 지정해서 골라야 한다.
 const SERIES_MATCH: Record<SeriesKey, (level0: string, level1: string) => boolean> = {
   energy: (l0) => l0 === "Total energy consumption [GJ]",
   waste: (l0) => l0 === "Total waste generated [t]",
   water: (l0, l1) => l0 === "Total Water Withdrawal [m3]" && l1.trim().startsWith("b)"),
+  waterDischarge: (l0, l1) => l0 === "Total Water Withdrawal [m3]" && l1.trim().startsWith("c)"),
   scope1: (l0, l1) => l0 === "Carbon emission [tCO2e]" && l1.trim() === "Scope 1 emissions [t CO2e]",
   scope2: (l0, l1) => l0 === "Carbon emission [tCO2e]" && l1.trim() === "Scope 2 Emissions [t CO2e]",
   salesUSD: (l0, l1) => l0 === "Intensity Normalisers [USD]" && l1.trim() === "Site Sales [USD]",
@@ -175,12 +177,12 @@ export async function parseKpiDetailsWorkbook(buffer: Buffer, filename: string):
 
   // key: seriesKey -> "fiscalYear|month" -> 합계
   const sums: Record<SeriesKey, Map<string, number>> = {
-    energy: new Map(), waste: new Map(), water: new Map(),
+    energy: new Map(), waste: new Map(), water: new Map(), waterDischarge: new Map(),
     scope1: new Map(), scope2: new Map(), salesUSD: new Map(),
   };
   // key: seriesKey -> measureName -> "fiscalYear|month" -> 합계
   const breakdownSums: Record<BreakdownSeriesKey, Map<string, Map<string, number>>> = {
-    energy: new Map(), waste: new Map(), water: new Map(),
+    energy: new Map(), waste: new Map(), water: new Map(), waterDischarge: new Map(),
   };
 
   for (let r = 2; r <= ws.rowCount; r++) {
@@ -199,7 +201,7 @@ export async function parseKpiDetailsWorkbook(buffer: Buffer, filename: string):
       const mapKey = `${fiscalYear}|${month}`;
       sums[key].set(mapKey, (sums[key].get(mapKey) ?? 0) + value);
 
-      if (key === "energy" || key === "waste" || key === "water") {
+      if (key === "energy" || key === "waste" || key === "water" || key === "waterDischarge") {
         const measureName = cleanMeasureName(measure) || "기타";
         const byMeasure = breakdownSums[key];
         if (!byMeasure.has(measureName)) byMeasure.set(measureName, new Map());

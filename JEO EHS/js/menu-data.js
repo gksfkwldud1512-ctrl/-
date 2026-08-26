@@ -167,6 +167,21 @@ const EHS_MENU = [
             "에너지·폐기물·용수 항목별 월별 사용량 표"
           ]
         }
+      },
+      {
+        name: "용수관리",
+        url: "https://daegi-bangji-webapp.vercel.app/water",
+        flow: {
+          stack: "Next.js · Vercel Blob(비공개, 기존 KPI 데이터 재사용)",
+          statusTone: "live",
+          statusLabel: "운영중",
+          access: "공개",
+          input: ["별도 업로드 없음 — 안전환경 KPI에서 업로드한 DETAILS 파일 재사용"],
+          processing: [
+            "용수 취수(b)/배출(c) 항목을 일반용수·공업용수·하수처리장·폐수 4종으로 재분류 (waterUsage.ts)"
+          ],
+          output: ["시설배치도(공급~사용처~배출처 흐름도)", "월별 소비수/배출수 표(기간 조절 가능)"]
+        }
       }
     ],
     plannedItems: [
