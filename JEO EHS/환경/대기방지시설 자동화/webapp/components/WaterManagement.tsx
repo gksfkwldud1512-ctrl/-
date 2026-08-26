@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { KpiSummary, MonthlyPoint } from "@/lib/kpi/parseDetails";
+import type { FacilitySpec, FacilitySpecs } from "@/lib/kpi/facilitySpecs";
 import {
   CONSUMPTION_LABEL,
   DISCHARGE_LABEL,
@@ -40,7 +41,7 @@ const ICON_HALF_H = 42;
 const COLLECTOR_Y = 252;
 const DISCHARGE_Y = 306;
 const DISCHARGE_HALF_H = 32;
-const PIPE_W = 15;
+const PIPE_W = 7; // 얇게(작게) 구성 — 두꺼우면 점선 방향이 뭉개져 안 보임
 
 const PIPE_COLOR: Record<string, string> = {
   supplyGeneral: "#0284c7", // sky-600
@@ -61,8 +62,16 @@ function pct(v: number, total: number): string {
 }
 
 function ArrowDown({ x, y, color }: { x: number; y: number; color: string }) {
-  const s = 9;
-  return <polygon points={`${x - s},${y - s} ${x + s},${y - s} ${x},${y + s}`} fill={color} />;
+  const s = 12;
+  return (
+    <polygon
+      points={`${x - s},${y - s} ${x + s},${y - s} ${x},${y + s}`}
+      fill={color}
+      stroke="white"
+      strokeWidth={1.5}
+      strokeLinejoin="round"
+    />
+  );
 }
 
 type Group = { columns: number[]; dest: "하수처리장" | "우수" | "폐수"; annotation?: string[] };
@@ -75,6 +84,8 @@ function PipelineLane({
   supplyColor,
   items,
   groups,
+  onSelectItem,
+  hasSpec,
 }: {
   sourceIcon: string;
   sourceLabel: string;
@@ -82,6 +93,8 @@ function PipelineLane({
   supplyColor: string;
   items: Item[];
   groups: Group[];
+  onSelectItem: (label: string) => void;
+  hasSpec: (label: string) => boolean;
 }) {
   return (
     <div className="relative w-full" style={{ aspectRatio: `${VB_W} / ${VB_H}` }}>
@@ -135,13 +148,20 @@ function PipelineLane({
         {sourceSub && <span className="text-xs font-medium text-zinc-500">{sourceSub}</span>}
       </div>
 
-      {/* 사용처 박스 4개 */}
+      {/* 사용처 박스 4개 — 클릭하면 세부시설항목 입력창이 열린다 */}
       {items.map((it, i) => (
-        <div
+        <button
           key={it.label}
-          className="absolute flex w-[130px] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 rounded-lg border border-zinc-200 bg-white px-2 py-2 text-center shadow-sm"
+          type="button"
+          onClick={() => onSelectItem(it.label)}
+          className="group absolute flex w-[130px] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 rounded-lg border border-zinc-200 bg-white px-2 py-2 text-center shadow-sm transition hover:border-zinc-400 hover:shadow-md"
           style={{ left: pct(COLS[i], VB_W), top: pct(ICON_Y, VB_H) }}
         >
+          {hasSpec(it.label) && (
+            <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[9px] text-white">
+              ✓
+            </span>
+          )}
           <span className="text-xl leading-none">{it.icon}</span>
           <span className="text-xs font-medium leading-tight text-zinc-700">{it.label}</span>
           {it.sub?.map((line) => (
@@ -149,7 +169,8 @@ function PipelineLane({
               {line}
             </span>
           ))}
-        </div>
+          <span className="text-[10px] leading-tight text-zinc-400 opacity-0 transition group-hover:opacity-100">세부시설항목 ▸</span>
+        </button>
       ))}
 
       {/* 배출처 박스 (그룹당 1개) */}
@@ -188,6 +209,8 @@ function FacilityLayout({
   industrialTotal,
   sewageActual,
   effluentActual,
+  onSelectItem,
+  hasSpec,
 }: {
   availableYMs: string[];
   selectedYM: string;
@@ -196,6 +219,8 @@ function FacilityLayout({
   industrialTotal?: number;
   sewageActual?: number;
   effluentActual?: number;
+  onSelectItem: (label: string) => void;
+  hasSpec: (label: string) => boolean;
 }) {
   // 일반용수 계열: 온수탱크 보충(월 360㎥ 고정) + 보일러 자체 사용량(500L/hr×가동시간, 별도 계산)을
   // 뺀 나머지가 화장실·샤워장·식당을 거쳐 하수처리장으로 간다고 계산.
@@ -272,6 +297,8 @@ function FacilityLayout({
             annotation: boilerTotal !== undefined ? [`보일러 계열 ${fmtM3(boilerTotal)}㎥`] : undefined,
           },
         ]}
+        onSelectItem={onSelectItem}
+        hasSpec={hasSpec}
       />
 
       <PipelineLane
@@ -303,6 +330,8 @@ function FacilityLayout({
                 : undefined,
           },
         ]}
+        onSelectItem={onSelectItem}
+        hasSpec={hasSpec}
       />
 
       <div className="rounded-md border border-zinc-200 bg-zinc-50 px-4 py-3 text-xs leading-relaxed text-zinc-600">
@@ -394,7 +423,134 @@ function sum(rows: Row[], field: "general" | "industrial" | "sewage" | "effluent
   return rows.reduce((acc, r) => acc + (r[field] ?? 0), 0);
 }
 
-export function WaterManagement({ summary }: { summary: KpiSummary | null }) {
+// 회수율 = 일반용수 사용량 중 하수처리장으로 배출(회수)된 비율. 보일러(증기 손실)처럼
+// 하수처리장으로 가지 않는 몫이 있어 100%보다 낮게 나오는 게 정상이다.
+function recoveryRate(sewage: number | undefined, general: number | undefined): number | undefined {
+  if (sewage === undefined || general === undefined || general === 0) return undefined;
+  return (sewage / general) * 100;
+}
+
+function fmtPercent(v: number | undefined): string {
+  if (v === undefined) return "-";
+  return `${v.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}%`;
+}
+
+// -------------------------------------------
+// 세부시설항목 입력 모달 — 시설배치도의 각 사용처 박스를 클릭하면 뜬다.
+// 대수/제품/용수사용량/비고를 입력·저장(추후 용수사용량 역산에 쓸 원자료).
+// -------------------------------------------
+function FacilityDetailModal({
+  facility,
+  spec,
+  saving,
+  onSave,
+  onClose,
+}: {
+  facility: string;
+  spec: FacilitySpec;
+  saving: boolean;
+  onSave: (next: FacilitySpec) => void;
+  onClose: () => void;
+}) {
+  const [quantity, setQuantity] = useState(spec.quantity !== undefined ? String(spec.quantity) : "");
+  const [model, setModel] = useState(spec.model ?? "");
+  const [waterUsage, setWaterUsage] = useState(spec.waterUsage ?? "");
+  const [note, setNote] = useState(spec.note ?? "");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-1 flex items-center justify-between">
+          <h3 className="text-base font-semibold text-zinc-800">{facility} — 세부시설항목</h3>
+          <button type="button" onClick={onClose} className="text-zinc-400 hover:text-zinc-600">
+            ✕
+          </button>
+        </div>
+        <p className="mb-4 text-xs text-zinc-500">추후 용수사용량 역산에 쓰일 자료입니다. 아는 만큼만 입력해도 됩니다.</p>
+
+        <div className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1 text-xs font-medium text-zinc-600">
+            대수
+            <input
+              type="number"
+              min={0}
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              placeholder="예: 3"
+              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-800"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-zinc-600">
+            제품(모델명)
+            <input
+              type="text"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              placeholder="예: OO양변기 OO모델"
+              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-800"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-zinc-600">
+            용수 사용량
+            <input
+              type="text"
+              value={waterUsage}
+              onChange={(e) => setWaterUsage(e.target.value)}
+              placeholder="예: 1대당 200L/hr, 1회당 6L 등"
+              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-800"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-zinc-600">
+            비고
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              placeholder="설치 위치, 사용 패턴 등 자유롭게"
+              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-800"
+            />
+          </label>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-zinc-300 px-4 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() =>
+              onSave({
+                quantity: quantity.trim() ? Number(quantity) : undefined,
+                model: model.trim() || undefined,
+                waterUsage: waterUsage.trim() || undefined,
+                note: note.trim() || undefined,
+              })
+            }
+            className="rounded-md bg-orange-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {saving ? "저장 중..." : "저장"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function WaterManagement({
+  summary,
+  initialFacilitySpecs,
+}: {
+  summary: KpiSummary | null;
+  initialFacilitySpecs?: FacilitySpecs;
+}) {
   const waterBreakdown = summary?.breakdown.water ?? {};
   const dischargeBreakdown = summary?.breakdown.waterDischarge ?? {};
 
@@ -437,6 +593,35 @@ export function WaterManagement({ summary }: { summary: KpiSummary | null }) {
   const effectiveFacilityYM = facilityYM || maxYM;
   const facilityRow = allRows.find((r) => r.ym === effectiveFacilityYM);
 
+  // 세부시설항목(대수/제품/용수사용량/비고) — 시설배치도 박스를 클릭하면 입력창이 뜬다.
+  const [specs, setSpecs] = useState<FacilitySpecs>(initialFacilitySpecs ?? {});
+  const [editingFacility, setEditingFacility] = useState<string | null>(null);
+  const [savingSpec, setSavingSpec] = useState(false);
+
+  function hasSpec(label: string): boolean {
+    const s = specs[label];
+    return !!s && (s.quantity !== undefined || !!s.model || !!s.waterUsage || !!s.note);
+  }
+
+  async function saveSpec(next: FacilitySpec) {
+    if (!editingFacility) return;
+    setSavingSpec(true);
+    try {
+      const nextSpecs = { ...specs, [editingFacility]: next };
+      const res = await fetch("/api/kpi/facility-specs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nextSpecs),
+      });
+      if (res.ok) {
+        setSpecs(await res.json());
+        setEditingFacility(null);
+      }
+    } finally {
+      setSavingSpec(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <FacilityLayout
@@ -447,7 +632,19 @@ export function WaterManagement({ summary }: { summary: KpiSummary | null }) {
         industrialTotal={facilityRow?.industrial}
         sewageActual={facilityRow?.sewage}
         effluentActual={facilityRow?.effluent}
+        onSelectItem={setEditingFacility}
+        hasSpec={hasSpec}
       />
+
+      {editingFacility && (
+        <FacilityDetailModal
+          facility={editingFacility}
+          spec={specs[editingFacility] ?? {}}
+          saving={savingSpec}
+          onSave={saveSpec}
+          onClose={() => setEditingFacility(null)}
+        />
+      )}
 
       <div className="flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -525,6 +722,9 @@ export function WaterManagement({ summary }: { summary: KpiSummary | null }) {
                   <th className="border-b border-zinc-200 px-3 py-2 text-right font-medium">{DISCHARGE_LABEL.sewage}</th>
                   <th className="border-b border-zinc-200 px-3 py-2 text-right font-medium">{DISCHARGE_LABEL.effluent}</th>
                   <th className="border-b border-zinc-200 px-3 py-2 text-right font-medium">배출수 합계</th>
+                  <th rowSpan={2} className="border-b border-zinc-200 px-3 py-2 text-right font-medium align-bottom">
+                    회수율(%)
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
@@ -541,6 +741,7 @@ export function WaterManagement({ summary }: { summary: KpiSummary | null }) {
                     <td className="px-3 py-2 text-right font-medium text-zinc-800">
                       {fmt((r.sewage ?? 0) + (r.effluent ?? 0) || undefined)}
                     </td>
+                    <td className="px-3 py-2 text-right font-medium text-blue-700">{fmtPercent(recoveryRate(r.sewage, r.general))}</td>
                   </tr>
                 ))}
               </tbody>
@@ -553,6 +754,7 @@ export function WaterManagement({ summary }: { summary: KpiSummary | null }) {
                   <td className="px-3 py-2 text-right">{fmt(sum(rows, "sewage"))}</td>
                   <td className="px-3 py-2 text-right">{fmt(sum(rows, "effluent"))}</td>
                   <td className="px-3 py-2 text-right">{fmt(sum(rows, "sewage") + sum(rows, "effluent"))}</td>
+                  <td className="px-3 py-2 text-right text-blue-700">{fmtPercent(recoveryRate(sum(rows, "sewage"), sum(rows, "general")))}</td>
                 </tr>
               </tfoot>
             </table>

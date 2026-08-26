@@ -1,10 +1,11 @@
 import { loadKpiSummary } from "@/lib/kpi/store";
+import { loadFacilitySpecs } from "@/lib/kpi/facilitySpecs";
 import { WaterManagement } from "@/components/WaterManagement";
 
 export const dynamic = "force-dynamic";
 
 export default async function WaterPage() {
-  const summary = await loadKpiSummary();
+  const [summary, facilitySpecs] = await Promise.all([loadKpiSummary(), loadFacilitySpecs()]);
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-6 py-10">
@@ -19,7 +20,7 @@ export default async function WaterPage() {
         </p>
       </div>
 
-      <WaterManagement summary={summary} />
+      <WaterManagement summary={summary} initialFacilitySpecs={facilitySpecs} />
     </main>
   );
 }

@@ -26,13 +26,15 @@ body {
 }
 
 /* 용수관리 시설배치도 파이프라인 — 흐르는 점선 애니메이션(배관 위에서 데이터가 실시간으로
-   이동하는 듯한 느낌을 주기 위함). stroke-dasharray/-dashoffset만 움직이므로 가벼움. */
+   이동하는 듯한 느낌을 주기 위함). stroke-dasharray/-dashoffset만 움직이므로 가벼움.
+   배관을 얇게(PIPE_W=7) 바꾸면서, 점(캡슐) 사이 간격을 넉넉히 둬서 방향이 뭉개지지 않고
+   또렷하게 보이도록 조정. */
 @keyframes pipe-flow {
   to {
-    stroke-dashoffset: -32;
+    stroke-dashoffset: -44;
   }
 }
 .pipe-flow {
-  stroke-dasharray: 14 9;
-  animation: pipe-flow 0.9s linear infinite;
+  stroke-dasharray: 10 12;
+  animation: pipe-flow 1.1s linear infinite;
 }
