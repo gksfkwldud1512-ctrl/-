@@ -10,6 +10,14 @@ import {
   classifyDischarge,
   unmatchedMeasureNames,
 } from "@/lib/kpi/waterUsage";
+import {
+  BOILER_FLOW_RATE_LPH,
+  BOILER_MONTHLY_MAKEUP_M3,
+  COOLING_TOWER_CAPACITY_KCAL_HR,
+  COOLING_TOWER_FLOW_LPM,
+  coolingTowerEvaporationMonthly,
+  evaporationRatePercentOfCirculation,
+} from "@/lib/kpi/waterCalc";
 
 // -------------------------------------------
 // 상단: 시설배치도 (업로드 데이터와 무관한 정적 흐름도)
@@ -53,7 +61,8 @@ function ArrowDown({ x, y, color }: { x: number; y: number; color: string }) {
   return <polygon points={`${x - s},${y - s} ${x + s},${y - s} ${x},${y + s}`} fill={color} />;
 }
 
-type Group = { columns: number[]; dest: "하수처리장" | "우수" | "폐수" };
+type Group = { columns: number[]; dest: "하수처리장" | "우수" | "폐수"; annotation?: string };
+type Item = { icon: string; label: string; sub?: string };
 
 function PipelineLane({
   sourceIcon,
@@ -65,7 +74,7 @@ function PipelineLane({
   sourceIcon: string;
   sourceLabel: string;
   supplyColor: string;
-  items: { icon: string; label: string }[];
+  items: Item[];
   groups: Group[];
 }) {
   return (
@@ -123,11 +132,12 @@ function PipelineLane({
       {items.map((it, i) => (
         <div
           key={it.label}
-          className="absolute flex w-[104px] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 rounded-lg border border-zinc-200 bg-white px-2 py-2 text-center shadow-sm"
+          className="absolute flex w-[112px] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 rounded-lg border border-zinc-200 bg-white px-2 py-2 text-center shadow-sm"
           style={{ left: pct(COLS[i], VB_W), top: pct(ICON_Y, VB_H) }}
         >
           <span className="text-xl leading-none">{it.icon}</span>
           <span className="text-[11px] font-medium leading-tight text-zinc-700">{it.label}</span>
+          {it.sub && <span className="text-[9px] leading-tight text-zinc-400">{it.sub}</span>}
         </div>
       ))}
 
@@ -138,10 +148,11 @@ function PipelineLane({
         return (
           <div
             key={gi}
-            className={`absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold shadow-sm ${DEST_BADGE[g.dest]}`}
+            className={`absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-lg border px-3 py-1.5 text-center shadow-sm ${DEST_BADGE[g.dest]}`}
             style={{ left: pct(x, VB_W), top: pct(DISCHARGE_Y, VB_H) }}
           >
-            {g.dest}
+            <div className="text-xs font-semibold">{g.dest}</div>
+            {g.annotation && <div className="text-[10px] font-normal opacity-80">{g.annotation}</div>}
           </div>
         );
       })}
@@ -149,12 +160,62 @@ function PipelineLane({
   );
 }
 
-function FacilityLayout() {
+function fmtM3(v: number | undefined | null, decimals = 1): string {
+  if (v === undefined || v === null || Number.isNaN(v)) return "-";
+  return v.toLocaleString("ko-KR", { maximumFractionDigits: decimals, minimumFractionDigits: 0 });
+}
+
+function FacilityLayout({
+  availableYMs,
+  selectedYM,
+  onChangeYM,
+  generalTotal,
+  industrialTotal,
+  sewageActual,
+  effluentActual,
+}: {
+  availableYMs: string[];
+  selectedYM: string;
+  onChangeYM: (ym: string) => void;
+  generalTotal?: number;
+  industrialTotal?: number;
+  sewageActual?: number;
+  effluentActual?: number;
+}) {
+  // 일반용수 계열: 보일러+온수탱크 보충수(월평균 고정값)를 제외한 나머지가 하수처리장으로 간다고 계산.
+  const sewageComputed = generalTotal !== undefined ? Math.max(generalTotal - BOILER_MONTHLY_MAKEUP_M3, 0) : undefined;
+
+  // 공업용수 계열: 쿨링타워 증발량을 두 가지 방식으로 교차 계산한다.
+  // ① 실사용 기준: 공업용수 총사용량 - 실측 폐수 배출량
+  // ② 스펙 기준: 냉각용량 ÷ 증발잠열로 추정한 이론값(24시간 연속가동 가정)
+  const evapByBalance =
+    industrialTotal !== undefined && effluentActual !== undefined ? Math.max(industrialTotal - effluentActual, 0) : undefined;
+  const evapBySpec = selectedYM ? coolingTowerEvaporationMonthly(selectedYM) : undefined;
+  const evapRatePercent = evaporationRatePercentOfCirculation();
+
   return (
     <div className="flex flex-col gap-6 rounded-lg border border-zinc-200 bg-white p-5">
-      <div>
-        <h2 className="text-lg font-semibold text-zinc-800">시설배치도</h2>
-        <p className="text-xs text-zinc-500">용수 공급원부터 사용처, 배출처까지의 배관 흐름입니다.</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-zinc-800">시설배치도</h2>
+          <p className="text-xs text-zinc-500">용수 공급원부터 사용처, 배출처까지의 배관 흐름입니다. (선택한 달 기준 계산값 포함)</p>
+        </div>
+        {availableYMs.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-zinc-600" htmlFor="facilityYM">
+              기준월
+            </label>
+            <input
+              id="facilityYM"
+              type="month"
+              value={selectedYM}
+              min={availableYMs[availableYMs.length - 1]}
+              max={availableYMs[0]}
+              onChange={(e) => onChangeYM(e.target.value)}
+              className="rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
+            />
+          </div>
+        )}
       </div>
 
       <PipelineLane
@@ -165,10 +226,17 @@ function FacilityLayout() {
           { icon: "🚻", label: "화장실" },
           { icon: "🚿", label: "샤워장" },
           { icon: "🍽️", label: "식당" },
-          { icon: "🔥", label: "보일러" },
+          { icon: "🔥", label: "보일러", sub: `${BOILER_FLOW_RATE_LPH}L/hr` },
         ]}
         groups={[
-          { columns: [0, 1, 2], dest: "하수처리장" },
+          {
+            columns: [0, 1, 2],
+            dest: "하수처리장",
+            annotation:
+              sewageComputed !== undefined
+                ? `계산 ${fmtM3(sewageComputed)}㎥${sewageActual !== undefined ? ` · 실측 ${fmtM3(sewageActual)}㎥` : ""}`
+                : undefined,
+          },
           { columns: [3], dest: "우수" },
         ]}
       />
@@ -178,16 +246,43 @@ function FacilityLayout() {
         sourceLabel="공업용수"
         supplyColor={PIPE_COLOR.supplyIndustrial}
         items={[
-          { icon: "🌀", label: "쿨링타워" },
+          { icon: "🌀", label: "쿨링타워", sub: `${COOLING_TOWER_CAPACITY_KCAL_HR.toLocaleString("ko-KR")}kcal/hr` },
           { icon: "🔧", label: "피스톤세척기" },
           { icon: "🛢️", label: "바렐세척기" },
           { icon: "📦", label: "박스세척기" },
         ]}
         groups={[
-          { columns: [0], dest: "우수" },
-          { columns: [1, 2, 3], dest: "폐수" },
+          { columns: [0], dest: "우수", annotation: evapByBalance !== undefined ? `≈${fmtM3(evapByBalance)}㎥ (증발추정)` : undefined },
+          { columns: [1, 2, 3], dest: "폐수", annotation: effluentActual !== undefined ? `${fmtM3(effluentActual)}㎥ (실측)` : undefined },
         ]}
       />
+
+      <div className="rounded-md border border-zinc-200 bg-zinc-50 px-4 py-3 text-xs leading-relaxed text-zinc-600">
+        <p className="font-medium text-zinc-700">계산 방식 ({selectedYM || "선택 월 없음"} 기준)</p>
+        <p className="mt-1.5">
+          🔥 보일러+온수탱크 월평균 보충수 <b>{fmtM3(BOILER_MONTHLY_MAKEUP_M3, 2)}㎥(360L)</b> — 순환유량 {BOILER_FLOW_RATE_LPH}L/hr와는 별개로 실제
+          채워주는 보충수 실측 고정값
+        </p>
+        <p className="mt-1">
+          🚻 하수처리장 = 일반용수 {fmtM3(generalTotal)}㎥ − 보일러 보충수 {fmtM3(BOILER_MONTHLY_MAKEUP_M3, 2)}㎥ ={" "}
+          <b>{fmtM3(sewageComputed)}㎥</b> (화장실·샤워장·식당 합산분){" "}
+          {sewageActual !== undefined && (
+            <span className="text-zinc-400">— 실측값(업로드 파일 배출 데이터)은 {fmtM3(sewageActual)}㎥</span>
+          )}
+        </p>
+        <p className="mt-1">
+          🌀 쿨링타워 증발량(실사용 기준) = 공업용수 {fmtM3(industrialTotal)}㎥ − 폐수 실측 {fmtM3(effluentActual)}㎥ ={" "}
+          <b>{fmtM3(evapByBalance)}㎥</b>
+        </p>
+        <p className="mt-1">
+          🌀 쿨링타워 증발량(설비 스펙 기준) = 냉각용량 {COOLING_TOWER_CAPACITY_KCAL_HR.toLocaleString("ko-KR")}kcal/hr ÷ 증발잠열
+          580kcal/kg × 24시간 × {selectedYM ? "해당월 일수" : "-"} ≈ <b>{fmtM3(evapBySpec)}㎥/월</b>{" "}
+          <span className="text-zinc-400">(순환수 {COOLING_TOWER_FLOW_LPM.toLocaleString("ko-KR")}LPM 대비 증발률 약 {evapRatePercent.toFixed(2)}% — 통상 0.5~1.5% 범위와 비슷하면 추정이 합리적)</span>
+        </p>
+        <p className="mt-1.5 text-zinc-400">
+          * 두 증발량 계산치가 비슷한 범위로 나오면 서로 교차검증이 되는 것이고, 크게 어긋나면 폐수 실측값이나 가동시간 가정을 다시 확인해야 합니다.
+        </p>
+      </div>
     </div>
   );
 }
@@ -226,7 +321,9 @@ function buildRows(
   put(sewage, "sewage");
   put(effluent, "effluent");
 
-  return [...map.values()].sort((a, b) => a.key.localeCompare(b.key));
+  // 최신 달이 위로 오게 내림차순 — 오래된 달은 세부 항목(일반/공업용수) 구분이 아예 없는 경우가
+  // 있어, 오름차순으로 두면 화면 맨 위가 비어 보여 "데이터가 없어졌다"고 오해하기 쉽다.
+  return [...map.values()].sort((a, b) => b.key.localeCompare(a.key));
 }
 
 function fmt(v: number | undefined): string {
@@ -261,8 +358,9 @@ export function WaterManagement({ summary }: { summary: KpiSummary | null }) {
     [generalPoints, industrialPoints, sewagePoints, effluentPoints]
   );
 
-  const minYM = allRows[0]?.ym ?? "";
-  const maxYM = allRows[allRows.length - 1]?.ym ?? "";
+  // allRows는 최신 달이 먼저 오도록 내림차순 정렬돼 있다 (buildRows 참고).
+  const maxYM = allRows[0]?.ym ?? "";
+  const minYM = allRows[allRows.length - 1]?.ym ?? "";
   const [rangeStart, setRangeStart] = useState("");
   const [rangeEnd, setRangeEnd] = useState("");
   const effectiveStart = rangeStart || minYM;
@@ -274,9 +372,23 @@ export function WaterManagement({ summary }: { summary: KpiSummary | null }) {
     [allRows, effectiveStart, effectiveEnd]
   );
 
+  // 시설배치도의 "기준월" — 표의 기간 선택과는 별개로, 배관 위 계산값에 쓸 단일 월을 고른다.
+  const availableYMs = useMemo(() => allRows.map((r) => r.ym), [allRows]);
+  const [facilityYM, setFacilityYM] = useState("");
+  const effectiveFacilityYM = facilityYM || maxYM;
+  const facilityRow = allRows.find((r) => r.ym === effectiveFacilityYM);
+
   return (
     <div className="flex flex-col gap-6">
-      <FacilityLayout />
+      <FacilityLayout
+        availableYMs={availableYMs}
+        selectedYM={effectiveFacilityYM}
+        onChangeYM={setFacilityYM}
+        generalTotal={facilityRow?.general}
+        industrialTotal={facilityRow?.industrial}
+        sewageActual={facilityRow?.sewage}
+        effluentActual={facilityRow?.effluent}
+      />
 
       <div className="flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
