@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import type { KpiSummary, MonthlyPoint } from "@/lib/kpi/parseDetails";
-import type { FacilitySpec, FacilitySpecs } from "@/lib/kpi/facilitySpecs";
+import type { FacilitySpec, FacilitySpecs, FixtureEntry } from "@/lib/kpi/facilitySpecs";
+import { FIXTURE_PRESETS, FIXTURE_TYPES, type FixtureType } from "@/lib/kpi/fixturePresets";
 import {
   CONSUMPTION_LABEL,
   DISCHARGE_LABEL,
@@ -211,6 +212,7 @@ function FacilityLayout({
   effluentActual,
   onSelectItem,
   hasSpec,
+  specs,
 }: {
   availableYMs: string[];
   selectedYM: string;
@@ -221,12 +223,22 @@ function FacilityLayout({
   effluentActual?: number;
   onSelectItem: (label: string) => void;
   hasSpec: (label: string) => boolean;
+  specs: FacilitySpecs;
 }) {
   // 일반용수 계열: 온수탱크 보충(월 360㎥ 고정) + 보일러 자체 사용량(500L/hr×가동시간, 별도 계산)을
   // 뺀 나머지가 화장실·샤워장·식당을 거쳐 하수처리장으로 간다고 계산.
   const boilerOwn = selectedYM ? boilerOwnMonthlyM3(selectedYM) : undefined;
   const boilerTotal = selectedYM ? boilerTotalMonthlyM3(selectedYM) : undefined;
   const sewageComputed = generalTotal !== undefined && boilerTotal !== undefined ? Math.max(generalTotal - boilerTotal, 0) : undefined;
+
+  // 화장실·샤워장·식당에 등록된 기구(소변기/대변기/세면대 등) 목록으로부터 이론 월 사용량을
+  // 합산 — 사용횟수를 입력한 기구가 하나도 없으면 undefined(비교 대상 없음)로 둔다.
+  const fixtureFacilityNames = ["화장실", "샤워장", "식당"];
+  const fixtureEntries = fixtureFacilityNames.flatMap((name) => specs[name]?.fixtures ?? []);
+  const hasAnyFixtureFrequency = fixtureEntries.some((f) => f.usesPerDayPerUnit);
+  const sewageTheoreticalFromFixtures = hasAnyFixtureFrequency
+    ? fixtureEntries.reduce((sum, f) => sum + fixtureMonthlyM3(f), 0)
+    : undefined;
 
   // 공업용수 계열: 쿨링타워 증발량을 두 가지 방식으로 교차 계산한다.
   // ① 실사용 기준: 공업용수 총사용량 - 실측 폐수 배출량
@@ -348,6 +360,15 @@ function FacilityLayout({
             <span className="text-zinc-400">— 실측값(업로드 파일 배출 데이터)은 {fmtM3(sewageActual)}㎥</span>
           )}
         </p>
+        {sewageTheoreticalFromFixtures !== undefined && (
+          <p className="mt-1">
+            🚽 화장실·샤워장·식당 기구 목록 기준 이론 사용량 ≈ <b>{fmtM3(sewageTheoreticalFromFixtures, 2)}㎥/월</b>{" "}
+            <span className="text-zinc-400">
+              (등록한 기구별 대수×1회사용량×1일사용횟수 합산, 30일 기준) — 위 하수처리장 값과 차이가 크면 각 기구의
+              &quot;1일 사용횟수&quot;를 조정해가며 맞춰보면 실제 이용 빈도를 역산할 수 있음
+            </span>
+          </p>
+        )}
         <p className="mt-1">
           🌀 쿨링타워 증발량(실사용 기준) = 공업용수 {fmtM3(industrialTotal)}㎥ − 폐수 실측 {fmtM3(effluentActual)}㎥ ={" "}
           <b>{fmtM3(evapByBalance)}㎥</b>
@@ -435,9 +456,101 @@ function fmtPercent(v: number | undefined): string {
   return `${v.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}%`;
 }
 
+// 여러 종류의 기구가 섞여 있는 시설 — 이 시설들만 "기구 목록" 편집 UI를 쓴다.
+// 나머지(보일러/쿨링타워/세척기 등)는 단일 설비라 기존 대수·제품·용수사용량 폼 그대로 쓴다.
+const FIXTURE_FACILITIES = new Set(["화장실", "샤워장", "식당"]);
+const ASSUMED_DAYS_PER_MONTH = 30; // 이론 월 사용량 환산용 — 실제 선택월 일수와는 별개의 참고치
+
+function newFixture(): FixtureEntry {
+  const type: FixtureType = "대변기";
+  return {
+    id: crypto.randomUUID(),
+    type,
+    quantity: 1,
+    unitUsageL: FIXTURE_PRESETS[type]?.defaultUnitUsageL ?? 0,
+  };
+}
+
+function fixtureMonthlyM3(f: FixtureEntry): number {
+  if (!f.usesPerDayPerUnit) return 0;
+  return (f.quantity * f.unitUsageL * f.usesPerDayPerUnit * ASSUMED_DAYS_PER_MONTH) / 1000;
+}
+
+/** 기구 목록 한 줄 — 종류/대수/1회사용량/1일사용횟수를 편집. */
+function FixtureRow({ fixture, onChange, onRemove }: { fixture: FixtureEntry; onChange: (next: FixtureEntry) => void; onRemove: () => void }) {
+  const preset = FIXTURE_PRESETS[fixture.type];
+  return (
+    <div className="flex flex-col gap-1.5 rounded-md border border-zinc-200 p-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={fixture.type}
+          onChange={(e) => {
+            const type = e.target.value as FixtureType;
+            const p = FIXTURE_PRESETS[type];
+            onChange({ ...fixture, type, unitUsageL: p ? p.defaultUnitUsageL : fixture.unitUsageL });
+          }}
+          className="rounded border border-zinc-300 px-2 py-1 text-xs"
+        >
+          {FIXTURE_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+        {fixture.type === "기타" && (
+          <input
+            type="text"
+            value={fixture.customTypeName ?? ""}
+            onChange={(e) => onChange({ ...fixture, customTypeName: e.target.value })}
+            placeholder="기구명 직접입력"
+            className="w-24 rounded border border-zinc-300 px-2 py-1 text-xs"
+          />
+        )}
+        <label className="flex items-center gap-1 text-xs text-zinc-500">
+          대수
+          <input
+            type="number"
+            min={0}
+            value={fixture.quantity}
+            onChange={(e) => onChange({ ...fixture, quantity: Number(e.target.value) })}
+            className="w-14 rounded border border-zinc-300 px-1.5 py-1 text-xs"
+          />
+        </label>
+        <label className="flex items-center gap-1 text-xs text-zinc-500">
+          1회(L)
+          <input
+            type="number"
+            min={0}
+            step={0.1}
+            value={fixture.unitUsageL}
+            onChange={(e) => onChange({ ...fixture, unitUsageL: Number(e.target.value) })}
+            className="w-16 rounded border border-zinc-300 px-1.5 py-1 text-xs"
+          />
+        </label>
+        <label className="flex items-center gap-1 text-xs text-zinc-500">
+          1일 사용횟수(대당)
+          <input
+            type="number"
+            min={0}
+            value={fixture.usesPerDayPerUnit ?? ""}
+            onChange={(e) => onChange({ ...fixture, usesPerDayPerUnit: e.target.value ? Number(e.target.value) : undefined })}
+            placeholder="모름"
+            className="w-16 rounded border border-zinc-300 px-1.5 py-1 text-xs"
+          />
+        </label>
+        <button type="button" onClick={onRemove} className="ml-auto text-xs text-red-500 hover:underline">
+          삭제
+        </button>
+      </div>
+      {preset && <p className="text-[11px] text-zinc-400">{preset.sourceNote}</p>}
+    </div>
+  );
+}
+
 // -------------------------------------------
 // 세부시설항목 입력 모달 — 시설배치도의 각 사용처 박스를 클릭하면 뜬다.
-// 대수/제품/용수사용량/비고를 입력·저장(추후 용수사용량 역산에 쓸 원자료).
+// 화장실/샤워장/식당은 기구 목록(종류별 대수+이론사용량+사용횟수), 그 외 단일 설비는
+// 기존 대수/제품/용수사용량/비고 입력을 쓴다. (추후 용수사용량 역산에 쓸 원자료.)
 // -------------------------------------------
 function FacilityDetailModal({
   facility,
@@ -452,17 +565,20 @@ function FacilityDetailModal({
   onSave: (next: FacilitySpec) => void;
   onClose: () => void;
 }) {
+  const isFixtureFacility = FIXTURE_FACILITIES.has(facility);
+
   const [quantity, setQuantity] = useState(spec.quantity !== undefined ? String(spec.quantity) : "");
   const [model, setModel] = useState(spec.model ?? "");
   const [waterUsage, setWaterUsage] = useState(spec.waterUsage ?? "");
   const [note, setNote] = useState(spec.note ?? "");
+  const [fixtures, setFixtures] = useState<FixtureEntry[]>(spec.fixtures ?? []);
+
+  const theoreticalMonthlyM3 = useMemo(() => fixtures.reduce((sum, f) => sum + fixtureMonthlyM3(f), 0), [fixtures]);
+  const hasAnyFrequency = fixtures.some((f) => f.usesPerDayPerUnit);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
-      <div
-        className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="w-full max-w-lg rounded-lg bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-1 flex items-center justify-between">
           <h3 className="text-base font-semibold text-zinc-800">{facility} — 세부시설항목</h3>
           <button type="button" onClick={onClose} className="text-zinc-400 hover:text-zinc-600">
@@ -471,49 +587,95 @@ function FacilityDetailModal({
         </div>
         <p className="mb-4 text-xs text-zinc-500">추후 용수사용량 역산에 쓰일 자료입니다. 아는 만큼만 입력해도 됩니다.</p>
 
-        <div className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1 text-xs font-medium text-zinc-600">
-            대수
-            <input
-              type="number"
-              min={0}
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-              placeholder="예: 3"
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-800"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-zinc-600">
-            제품(모델명)
-            <input
-              type="text"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              placeholder="예: OO양변기 OO모델"
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-800"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-zinc-600">
-            용수 사용량
-            <input
-              type="text"
-              value={waterUsage}
-              onChange={(e) => setWaterUsage(e.target.value)}
-              placeholder="예: 1대당 200L/hr, 1회당 6L 등"
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-800"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-zinc-600">
-            비고
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              rows={2}
-              placeholder="설치 위치, 사용 패턴 등 자유롭게"
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-800"
-            />
-          </label>
-        </div>
+        {isFixtureFacility ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2">
+              {fixtures.length === 0 && (
+                <p className="rounded-md border border-dashed border-zinc-300 px-3 py-4 text-center text-xs text-zinc-400">
+                  아직 등록된 기구가 없습니다. 아래에서 추가하세요.
+                </p>
+              )}
+              {fixtures.map((f) => (
+                <FixtureRow
+                  key={f.id}
+                  fixture={f}
+                  onChange={(next) => setFixtures((prev) => prev.map((x) => (x.id === f.id ? next : x)))}
+                  onRemove={() => setFixtures((prev) => prev.filter((x) => x.id !== f.id))}
+                />
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setFixtures((prev) => [...prev, newFixture()])}
+              className="w-fit rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
+            >
+              + 기구 추가
+            </button>
+
+            <div className="rounded-md bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+              이론 월 사용량 ≈ <b>{theoreticalMonthlyM3.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}㎥</b>
+              {!hasAnyFrequency && fixtures.length > 0 && (
+                <span className="text-zinc-400"> (1일 사용횟수를 입력한 기구가 없어 0으로 계산됨)</span>
+              )}
+              <span className="block text-zinc-400">* 30일 기준 환산. 실제 배출 실적과 비교해가며 사용횟수를 조정해보세요.</span>
+            </div>
+
+            <label className="flex flex-col gap-1 text-xs font-medium text-zinc-600">
+              비고
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={2}
+                placeholder="설치 위치, 사용 패턴 등 자유롭게"
+                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-800"
+              />
+            </label>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <label className="flex flex-col gap-1 text-xs font-medium text-zinc-600">
+              대수
+              <input
+                type="number"
+                min={0}
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                placeholder="예: 3"
+                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-800"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-zinc-600">
+              제품(모델명)
+              <input
+                type="text"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="예: OO양변기 OO모델"
+                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-800"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-zinc-600">
+              용수 사용량
+              <input
+                type="text"
+                value={waterUsage}
+                onChange={(e) => setWaterUsage(e.target.value)}
+                placeholder="예: 1대당 200L/hr, 1회당 6L 등"
+                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-800"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-zinc-600">
+              비고
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={2}
+                placeholder="설치 위치, 사용 패턴 등 자유롭게"
+                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-800"
+              />
+            </label>
+          </div>
+        )}
 
         <div className="mt-5 flex justify-end gap-2">
           <button
@@ -527,12 +689,16 @@ function FacilityDetailModal({
             type="button"
             disabled={saving}
             onClick={() =>
-              onSave({
-                quantity: quantity.trim() ? Number(quantity) : undefined,
-                model: model.trim() || undefined,
-                waterUsage: waterUsage.trim() || undefined,
-                note: note.trim() || undefined,
-              })
+              onSave(
+                isFixtureFacility
+                  ? { fixtures: fixtures.length > 0 ? fixtures : undefined, note: note.trim() || undefined }
+                  : {
+                      quantity: quantity.trim() ? Number(quantity) : undefined,
+                      model: model.trim() || undefined,
+                      waterUsage: waterUsage.trim() || undefined,
+                      note: note.trim() || undefined,
+                    }
+              )
             }
             className="rounded-md bg-orange-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
           >
@@ -600,7 +766,7 @@ export function WaterManagement({
 
   function hasSpec(label: string): boolean {
     const s = specs[label];
-    return !!s && (s.quantity !== undefined || !!s.model || !!s.waterUsage || !!s.note);
+    return !!s && (s.quantity !== undefined || !!s.model || !!s.waterUsage || !!s.note || !!s.fixtures?.length);
   }
 
   async function saveSpec(next: FacilitySpec) {
@@ -634,6 +800,7 @@ export function WaterManagement({
         effluentActual={facilityRow?.effluent}
         onSelectItem={setEditingFacility}
         hasSpec={hasSpec}
+        specs={specs}
       />
 
       {editingFacility && (
