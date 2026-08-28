@@ -3,10 +3,10 @@
   "card": {
     "date": "2026-08-14",
     "totalAmount": 16804521,
-    "totalFee": 0,
-    "totalNet": 0,
+    "totalFee": 237121,
+    "totalNet": 15774944,
     "count": 101,
-    "depositDate": "",
+    "depositDate": "2026-08-19",
     "cardTxs": [
       {
         "approvalNo": "47374570",
@@ -817,7 +817,14 @@
         "transTime": "00:19:28"
       }
     ],
-    "depositExpected": {}
+    "depositExpected": {
+      "2026-08-20": {
+        "비씨카드": 4462486,
+        "KB국민카드": 3484022,
+        "롯데카드": 381195,
+        "하나카드": 154645
+      }
+    }
   },
   "bos": {
     "date": "2026-08-14",
