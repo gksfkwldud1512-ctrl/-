@@ -9,14 +9,15 @@ const MONTH_NUMBER: Record<string, number> = {
   Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12,
 };
 
-export type SeriesKey = "energy" | "waste" | "water" | "scope1" | "scope2" | "salesUSD";
+export type SeriesKey = "energy" | "waste" | "water" | "waterDischarge" | "scope1" | "scope2" | "salesUSD";
 // 하위 항목(구성 내역)까지 조회 가능한 지표만 별도로 세분화해서 보관한다.
-export type BreakdownSeriesKey = "energy" | "waste" | "water";
+export type BreakdownSeriesKey = "energy" | "waste" | "water" | "waterDischarge";
 
 export const SERIES_META: Record<SeriesKey, { label: string; unit: string }> = {
   energy: { label: "에너지 사용량", unit: "GJ" },
   waste: { label: "폐기물 발생량", unit: "ton" },
   water: { label: "용수 사용량", unit: "㎥" },
+  waterDischarge: { label: "용수 배출량", unit: "㎥" },
   scope1: { label: "Scope 1 배출량", unit: "tCO2e" },
   scope2: { label: "Scope 2 배출량", unit: "tCO2e" },
   salesUSD: { label: "매출액", unit: "USD" },
@@ -24,13 +25,14 @@ export const SERIES_META: Record<SeriesKey, { label: string; unit: string }> = {
 
 // SPHERA/E MASTER 내보내기(DETAILS 파일)의 MEASURES LEVEL0/LEVEL1 조합으로 각 지표를 식별한다.
 // 주의: "Total Water Withdrawal [m3]" LEVEL0에는 취수량(b) 항목과 배출량(c) 항목이 섞여 있어
-// LEVEL1이 "b)"로 시작하는 취수량만 골라야 하고, "Carbon emission [tCO2e]"에는 Scope1/2를 합산한
-// "Scope 1 + 2 Emissions" 행이 별도로 더 있어 그대로 다 더하면 중복 집계된다 — Scope1/Scope2는
-// 반드시 LEVEL1을 정확히 지정해서 골라야 한다.
+// LEVEL1이 "b)"로 시작하면 취수(소비)량, "c)"로 시작하면 배출량이다(용수관리 화면에서 사용).
+// "Carbon emission [tCO2e]"에는 Scope1/2를 합산한 "Scope 1 + 2 Emissions" 행이 별도로 더 있어
+// 그대로 다 더하면 중복 집계된다 — Scope1/Scope2는 반드시 LEVEL1을 정확히 지정해서 골라야 한다.
 const SERIES_MATCH: Record<SeriesKey, (level0: string, level1: string) => boolean> = {
   energy: (l0) => l0 === "Total energy consumption [GJ]",
   waste: (l0) => l0 === "Total waste generated [t]",
   water: (l0, l1) => l0 === "Total Water Withdrawal [m3]" && l1.trim().startsWith("b)"),
+  waterDischarge: (l0, l1) => l0 === "Total Water Withdrawal [m3]" && l1.trim().startsWith("c)"),
   scope1: (l0, l1) => l0 === "Carbon emission [tCO2e]" && l1.trim() === "Scope 1 emissions [t CO2e]",
   scope2: (l0, l1) => l0 === "Carbon emission [tCO2e]" && l1.trim() === "Scope 2 Emissions [t CO2e]",
   salesUSD: (l0, l1) => l0 === "Intensity Normalisers [USD]" && l1.trim() === "Site Sales [USD]",
@@ -101,16 +103,69 @@ function pointsFromMap(map: Map<string, number>): MonthlyPoint[] {
   return points;
 }
 
-export async function parseKpiDetailsWorkbook(buffer: Buffer, filename: string): Promise<KpiSummary> {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buffer as unknown as ExcelJS.Buffer);
-  const ws = wb.worksheets[0];
-  if (!ws) throw new Error("워크시트를 찾을 수 없습니다.");
+const REQUIRED_HEADERS = ["MEASURES LEVEL0", "MEASURES LEVEL1", "MEASURES", "MONTH", "YEAR", "VALUE"] as const;
 
+/** 파일 앞부분이 zip(PK) 시그니처인지 확인. .xlsx는 zip 컨테이너이므로, 이게 아니면
+ *  구버전 .xls이거나 손상된 파일 — exceljs가 알아듣기 힘든 저수준 에러를 던지기 전에 미리 걸러낸다. */
+function looksLikeZip(buffer: Buffer): boolean {
+  if (buffer.length < 4) return false;
+  return buffer[0] === 0x50 && buffer[1] === 0x4b && (buffer[2] === 0x03 || buffer[2] === 0x05 || buffer[2] === 0x07);
+}
+
+function readHeaderRow(ws: ExcelJS.Worksheet): string[] {
   const headers: string[] = [];
   ws.getRow(1).eachCell((cell, col) => {
     headers[col] = String(cell.value ?? "").trim();
   });
+  return headers;
+}
+
+export async function parseKpiDetailsWorkbook(buffer: Buffer, filename: string): Promise<KpiSummary> {
+  if (!looksLikeZip(buffer)) {
+    throw new Error(
+      "업로드한 파일이 표준 Excel(.xlsx) 형식이 아닌 것 같습니다. 예전 형식(.xls)이거나 파일이 손상됐을 수 있습니다. " +
+        "Excel에서 파일을 열어 '다른 이름으로 저장 → Excel 통합 문서(.xlsx)'로 다시 저장한 뒤 업로드해 주세요."
+    );
+  }
+
+  const wb = new ExcelJS.Workbook();
+  try {
+    await wb.xlsx.load(buffer as unknown as ExcelJS.Buffer);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      "엑셀 파일을 여는 데 실패했습니다. 암호로 보호되어 있거나 손상된 파일일 수 있습니다. " +
+        `암호가 걸려 있다면 해제한 뒤 다시 저장해서 업로드해 주세요. (상세: ${detail})`
+    );
+  }
+
+  if (wb.worksheets.length === 0) throw new Error("워크시트를 찾을 수 없습니다.");
+
+  // 필요한 헤더를 모두 가진 시트를 자동으로 찾는다 (기존: 무조건 첫 번째 시트만 봄 —
+  // 새 내보내기 파일에 표지/요약 시트가 추가되면 엉뚱한 시트를 읽어서 깨졌었다).
+  let ws: ExcelJS.Worksheet | undefined;
+  let headers: string[] = [];
+  const sheetReport: { name: string; headers: string[] }[] = [];
+  for (const candidate of wb.worksheets) {
+    const h = readHeaderRow(candidate);
+    sheetReport.push({ name: candidate.name, headers: h.filter(Boolean) });
+    if (REQUIRED_HEADERS.every((req) => h.includes(req))) {
+      ws = candidate;
+      headers = h;
+      break;
+    }
+  }
+
+  if (!ws) {
+    const found = sheetReport
+      .map((s) => `- [${s.name}] 시트에서 찾은 헤더: ${s.headers.length ? s.headers.join(", ") : "(헤더 없음)"}`)
+      .join("\n");
+    throw new Error(
+      `필요한 컬럼(${REQUIRED_HEADERS.join("/")})을 어떤 시트에서도 찾지 못했습니다. ` +
+        `SPHERA/E MASTER 내보내기 형식인지 확인해 주세요.\n\n[파일에서 실제로 찾은 헤더]\n${found}`
+    );
+  }
+
   const colIndex = (name: string) => headers.findIndex((h) => h === name);
 
   const iLevel0 = colIndex("MEASURES LEVEL0");
@@ -120,20 +175,14 @@ export async function parseKpiDetailsWorkbook(buffer: Buffer, filename: string):
   const iYear = colIndex("YEAR");
   const iValue = colIndex("VALUE");
 
-  if ([iLevel0, iLevel1, iMeasure, iMonth, iYear, iValue].some((i) => i < 1)) {
-    throw new Error(
-      "필요한 컬럼(MEASURES LEVEL0/LEVEL1/MEASURES/MONTH/YEAR/VALUE)을 찾을 수 없습니다. SPHERA/E MASTER 내보내기 형식인지 확인해 주세요."
-    );
-  }
-
   // key: seriesKey -> "fiscalYear|month" -> 합계
   const sums: Record<SeriesKey, Map<string, number>> = {
-    energy: new Map(), waste: new Map(), water: new Map(),
+    energy: new Map(), waste: new Map(), water: new Map(), waterDischarge: new Map(),
     scope1: new Map(), scope2: new Map(), salesUSD: new Map(),
   };
   // key: seriesKey -> measureName -> "fiscalYear|month" -> 합계
   const breakdownSums: Record<BreakdownSeriesKey, Map<string, Map<string, number>>> = {
-    energy: new Map(), waste: new Map(), water: new Map(),
+    energy: new Map(), waste: new Map(), water: new Map(), waterDischarge: new Map(),
   };
 
   for (let r = 2; r <= ws.rowCount; r++) {
@@ -152,7 +201,7 @@ export async function parseKpiDetailsWorkbook(buffer: Buffer, filename: string):
       const mapKey = `${fiscalYear}|${month}`;
       sums[key].set(mapKey, (sums[key].get(mapKey) ?? 0) + value);
 
-      if (key === "energy" || key === "waste" || key === "water") {
+      if (key === "energy" || key === "waste" || key === "water" || key === "waterDischarge") {
         const measureName = cleanMeasureName(measure) || "기타";
         const byMeasure = breakdownSums[key];
         if (!byMeasure.has(measureName)) byMeasure.set(measureName, new Map());

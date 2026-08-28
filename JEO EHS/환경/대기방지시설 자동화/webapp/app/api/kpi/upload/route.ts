@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { parseKpiDetailsWorkbook } from "@/lib/kpi/parseDetails";
-import { saveKpiSummary } from "@/lib/kpi/store";
+import { saveKpiSummary, saveFailedUpload } from "@/lib/kpi/store";
 
 export const maxDuration = 60;
 
@@ -22,10 +22,12 @@ export async function POST(request: Request) {
   try {
     summary = await parseKpiDetailsWorkbook(buffer, file.name);
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "파일을 분석하지 못했습니다." },
-      { status: 400 }
-    );
+    const message = err instanceof Error ? err.message : "파일을 분석하지 못했습니다.";
+    // Vercel 로그에 상세 남기기 + 실패한 원본 파일 보관 — 다음에 같은 문제가 생겨도
+    // 재현/재전달 없이 바로 원인을 진단할 수 있게 한다.
+    console.error(`[kpi/upload] parse failed: file=${file.name} size=${file.size}B message=${message}`);
+    await saveFailedUpload(buffer, file.name, message);
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 
   await saveKpiSummary(summary);
