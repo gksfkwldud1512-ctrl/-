@@ -169,7 +169,10 @@ function findGreedyWindow(months, amount, forceAccept = false) {
 // 반환: { vendor: { months:[{month,charge,paid,remaining,lagMonths}],
 //         allocations:[{depositId,date,amount,note,isSplit,appliedTo,source}],
 //         unresolved:[...], totalCharge, totalPaid, remaining, surplus, beforeTrackCount } }
-function allocateArDeposits(arMatrix, deposits) {
+// manualPaid: Set of "업체명|YYYY-MM" — 카드결제 등 은행입금이 아예 없어 자동/수동 매칭
+// 대상이 될 입금 자체가 없는 업체(예: 카드로만 결제받는 거래처)를 위해, 사람이 "이 달은
+// 완납 처리"로 직접 확정한 달. 실제 입금 기록 없이 해당 월 charge=paid로 강제 처리.
+function allocateArDeposits(arMatrix, deposits, manualPaid = new Set()) {
   const result = {};
   const units = decomposeUnits(deposits);
   const unitsByVendor = new Map();
@@ -247,6 +250,15 @@ function allocateArDeposits(arMatrix, deposits) {
       unresolved.push({ ...unitMeta(u), suggestedWindow: suggested ? suggested.assignments : [] });
       allocations.push({ ...unitMeta(u), appliedTo: [], source: 'unresolved' });
     }
+
+    // 카드결제 완납 수동 처리 — 최종 오버라이드(실제 입금 매칭 결과보다 우선)
+    months.forEach(m => {
+      if (manualPaid.has(`${vendor}|${m.month}`) && m.paid < m.charge) {
+        m.paid = m.charge;
+        m.remaining = 0;
+        m.manualPaidCard = true;
+      }
+    });
 
     const totalCharge = months.reduce((s, m) => s + m.charge, 0);
     const totalPaid   = months.reduce((s, m) => s + m.paid, 0);

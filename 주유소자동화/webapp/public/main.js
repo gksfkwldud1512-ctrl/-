@@ -119,6 +119,9 @@ function initTabs() {
   document.querySelectorAll('#subnav-monthly .tab-btn').forEach(btn => {
     btn.addEventListener('click', () => switchSubTab(btn.dataset.tab));
   });
+  document.querySelectorAll('#subnav-summary .tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchSummarySubTab(btn.dataset.tab));
+  });
 }
 
 function switchGroup(group) {
@@ -141,10 +144,12 @@ function switchGroup(group) {
   const subnav        = document.getElementById('subnav');
   const subnavDaily   = document.getElementById('subnav-daily');
   const subnavMonthly = document.getElementById('subnav-monthly');
-  if (group === 'daily' || group === 'monthly') {
+  const subnavSummary = document.getElementById('subnav-summary');
+  if (group === 'daily' || group === 'monthly' || group === 'summary') {
     subnav.classList.remove('hidden');
     if (subnavDaily)   subnavDaily.style.display   = group === 'daily'   ? '' : 'none';
     if (subnavMonthly) subnavMonthly.style.display = group === 'monthly' ? '' : 'none';
+    if (subnavSummary) subnavSummary.style.display = group === 'summary' ? '' : 'none';
   } else {
     subnav.classList.add('hidden');
   }
@@ -158,8 +163,26 @@ function switchGroup(group) {
     const activeTab = document.querySelector('#subnav-monthly .tab-btn.active')?.dataset.tab || 'statements';
     switchSubTab(activeTab);
   } else if (group === 'summary') {
-    loadSummary();
+    const activeTab = document.querySelector('#subnav-summary .tab-btn.active')?.dataset.tab || 'summary-main';
+    switchSummarySubTab(activeTab);
   }
+}
+
+function switchSummarySubTab(tab) {
+  document.querySelectorAll('#subnav-summary .tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+  const gs = document.getElementById('group-summary');
+  if (gs) { gs.style.display = 'block'; gs.classList.add('active'); }
+  ['summary-main', 'summary-assets'].forEach(t => {
+    const el = document.getElementById(`tab-${t}`);
+    if (!el) return;
+    const show = t === tab;
+    el.style.display = show ? 'block' : 'none';
+    el.classList.toggle('active', show);
+  });
+  if (tab === 'summary-main')   loadSummary();
+  if (tab === 'summary-assets') loadAssetOverview();
 }
 
 function switchDailySubTab(tab) {
@@ -1850,23 +1873,44 @@ function renderTankStatus(tanks, date) {
   }
 }
 
-function calcDailyProfit(day) {
+// 일별 영업이익을 구성요소별로 분해해서 반환
+//   fuel  : 유종(휘발유/경유/등유) 판매이익 = 매출 − 판매량×FIFO매입단가
+//   etc   : 유외상품 이익(매출−수기원가) + 세차 매출(원가 없음)
+//   cardFee: 카드 수수료(차감 항목)
+//   total : 영업이익 = fuel + etc − cardFee
+// 화면에서 유종이익과 유외·세차이익을 따로 보여주기 위해 분해 형태로 돌려준다.
+function calcDailyProfitBreakdown(day) {
   const bos = day.bos;
   if (!bos || !bos.date) return null;
+  if (!dailyState.purchasePrices.length) return null;   // 매입단가 없으면 계산 불가
 
-  // 단가가 하나도 없으면 null
-  if (!dailyState.purchasePrices.length) return null;
-
-  let profit = 0;
-  ['휘발유', '경유', '등유'].forEach(fuel => {
-    const f   = bos.fuels?.[fuel];
-    const buy = getPriceForDate(bos.date, fuel);
-    if (f && buy) profit += f.amount - (f.qty * buy);
+  let fuel = 0;
+  ['휘발유', '경유', '등유'].forEach(f => {
+    const fd  = bos.fuels?.[f];
+    const buy = getPriceForDate(bos.date, f);
+    if (fd && buy) fuel += fd.amount - (fd.qty * buy);
   });
-  profit += (bos.carwash?.amount || 0);
-  profit += (bos.others?.amount  || 0) - (day.otherCost || 0);
-  profit -= (day.card?.totalFee  || 0);  // 카드 수수료 차감
-  return Math.round(profit);
+
+  const etc     = (bos.carwash?.amount || 0) + (bos.others?.amount || 0) - (day.otherCost || 0);
+  const cardFee = day.card?.totalFee || 0;
+
+  // 반올림하지 않은 원값도 함께 반환 — 합계 행은 원값으로 누적한 뒤 마지막에 한 번만
+  // 반올림해야 종합현황 탭의 월 영업이익과 원 단위까지 정확히 일치한다
+  // (일별로 반올림해서 더하면 한 달치가 쌓여 몇 원씩 어긋남)
+  return {
+    fuel:    Math.round(fuel),
+    etc:     Math.round(etc),
+    cardFee: Math.round(cardFee),
+    total:   Math.round(fuel + etc - cardFee),
+    rawFuel: fuel,
+    rawEtc:  etc,
+    rawCardFee: cardFee,
+  };
+}
+
+function calcDailyProfit(day) {
+  const b = calcDailyProfitBreakdown(day);
+  return b ? b.total : null;
 }
 
 function renderDailyTable() {
@@ -1874,12 +1918,13 @@ function renderDailyTable() {
   if (!tbody) return;
 
   if (!dailyState.days.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="25">BOS 데이터를 업로드하면 현황이 표시됩니다</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="28">BOS 데이터를 업로드하면 현황이 표시됩니다</td></tr>';
     updateDailySummary(null);
     return;
   }
 
-  let totals = { 휘발유L: 0, 경유L: 0, 등유L: 0, 휘발유A: 0, 경유A: 0, 등유A: 0, otherA: 0, carwashA: 0, profit: 0, cardFee: 0 };
+  let totals = { 휘발유L: 0, 경유L: 0, 등유L: 0, 휘발유A: 0, 경유A: 0, 등유A: 0, otherA: 0, carwashA: 0,
+                 profit: 0, cardFee: 0, profitFuel: 0, profitEtc: 0 };
 
   const rows = dailyState.days.map(day => {
     const bos  = day.bos;
@@ -1897,14 +1942,18 @@ function renderDailyTable() {
     const cwA = bos?.carwash?.amount || 0;  // 세차
     const otC = day.otherCost || 0;
     const cardFee = card?.totalFee || 0;
-    const profit  = calcDailyProfit(day);
+    const brk     = calcDailyProfitBreakdown(day);
+    const profit  = brk ? brk.total : null;
 
     totals.휘발유L += gL; totals.경유L += dL; totals.등유L += kL;
     totals.휘발유A += gA; totals.경유A += dA; totals.등유A += kA;
     totals.otherA  += otA;
     totals.carwashA += cwA;
-    totals.profit  += profit ?? 0;
     totals.cardFee += cardFee;
+    // 합계는 원값(raw)으로 누적 → 표시할 때 한 번만 반올림 (종합현황 월 영업이익과 정확히 일치)
+    totals.profit     += brk?.rawFuel != null ? (brk.rawFuel + brk.rawEtc - brk.rawCardFee) : 0;
+    totals.profitFuel += brk?.rawFuel ?? 0;
+    totals.profitEtc  += brk?.rawEtc  ?? 0;
 
     const drum  = v  => v > 0 ? Math.floor(v / 200).toLocaleString() : '-';
     const litL  = v  => v > 0 ? Math.floor(v).toLocaleString() : '-';
@@ -1912,6 +1961,9 @@ function renderDailyTable() {
     const price = (a, q) => q > 0 ? Math.round(a / q).toLocaleString() + '원' : '-';
     const buyPr = (d, f) => { const p = getPriceForDate(d, f); return p ? p.toLocaleString() + '원' : '-'; };
     const pf    = profit != null ? `<span class="${profit >= 0 ? 'profit-pos' : 'profit-neg'}">${profit.toLocaleString()}원</span>` : '-';
+    const money = v => v != null ? `<span class="${v >= 0 ? 'profit-pos' : 'profit-neg'}">${v.toLocaleString()}원</span>` : '-';
+    const pfFuel = brk ? money(brk.fuel) : '-';   // 유종(휘발유·경유·등유) 이익만
+    const pfEtc  = brk ? money(brk.etc)  : '-';   // 유외상품 + 세차 이익
 
     const m      = day.matching;
     const bm     = calcBankMatch(day);
@@ -1951,7 +2003,9 @@ function renderDailyTable() {
       <td class="daily-col-date">${md}</td>
       <td class="group-summary-cell">${totalDrum}</td>
       <td class="group-summary-cell" style="font-weight:600;">${totalSales > 0 ? totalSales.toLocaleString() + '원' : '-'}</td>
-      <td class="group-summary-cell daily-col-profit">${pf}</td>
+      <td class="group-summary-cell daily-col-profit">${pfFuel}</td>
+      <td class="group-summary-cell daily-col-profit">${pfEtc}</td>
+      <td class="group-summary-cell daily-col-profit" style="font-weight:600;">${pf}</td>
       <td>${litL(gL)}</td><td>${drum(gL)}</td><td>${won(gA)}</td><td>${price(gA,gL)}</td><td>${buyPr(date,'휘발유')}</td>
       <td>${litL(dL)}</td><td>${drum(dL)}</td><td>${won(dA)}</td><td>${price(dA,dL)}</td><td>${buyPr(date,'경유')}</td>
       <td>${litL(kL)}</td><td>${drum(kL)}</td><td>${won(kA)}</td><td>${price(kA,kL)}</td><td>${buyPr(date,'등유')}</td>
@@ -1967,6 +2021,10 @@ function renderDailyTable() {
   });
 
   const hasPriceData = dailyState.purchasePrices.length > 0;
+  // 원값 누적분을 여기서 한 번만 반올림
+  totals.profit     = Math.round(totals.profit);
+  totals.profitFuel = Math.round(totals.profitFuel);
+  totals.profitEtc  = Math.round(totals.profitEtc);
   const totalPf    = hasPriceData
     ? `<span class="${totals.profit >= 0 ? 'profit-pos' : 'profit-neg'}">${totals.profit.toLocaleString()}원</span>`
     : '단가 미입력';
@@ -1975,11 +2033,18 @@ function renderDailyTable() {
   const totalAllDrum = Math.floor(totalAllL / 200).toLocaleString();
 
   const totalAllSales = totals.휘발유A + totals.경유A + totals.등유A + totals.otherA + totals.carwashA;
+  const totalPfFuel = hasPriceData
+    ? `<span class="${totals.profitFuel >= 0 ? 'profit-pos' : 'profit-neg'}">${totals.profitFuel.toLocaleString()}원</span>` : '-';
+  const totalPfEtc = hasPriceData
+    ? `<span class="${totals.profitEtc >= 0 ? 'profit-pos' : 'profit-neg'}">${totals.profitEtc.toLocaleString()}원</span>` : '-';
+
   const totalRow = `<tr class="total-row">
     <td class="daily-col-date">합계</td>
     <td class="group-summary-cell">${totalAllDrum}</td>
     <td class="group-summary-cell" style="font-weight:700;">${totalAllSales.toLocaleString()}원</td>
-    <td class="group-summary-cell daily-col-profit">${totalPf}</td>
+    <td class="group-summary-cell daily-col-profit">${totalPfFuel}</td>
+    <td class="group-summary-cell daily-col-profit">${totalPfEtc}</td>
+    <td class="group-summary-cell daily-col-profit" style="font-weight:700;">${totalPf}</td>
     <td>${Math.floor(totals.휘발유L).toLocaleString()}</td><td>${Math.floor(totals.휘발유L/200).toLocaleString()}</td><td>${totals.휘발유A.toLocaleString()}</td><td>-</td><td>-</td>
     <td>${Math.floor(totals.경유L).toLocaleString()}</td><td>${Math.floor(totals.경유L/200).toLocaleString()}</td><td>${totals.경유A.toLocaleString()}</td><td>-</td><td>-</td>
     <td>${Math.floor(totals.등유L).toLocaleString()}</td><td>${Math.floor(totals.등유L/200).toLocaleString()}</td><td>${totals.등유A.toLocaleString()}</td><td>-</td><td>-</td>
@@ -2992,13 +3057,34 @@ function renderSummary(data) {
         ${td(amt > 0 ? amt.toLocaleString()+'원' : '-', true)}
       </tr>`;
     });
-    const etcAmt = (data.sales?.carwash||0) + (data.sales?.others||0);
+    // 유종 소계 → 세차·유외 이익 → 카드수수료 차감 → 합계 순으로 보여줘야
+    // "유종 합 ≠ 총 영업이익"으로 보이던 혼란이 없어진다 (셋을 더하면 정확히 합계가 됨)
+    const fuelProfit = data.fuelProfit ?? null;
+    rows.push(`<tr style="background:#f8fafc;border-top:1px solid #e2e8f0;">
+      ${td('<span style="color:#64748b;">유종 소계</span>')} ${td('-',true)} ${td('-',true)} ${td('-',true)}
+      ${td(fuelProfit != null ? `<span style="color:${fuelProfit>=0?'#16a34a':'#dc2626'};font-weight:700;">${fuelProfit.toLocaleString()}원</span>` : '-', true)}
+      ${td('-',true)}
+    </tr>`);
+
+    const etcAmt    = (data.sales?.carwash||0) + (data.sales?.others||0);
+    const etcProfit = data.etcProfit ?? null;
+    const otherCost = data.otherCost || 0;
     rows.push(`<tr style="background:#f8fafc;">
-      ${td('세차+유외')} ${td('-',true)} ${td('-',true)} ${td('-',true)} ${td('-',true)}
+      ${td(`세차+유외${otherCost ? `<span style="font-size:11px;color:#94a3b8;"> (원가 ${otherCost.toLocaleString()}원 차감)</span>` : ''}`)}
+      ${td('-',true)} ${td('-',true)} ${td('-',true)}
+      ${td(etcProfit != null ? `<span style="color:${etcProfit>=0?'#16a34a':'#dc2626'};font-weight:700;">${etcProfit.toLocaleString()}원</span>` : '-', true)}
       ${td(etcAmt > 0 ? etcAmt.toLocaleString()+'원' : '-', true)}
     </tr>`);
+
+    const cardFee = data.cardFee || 0;
+    rows.push(`<tr style="background:#f8fafc;">
+      ${td('<span style="color:#64748b;">카드 수수료</span>')} ${td('-',true)} ${td('-',true)} ${td('-',true)}
+      ${td(cardFee ? `<span style="color:#dc2626;font-weight:700;">-${cardFee.toLocaleString()}원</span>` : '-', true)}
+      ${td('-',true)}
+    </tr>`);
+
     rows.push(`<tr style="background:#f1f5f9;border-top:2px solid #e2e8f0;">
-      ${td('합계',false,true)} ${td('-',true,true)} ${td('-',true,true)} ${td('-',true,true)}
+      ${td('영업이익 합계',false,true)} ${td('-',true,true)} ${td('-',true,true)} ${td('-',true,true)}
       ${td(data.profit!=null?`<span style="color:${data.profit>=0?'#16a34a':'#dc2626'};font-weight:700;">${data.profit.toLocaleString()}원</span>`:'-',true,true)}
       ${td((data.revenue||0).toLocaleString()+'원',true,true)}
     </tr>`);
@@ -3965,12 +4051,16 @@ function renderArVendorDetail() {
     // remaining: 0=일치, 양수=부족(달마다 그대로 표시, 다른달과 상계 안함), 음수=그 달만 초과입금
     const remColor = m.remaining === 0 ? '#16a34a' : (m.remaining > 0 ? '#dc2626' : '#0369a1');
     const remLabel = m.remaining === 0 ? '0원' : (m.remaining > 0 ? arNum(m.remaining) + ' 부족' : arNum(-m.remaining) + ' 초과');
+    const cardBtn = m.manualPaidCard
+      ? `<button style="font-size:10px;padding:1px 5px;margin-left:6px;color:#dc2626;" onclick="unmarkArPaidCard('${esc(v.name)}','${m.month}')">✕카드결제 취소</button>`
+      : `<button style="font-size:10px;padding:1px 5px;margin-left:6px;" onclick="markArPaidCard('${esc(v.name)}','${m.month}')">입금 확인(카드결제)</button>`;
     return `
     <tr style="border-bottom:1px solid #f1f5f9;">
-      <td style="padding:4px 6px;">${m.month}</td>
-      <td style="padding:4px 6px;text-align:right;">${arNum(m.charge)}</td>
-      <td style="padding:4px 6px;text-align:right;">${arNum(m.paid)}${m.lagMonths != null ? ` <span style="font-size:10px;color:#64748b;">(+${m.lagMonths}개월)</span>` : ''}</td>
-      <td style="padding:4px 6px;text-align:right;color:${remColor};">${remLabel}</td>
+      <td style="padding:1px 6px;line-height:1.2;">${m.month}</td>
+      <td style="padding:1px 6px;line-height:1.2;text-align:right;">${arNum(m.charge)}</td>
+      <td style="padding:1px 6px;line-height:1.2;text-align:right;">${arNum(m.paid)}${m.lagMonths != null ? ` <span style="font-size:10px;color:#64748b;">(+${m.lagMonths}개월)</span>` : ''}</td>
+      <td style="padding:1px 6px;line-height:1.2;text-align:right;color:${remColor};">${remLabel}${m.manualPaidCard ? ' <span class="badge badge-done" style="font-size:10px;">카드결제</span>' : ''}</td>
+      <td style="padding:1px 6px;line-height:1.2;">${cardBtn}</td>
     </tr>`;
   }).join('');
 
@@ -4043,6 +4133,7 @@ function renderArVendorDetail() {
           <th style="padding:4px 6px;text-align:right;">거래대금</th>
           <th style="padding:4px 6px;text-align:right;">충당액</th>
           <th style="padding:4px 6px;text-align:right;">잔액</th>
+          <th style="padding:4px 6px;"></th>
         </tr></thead>
         <tbody>${monthRows}</tbody>
       </table>
@@ -4148,6 +4239,22 @@ async function confirmArMatch(depositId, vendorName) {
   renderArUnmatchedModalBody();
 }
 
+// ── 카드결제 등 은행입금 매칭 대상이 없는 업체의 월별 완납 수동 확정 ──
+async function markArPaidCard(vendorName, month) {
+  const res = await api('POST', '/api/ar/mark-paid', { vendorName, month });
+  if (!res.ok) return toast(res.error || '처리 실패', 'error');
+  toast(`${month} 카드결제 완납 처리 완료`, 'success');
+  await loadArSummary();
+  renderArVendorDetail();
+}
+
+async function unmarkArPaidCard(vendorName, month) {
+  const res = await api('DELETE', '/api/ar/mark-paid', { vendorName, month });
+  if (!res.ok) return toast(res.error || '취소 실패', 'error');
+  await loadArSummary();
+  renderArVendorDetail();
+}
+
 // ── 미확정 배분(자동판별 실패 건) 수동 확정 모달 ──────────────────
 function renderArUnresolvedBadge() {
   const badge = document.getElementById('ar-unresolved-badge');
@@ -4248,6 +4355,113 @@ async function removeArAlias(vendorName, alias) {
   if (!res.ok) return toast(res.error || '삭제 실패', 'error');
   await loadArSummary();
   renderArVendorDetail();
+}
+
+// ── 자산현황 ─────────────────────────────────────────────────
+const assetState = { months: [], rows: [], loans: [], bankBalances: [], editingBankMonth: null };
+
+async function loadAssetOverview() {
+  const res = await api('GET', '/api/asset-overview');
+  if (!res.ok) { toast(res.error || '자산현황 조회 실패', 'error'); return; }
+  assetState.months       = res.months;
+  assetState.rows         = res.rows;
+  assetState.loans        = res.loans;
+  assetState.bankBalances = res.bankBalances;
+  renderAssetLoans();
+  renderAssetTable();
+}
+
+function renderAssetLoans() {
+  const tbody = document.getElementById('asset-loan-tbody');
+  const totalEl = document.getElementById('asset-loan-total');
+  if (!tbody) return;
+  const total = assetState.loans.reduce((s, l) => s + (l.amount || 0), 0);
+  if (totalEl) totalEl.textContent = `대출총액 ${arNum(total)}`;
+
+  tbody.innerHTML = assetState.loans.length ? assetState.loans.map(l => `
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:6px;">${esc(l.name)}</td>
+      <td style="padding:6px;text-align:right;">${arNum(l.amount)}</td>
+      <td style="padding:6px;text-align:right;">${l.interestRate ? l.interestRate + '%' : '-'}</td>
+      <td style="padding:6px;color:#64748b;">${esc(l.memo) || '-'}</td>
+      <td style="padding:6px;text-align:center;">
+        <button style="font-size:11px;padding:2px 6px;color:#dc2626;" onclick="deleteLoan('${l.id}')">삭제</button>
+      </td>
+    </tr>`).join('') : `<tr><td colspan="5" style="padding:16px;text-align:center;color:#94a3b8;">등록된 대출이 없습니다.</td></tr>`;
+}
+
+async function addLoan() {
+  const name = document.getElementById('asset-loan-name')?.value.trim();
+  const amount = Number(document.getElementById('asset-loan-amount')?.value) || 0;
+  const interestRate = Number(document.getElementById('asset-loan-rate')?.value) || 0;
+  const memo = document.getElementById('asset-loan-memo')?.value.trim() || '';
+  if (!name) return toast('대출명을 입력하세요.', 'warn');
+  if (!amount) return toast('금액을 입력하세요.', 'warn');
+  const res = await api('POST', '/api/asset/loans', { name, amount, interestRate, memo });
+  if (!res.ok) return toast(res.error || '대출 등록 실패', 'error');
+  toast('대출 등록 완료', 'success');
+  ['asset-loan-name', 'asset-loan-amount', 'asset-loan-rate', 'asset-loan-memo'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  await loadAssetOverview();
+}
+
+async function deleteLoan(id) {
+  const res = await api('DELETE', `/api/asset/loans/${id}`);
+  if (!res.ok) return toast(res.error || '삭제 실패', 'error');
+  await loadAssetOverview();
+}
+
+function renderAssetTable() {
+  const tbody = document.getElementById('asset-table-tbody');
+  if (!tbody) return;
+  if (!assetState.rows.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="padding:16px;text-align:center;color:#94a3b8;">일마감 데이터가 없습니다.</td></tr>`;
+    return;
+  }
+  // 최신 달이 위로 오도록 역순 표시
+  const rows = assetState.rows.slice().reverse();
+  tbody.innerHTML = rows.map(r => {
+    const editing = assetState.editingBankMonth === r.month;
+    const bankCell = editing ? `
+      <div style="display:flex;gap:4px;align-items:center;justify-content:flex-end;">
+        <input type="date" id="asset-bank-date-${r.month}" value="${r.bankDate || `${r.month}-01`}" style="font-size:11px;padding:2px 4px;width:120px;">
+        <input type="number" id="asset-bank-amount-${r.month}" value="${r.bankAmount || ''}" placeholder="금액" style="font-size:11px;padding:2px 4px;width:100px;">
+        <button style="font-size:11px;padding:2px 6px;" onclick="saveBankBalance('${r.month}')">저장</button>
+        <button style="font-size:11px;padding:2px 6px;" onclick="toggleBankEdit(null)">취소</button>
+      </div>` : `
+      <span style="cursor:pointer;" onclick="toggleBankEdit('${r.month}')" title="클릭해서 수정">
+        ${r.bankDate ? arNum(r.bankAmount) : '<span style="color:#94a3b8;">입력 필요</span>'}
+        ${r.bankCarried ? `<span style="font-size:10px;color:#94a3b8;"> (${r.bankDate} 이월)</span>` : ''}
+        ✏️
+      </span>`;
+    const netColor = r.netWorth >= 0 ? '#0f172a' : '#dc2626';
+    return `<tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:6px;font-weight:600;">${r.month}</td>
+      <td style="padding:6px;text-align:right;">${bankCell}</td>
+      <td style="padding:6px;text-align:right;">${arNum(r.inventoryValue)}</td>
+      <td style="padding:6px;text-align:right;">${arNum(r.receivableValue)}</td>
+      <td style="padding:6px;text-align:right;">${arNum(r.loanTotal)}</td>
+      <td style="padding:6px;text-align:right;font-weight:700;color:${netColor};">${arNum(r.netWorth)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function toggleBankEdit(month) {
+  assetState.editingBankMonth = month;
+  renderAssetTable();
+}
+
+async function saveBankBalance(month) {
+  const date = document.getElementById(`asset-bank-date-${month}`)?.value;
+  const amount = Number(document.getElementById(`asset-bank-amount-${month}`)?.value);
+  if (!date) return toast('기준일을 입력하세요.', 'warn');
+  if (!amount && amount !== 0) return toast('금액을 입력하세요.', 'warn');
+  const res = await api('POST', '/api/asset/bank-balance', { date, amount });
+  if (!res.ok) return toast(res.error || '저장 실패', 'error');
+  toast('통장금액 저장 완료', 'success');
+  assetState.editingBankMonth = null;
+  await loadAssetOverview();
 }
 
 // ── 업체별 결제주기 설정 ──────────────────────────────────────

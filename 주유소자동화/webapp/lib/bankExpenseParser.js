@@ -291,10 +291,13 @@ function stripBankSuffix(s) {
   return String(s || '').replace(/\/\s*(타행이체|대체|이체|입금)\s*$/, '').trim();
 }
 
-// "(주)"/"㈜"/"주식회사" 위치 차이로 매칭이 실패하는 것을 막기 위해 제거
-// (예: "디비엘(주)음성지점" ↔ "디비엘음성지점" 을 같은 업체로 인식)
+// "(주)"/"㈜"/"주식회사"/"(합자)"/"(자)"(합자회사 약칭) 위치 차이로 매칭이 실패하는 것을
+// 막기 위해 제거 (예: "디비엘(주)음성지점" ↔ "디비엘음성지점", "(합자)새한관광" ↔ "새한관광(자)")
 function stripCorpMarkers(s) {
-  return String(s || '').replace(/\(주\)/g, '').replace(/㈜/g, '').replace(/주식회사/g, '').trim();
+  return String(s || '')
+    .replace(/\(주\)/g, '').replace(/㈜/g, '').replace(/주식회사/g, '')
+    .replace(/\(합자\)/g, '').replace(/\(자\)/g, '').replace(/합자회사/g, '')
+    .trim();
 }
 
 function parseBankIncoming(filePath) {

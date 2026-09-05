@@ -1378,6 +1378,32 @@
     "totalAmount": 1921064
   },
   {
+    "name": "면세박충남",
+    "custNo": "0000107",
+    "payType": "기타",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 1133,
+        "amount": 1756150,
+        "avgPrice": 1550
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 1133,
+    "totalAmount": 1756150
+  },
+  {
     "name": "현금고객",
     "custNo": "4996000",
     "payType": "현금",

@@ -18,8 +18,13 @@
       <button class="main-tab active" data-group="monthly">월마감</button>
     </nav>
   </div>
-  <!-- subnav: 일마감 and 월마감 groups both use this -->
+  <!-- subnav: 종합/일마감/월마감 groups all use this -->
   <div class="subnav" id="subnav">
+    <!-- 종합 subnav -->
+    <div class="subnav-inner" id="subnav-summary" style="display:none;">
+      <button class="tab-btn active" data-tab="summary-main">종합현황</button>
+      <button class="tab-btn" data-tab="summary-assets">자산현황</button>
+    </div>
     <!-- 일마감 subnav -->
     <div class="subnav-inner" id="subnav-daily" style="display:none;">
       <button class="tab-btn active" data-tab="daily-main">일마감</button>
@@ -216,6 +221,8 @@
   <!-- ───── 대분류: 종합 ───── -->
   <section id="group-summary" class="group-content">
 
+  <div id="tab-summary-main" class="tab-content">
+
     <!-- 툴바: 조회 년월 -->
     <div class="toolbar">
       <div class="toolbar-group">
@@ -337,6 +344,68 @@
         <div style="padding:24px;text-align:center;color:#94a3b8;">연도를 선택하고 조회하세요</div>
       </div>
     </div>
+
+  </div><!-- /tab-summary-main -->
+
+  <!-- ───── 종합 서브탭: 자산현황 ───── -->
+  <div id="tab-summary-assets" class="tab-content" style="display:none;">
+
+    <div class="notice notice-info">
+      💰 통장금액(수기 입력)·재고금액(매입가 기준 자동, 그 달 1일 기준)·채권금액(미수 잔액
+      자동, 그 달 말일 기준)·대출을 종합한 월별 자산현황입니다. 재고금액·채권금액은
+      각 월 시점에 맞춰 매번 다시 계산됩니다.
+    </div>
+
+    <!-- 대출 관리 -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <h2>대출 관리</h2>
+        <div id="asset-loan-total" style="font-size:13px;color:#64748b;"></div>
+      </div>
+      <div style="padding:12px;">
+        <table style="width:100%;font-size:13px;border-collapse:collapse;">
+          <thead>
+            <tr style="background:#f1f5f9;">
+              <th style="padding:6px;text-align:left;">대출명</th>
+              <th style="padding:6px;text-align:right;">금액</th>
+              <th style="padding:6px;text-align:right;">이자율</th>
+              <th style="padding:6px;text-align:left;">메모</th>
+              <th style="padding:6px;"></th>
+            </tr>
+          </thead>
+          <tbody id="asset-loan-tbody"></tbody>
+        </table>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9;">
+          <input type="text"   id="asset-loan-name" placeholder="대출명" style="font-size:13px;padding:4px 8px;width:140px;">
+          <input type="number" id="asset-loan-amount" placeholder="금액" style="font-size:13px;padding:4px 8px;width:120px;">
+          <input type="number" id="asset-loan-rate" placeholder="이자율(%)" step="0.01" style="font-size:13px;padding:4px 8px;width:100px;">
+          <input type="text"   id="asset-loan-memo" placeholder="메모(선택)" style="font-size:13px;padding:4px 8px;width:140px;">
+          <button class="btn-primary" onclick="addLoan()">+ 대출 추가</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 월별 자산현황 표 -->
+    <div class="card">
+      <div class="card-header"><h2>월별 자산현황</h2></div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;font-size:13px;border-collapse:collapse;white-space:nowrap;">
+          <thead>
+            <tr style="background:#f1f5f9;">
+              <th style="padding:6px;text-align:left;">월</th>
+              <th style="padding:6px;text-align:right;">통장금액</th>
+              <th style="padding:6px;text-align:right;">재고금액<br><span style="font-size:10px;font-weight:400;color:#94a3b8;">(매입가 기준)</span></th>
+              <th style="padding:6px;text-align:right;">채권금액<br><span style="font-size:10px;font-weight:400;color:#94a3b8;">(그 달 말일 기준)</span></th>
+              <th style="padding:6px;text-align:right;">대출총액</th>
+              <th style="padding:6px;text-align:right;">순자산</th>
+            </tr>
+          </thead>
+          <tbody id="asset-table-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /tab-summary-assets -->
 
   </section>
 
@@ -527,14 +596,18 @@
       <details style="padding:0 16px 12px; font-size:12px; color:#64748b;">
         <summary style="cursor:pointer; font-weight:600; color:#475569; user-select:none;">영업이익 계산 방법 보기</summary>
         <div style="margin-top:10px; padding:12px; background:#f8fafc; border-radius:6px; line-height:2;">
-          <strong>영업이익 =</strong><br>
+          <strong>영업이익 = 유종이익 + 유외·세차이익 − 카드 수수료</strong><br>
+          <br>
+          <strong>① 유종이익</strong><br>
           &nbsp;&nbsp;(휘발유 매출 − 휘발유 수량 × 매입단가)<br>
           &nbsp;+ (경유 매출 − 경유 수량 × 매입단가)<br>
           &nbsp;+ (등유 매출 − 등유 수량 × 매입단가)<br>
-          &nbsp;+ 세차 매출<br>
+          <strong>② 유외·세차이익</strong><br>
+          &nbsp;&nbsp;세차 매출 (원가 없음)<br>
           &nbsp;+ (유외상품 매출 − 수기 입력 원가)<br>
-          &nbsp;− <strong>카드 수수료</strong> (이지샵 업로드 시 자동 반영)<br>
+          <strong>③ 카드 수수료</strong> (이지샵 업로드 시 자동 반영, 차감)<br>
           <br>
+          <span style="color:#94a3b8;">※ 표의 유종이익·유외·세차이익·영업이익(합계) 3개 열이 위 ①②③에 그대로 대응합니다</span><br>
           <span style="color:#94a3b8;">※ 매입단가 미입력 시 이익 계산 불가 ("−" 표시)</span><br>
           <span style="color:#94a3b8;">※ 매입단가는 적용 시작일 기준으로 자동 선택됩니다</span>
         </div>
@@ -546,7 +619,12 @@
               <th rowspan="2" class="daily-col-date">날짜</th>
               <th rowspan="2" class="group-summary">합계<br>드럼</th>
               <th rowspan="2" class="group-summary" style="min-width:90px;">판매금액</th>
-              <th rowspan="2" class="daily-col-profit group-summary" style="min-width:80px;">영업이익</th>
+              <th rowspan="2" class="daily-col-profit group-summary" style="min-width:80px;"
+                  title="휘발유+경유+등유 판매이익 (매출 − 판매량×FIFO매입단가)">유종<br>이익</th>
+              <th rowspan="2" class="daily-col-profit group-summary" style="min-width:80px;"
+                  title="세차 매출 + (유외상품 매출 − 수기 원가)">유외·세차<br>이익</th>
+              <th rowspan="2" class="daily-col-profit group-summary" style="min-width:90px;"
+                  title="영업이익 = 유종이익 + 유외·세차이익 − 카드수수료">영업이익<br>(합계)</th>
               <th colspan="5" class="group-gasoline">휘발유</th>
               <th colspan="5" class="group-diesel">경유</th>
               <th colspan="5" class="group-kerosene">등유</th>
@@ -567,7 +645,7 @@
           </thead>
           <tbody id="daily-tbody">
             <tr class="empty-row">
-              <td colspan="26">BOS 데이터를 업로드하면 현황이 표시됩니다</td>
+              <td colspan="28">BOS 데이터를 업로드하면 현황이 표시됩니다</td>
             </tr>
           </tbody>
         </table>
