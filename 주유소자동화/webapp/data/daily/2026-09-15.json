@@ -1,0 +1,30 @@
+{
+  "date": "2026-09-15",
+  "card": {
+    "date": "2026-09-15",
+    "totalAmount": 30000,
+    "totalFee": 0,
+    "totalNet": 0,
+    "count": 2,
+    "depositDate": "",
+    "cardTxs": [
+      {
+        "approvalNo": "34282674",
+        "cardCompany": "신한카드",
+        "cardNo": "9455-1100-****-066*",
+        "fuel": "세차",
+        "amount": 15000,
+        "transTime": "13:27:28"
+      },
+      {
+        "approvalNo": "47121130",
+        "cardCompany": "삼성카드",
+        "cardNo": "9420-8800-****-896*",
+        "fuel": "세차",
+        "amount": 15000,
+        "transTime": "11:33:17"
+      }
+    ],
+    "depositExpected": {}
+  }
+}
