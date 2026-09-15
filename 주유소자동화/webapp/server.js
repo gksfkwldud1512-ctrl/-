@@ -879,10 +879,10 @@ function saveCustomerSales(monthMap) {
 }
 
 // BOS 업로드 (단일 날짜 또는 월별 파일 모두 처리)
-app.post('/api/daily/upload-bos', upload.single('file'), (req, res) => {
+app.post('/api/daily/upload-bos', upload.single('file'), async (req, res) => {
   if (!req.file) return res.json({ ok: false, error: '파일 없음' });
   try {
-    const days = parseBosDaily(req.file.path);
+    const days = await parseBosDaily(req.file.path);
     let lastDate = '';
     for (const parsed of days) {
       const existing = readJSON(dailyFile(parsed.date), { date: parsed.date });
@@ -893,7 +893,7 @@ app.post('/api/daily/upload-bos', upload.single('file'), (req, res) => {
     }
     // 고객별 판매 집계도 함께 저장
     try {
-      const monthMap = parseCustomerSales(req.file.path);
+      const monthMap = await parseCustomerSales(req.file.path);
       saveCustomerSales(monthMap);
     } catch(_) {}
     res.json({ ok: true, count: days.length, date: lastDate });
@@ -910,7 +910,7 @@ app.get('/api/daily/customer-sales', (req, res) => {
 });
 
 // uploads/ 폴더의 BOS 상세조회 파일을 전부 재파싱하여 고객 판매 데이터 재구축
-app.post('/api/daily/rebuild-customer-sales', (req, res) => {
+app.post('/api/daily/rebuild-customer-sales', async (req, res) => {
   const UPLOADS_DIR = path.join(__dirname, 'uploads');
   if (!fs.existsSync(UPLOADS_DIR)) return res.json({ ok: true, processed: 0 });
 
@@ -924,7 +924,7 @@ app.post('/api/daily/rebuild-customer-sales', (req, res) => {
 
   for (const fname of files) {
     try {
-      const monthMap = parseCustomerSales(path.join(UPLOADS_DIR, fname));
+      const monthMap = await parseCustomerSales(path.join(UPLOADS_DIR, fname));
       if (Object.keys(monthMap).length > 0) {
         saveCustomerSales(monthMap);
         Object.keys(monthMap).forEach(ym => processedMonths.add(ym));
@@ -936,10 +936,10 @@ app.post('/api/daily/rebuild-customer-sales', (req, res) => {
 });
 
 // 이지샵 카드 업로드 (단일 날짜 또는 월별 파일 모두 처리)
-app.post('/api/daily/upload-card', upload.single('file'), (req, res) => {
+app.post('/api/daily/upload-card', upload.single('file'), async (req, res) => {
   if (!req.file) return res.json({ ok: false, error: '파일 없음' });
   try {
-    const days = parseEasyshop(req.file.path);
+    const days = await parseEasyshop(req.file.path);
     let lastDate = '';
     for (const parsed of days) {
       const existing = readJSON(dailyFile(parsed.date), { date: parsed.date });

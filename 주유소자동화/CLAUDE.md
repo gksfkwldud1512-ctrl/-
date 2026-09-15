@@ -534,3 +534,59 @@ webapp\시작.bat 더블클릭
 - webapp/data/vendors*.json (거래 데이터)
 - webapp/uploads/, webapp/output/
 - node_modules/
+
+---
+
+## 완료된 작업 전체 목록 (추가 - 2026-09-13) — 이지샵→나이스정보통신 전환 + 암호 자동해제
+
+### 배경
+- 카드 매입/VAN 처리 업체가 2026-09-04부터 (구)이지샵 → **나이스정보통신** 양식으로 변경
+- 나이스정보통신 매출자료, BOS 통합거래조회 다운로드 파일 모두 **항상 비밀번호로 암호화**되어 내려받음
+  (사용자가 저장 시 비밀번호 "1"로 통일하기로 함)
+
+### 조사 결과
+- 실제 나이스 파일(27개 컬럼: 거래고유번호~간편결제) 헤더 구조를 확인한 결과, 기존
+  `lib/easyshopParser.js`가 쓰던 고정 컬럼 인덱스와 100% 일치 → **파싱 로직 자체는
+  2026-06-02 최초 구현 이후 변경 불필요**했음
+- BOS ↔ 카드 대사(`lib/cardMatcher.js`, 승인번호 기준)와 불일치 표시(모달) 기능도
+  기존 그대로 나이스 파일에 적용됨 (변경 없음)
+- 데이터 확인 중 발견: 9/5·9/7~9/13 나이스 다운로드본은 하루 1~5건만 잡힘(카드 VAN
+  정산 지연으로 추정, 코드 버그 아님) → 며칠 뒤 재다운로드 권장 (사용자에게 안내함,
+  자동 UI 안내 문구는 사용자 요청으로 미추가)
+
+### 구현한 변경
+- **`lib/xlsxReader.js` 신규**: `readWorkbookAuto(filePath, password='1')` —
+  `officecrypto-tool`로 암호 여부 확인 후 암호화된 파일이면 자동 복호화, 평문
+  파일은 기존처럼 그대로 읽음 (완전 하위 호환)
+- **`lib/easyshopParser.js`**: `parseEasyshop` async 전환 + `readWorkbookAuto` 사용
+  + 헤더명 기반 컬럼 자동인식 추가(`resolveColumns`/`normalizeHeader`) — 컬럼 순서가
+  바뀌어도 헤더명(거래고유번호/거래일시/유종/카드번호/매입카드사/금액/승인번호/
+  입금예정일/승인결과/수수료/입금예정금액/취소여부)으로 찾고, 못 찾으면 기존 고정
+  인덱스로 폴백. 헤더에 정렬 화살표(▼ 등)가 붙는 경우 대비해 정규화 처리.
+- **`lib/dailyBosParser.js`**: `parseBosDaily`, `parseCustomerSales` 둘 다 async 전환
+  + `readWorkbookAuto` 사용 (BOS 통합거래조회도 암호화되어 있으므로)
+- **`server.js`**: `/api/daily/upload-bos`, `/api/daily/upload-card`,
+  `/api/daily/rebuild-customer-sales` 라우트 async 전환 + await 추가
+- **의존성 추가**: `officecrypto-tool` (SheetJS 무료판 `xlsx`는 암호 해제 기능이
+  실제로는 번들에 없음 — 상용 Pro 전용이라 별도 라이브러리 필요했음)
+
+### 검증 완료
+- 원본 나이스 파일 재파싱 → 수정 전과 완전히 동일한 결과(날짜별 count/금액) 확인
+- BOS 파일(`upload_1789287145094.xlsx`)을 `officecrypto-tool`로 암호화한 테스트
+  파일 → 정상 복호화 + 파싱, 평문 버전과 결과 동일
+- 나이스 파일도 동일하게 암호화 후 정상 복호화 + 파싱 확인
+- 컬럼 순서를 임의로 뒤섞은 테스트 파일 → 헤더명 기반으로 정확히 재매핑되어 원본과
+  동일한 결과 (최초 구현 시 헤더의 "거래일시▼" 화살표 때문에 매칭 실패하던 버그를
+  이 테스트로 발견 후 수정함)
+- 헤더를 전부 알아볼 수 없게 만든 극단 케이스 → 고정 인덱스 폴백 정상 동작
+- 틀린 비밀번호로 복호화 시도 → 한글 에러 메시지 정상 반환
+- 실제 `/api/daily/upload-bos`, `/api/daily/upload-card` HTTP 엔드포인트에 암호화된
+  테스트 파일을 curl로 업로드 → 정상 처리, 기존 저장 데이터와 값 일치 확인
+
+### 남은 참고사항
+- 비밀번호는 현재 `xlsxReader.js`에 상수("1")로 고정. 나중에 나이스/BOS 쪽에서
+  비밀번호 규칙이 바뀌면 이 파일 한 곳만 수정하면 됨.
+- 위 검증 과정에서 실제 업로드 API를 호출해 `data/daily/*.json`,
+  `data/customer_sales_2026_*.json`, `data/purchase_prices.json`이 재계산되어
+  갱신됨(내용은 기존과 동일한 소스 파일 기준이라 수치 변경 없음, 단 JSON 내부
+  순서/신규 파생값 일부 추가됨).

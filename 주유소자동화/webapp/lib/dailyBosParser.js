@@ -1,5 +1,6 @@
 'use strict';
 const XLSX = require('xlsx');
+const { readWorkbookAuto } = require('./xlsxReader');
 
 const FUEL_TYPES = new Set(['휘발유', '경유', '등유']);
 const CAR_WASH   = '세차';
@@ -16,8 +17,8 @@ function detectFormat(headerRow) {
   return { payTypeCol: 8, cardCoCol: 20, approvalCol: 21, outTypeCol: 15, cardNoCol: -1 };
 }
 
-function parseBosDaily(filePath) {
-  const wb   = XLSX.readFile(filePath);
+async function parseBosDaily(filePath) {
+  const wb   = await readWorkbookAuto(filePath);
   const ws   = wb.Sheets[wb.SheetNames[0]];
   const raw  = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
@@ -92,8 +93,8 @@ function bosCardNo(raw) {
 //   판매전표 상세조회: h2[4]='고객명', h2[8]='결제구분' → custCol=4, payCol=8, prodCol=11, qtyCol=12, priceCol=13, amtCol=14
 //   판매전표리스트:     h2[8]='고객명', h2[6]='결제구분' → custCol=8, payCol=6,  prodCol=11, qtyCol=12, priceCol=13, amtCol=14
 //   배달판매전표리스트: h2[8]='고객명', h2[6]='결제구분' → custCol=8, payCol=6,  prodCol=11, qtyCol=12, priceCol=13, amtCol=14
-function parseCustomerSales(filePath) {
-  const wb   = XLSX.readFile(filePath);
+async function parseCustomerSales(filePath) {
+  const wb   = await readWorkbookAuto(filePath);
   const ws   = wb.Sheets[wb.SheetNames[0]];
   const raw  = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
