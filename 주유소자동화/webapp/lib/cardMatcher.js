@@ -56,6 +56,7 @@ function matchCards(bosCards, easyCards) {
         cardCompany: bosGroup.cardCompany,
         cardNo:      bosGroup.cardNo,
         product,
+        source:      easyTx.source || '',
         bosAmount:   bosGroup.totalAmount,
         easyAmount:  easyTx.amount,
         diff:        bosGroup.totalAmount - easyTx.amount,
@@ -74,6 +75,7 @@ function matchCards(bosCards, easyCards) {
         cardNo:      easyTx.cardNo,
         product:     easyTx.fuel,
         transTime:   easyTx.transTime || '',
+        source:      easyTx.source || '',
         bosAmount:   null,
         easyAmount:  easyTx.amount,
         diff:        -easyTx.amount,
@@ -89,9 +91,16 @@ function matchCards(bosCards, easyCards) {
   }, 0);
   const easyTotal = easyCards.reduce((s, t) => s + t.amount, 0);
 
+  // 카드 출처(이지샵/나이스)별 합계 — 출처 없는 예전 데이터는 집계 안 함
+  const bySource = {};
+  for (const t of easyCards) {
+    if (t.source) bySource[t.source] = (bySource[t.source] || 0) + t.amount;
+  }
+
   return {
     bosTotal,
     easyTotal,
+    bySource,
     totalDiff:  bosTotal - easyTotal,
     totalMatch: bosTotal === easyTotal && errors.length === 0,
     errors,

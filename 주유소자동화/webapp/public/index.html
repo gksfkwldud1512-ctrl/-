@@ -59,7 +59,7 @@
             <div style="font-weight:700;color:#15803d;margin-bottom:8px;">① 일마감 (매일)</div>
             <ol style="margin:0;padding-left:18px;font-size:13px;color:#374151;line-height:1.8;">
               <li>BOS 데이터 업로드</li>
-              <li>이지샵 카드내역 업로드</li>
+              <li>이지샵(세차·유외) + 나이스(유류) 카드내역 업로드</li>
               <li>매입단가·입고이력 확인/수정</li>
               <li>카드 대사 확인</li>
             </ol>
@@ -107,9 +107,15 @@
               <td style="padding:10px 14px;"><span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 6px;font-size:11px;">.xlsx/.xls</span></td>
             </tr>
             <tr style="border-bottom:1px solid #f1f5f9;background:#f8fafc;">
-              <td style="padding:10px 14px;font-weight:600;">이지샵 카드내역</td>
-              <td style="padding:10px 14px;color:#64748b;">이지샵(VAN) → 승인내역 조회 → Excel</td>
-              <td style="padding:10px 14px;">일마감 탭 → 💳 이지샵 카드내역 업로드</td>
+              <td style="padding:10px 14px;font-weight:600;">이지샵 카드내역 (세차·유외)</td>
+              <td style="padding:10px 14px;color:#64748b;">이지샵(VAN) → 신용거래내역조회 → Excel</td>
+              <td style="padding:10px 14px;">일마감 탭 → 💳 이지샵 카드내역 (세차·유외)</td>
+              <td style="padding:10px 14px;"><span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 6px;font-size:11px;">.xlsx/.xls</span></td>
+            </tr>
+            <tr style="border-bottom:1px solid #f1f5f9;background:#f8fafc;">
+              <td style="padding:10px 14px;font-weight:600;">나이스 카드내역 (유류)</td>
+              <td style="padding:10px 14px;color:#64748b;">나이스정보통신 → 통합거래조회 → Excel (2026-09-04~)</td>
+              <td style="padding:10px 14px;">일마감 탭 → 💳 나이스 카드내역 (유류)</td>
               <td style="padding:10px 14px;"><span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 6px;font-size:11px;">.xlsx/.xls</span></td>
             </tr>
             <tr style="border-bottom:1px solid #f1f5f9;">
@@ -208,9 +214,9 @@
       <div style="padding:16px;font-size:13px;line-height:1.8;color:#374151;">
         <ol style="padding-left:20px;line-height:2.2;">
           <li><strong>BOS 업로드</strong> → 일마감에서 당일 카드 승인내역 파싱</li>
-          <li><strong>이지샵 업로드</strong> → VAN사 실제 승인내역 파싱</li>
-          <li><strong>승인번호 기준 매칭</strong> → BOS ↔ 이지샵 자동 대사</li>
-          <li><strong>불일치 확인</strong>: <span style="background:#fee2e2;color:#dc2626;border-radius:4px;padding:1px 6px;">BOS만</span> <span style="background:#fef9c3;color:#ca8a04;border-radius:4px;padding:1px 6px;">이지샵만</span> <span style="background:#fce7f3;color:#be185d;border-radius:4px;padding:1px 6px;">금액 불일치</span></li>
+          <li><strong>이지샵(세차·유외) + 나이스(유류) 업로드</strong> → VAN사 실제 승인내역 파싱 (따로 저장, 서로 덮어쓰지 않음)</li>
+          <li><strong>승인번호 기준 매칭</strong> → BOS ↔ (이지샵+나이스 합계) 자동 대사</li>
+          <li><strong>불일치 확인</strong>: <span style="background:#fee2e2;color:#dc2626;border-radius:4px;padding:1px 6px;">BOS만</span> <span style="background:#fef9c3;color:#ca8a04;border-radius:4px;padding:1px 6px;">카드(VAN)만</span> <span style="background:#fce7f3;color:#be185d;border-radius:4px;padding:1px 6px;">금액 불일치</span></li>
           <li>분할결제(동일 승인번호 복수건)는 합산 후 비교</li>
         </ol>
       </div>
@@ -481,7 +487,11 @@
         </button>
         <input type="file" id="card-file-input" accept=".xlsx,.xls" hidden>
         <button class="btn-upload btn-teal" onclick="document.getElementById('card-file-input').click()">
-          💳 이지샵 카드내역 업로드
+          💳 이지샵 카드내역 (세차·유외)
+        </button>
+        <input type="file" id="nice-file-input" accept=".xlsx,.xls" hidden>
+        <button class="btn-upload btn-teal" style="background:#4f46e5;border-color:#4f46e5;" onclick="document.getElementById('nice-file-input').click()">
+          💳 나이스 카드내역 (유류)
         </button>
       </div>
     </div>
@@ -630,7 +640,7 @@
               <th colspan="5" class="group-kerosene">등유</th>
               <th colspan="2" class="group-other">유외상품</th>
               <th colspan="1" class="group-carwash">세차</th>
-              <th colspan="2" class="group-card">카드(이지샵)</th>
+              <th colspan="2" class="group-card">카드(이지샵+나이스)</th>
               <th rowspan="2" class="daily-col-profit">영업이익</th>
               <th rowspan="2" class="group-match">카드대사</th>
             </tr>

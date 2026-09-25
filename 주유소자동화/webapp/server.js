@@ -935,22 +935,62 @@ app.post('/api/daily/rebuild-customer-sales', async (req, res) => {
   res.json({ ok: true, months: [...processedMonths].sort(), errors });
 });
 
-// 이지샵 카드 업로드 (단일 날짜 또는 월별 파일 모두 처리)
-app.post('/api/daily/upload-card', upload.single('file'), async (req, res) => {
+// 카드 VAN 출처 — 2026-09-04부터 유류는 나이스, 세차·유외상품은 기존 이지샵 단말기 유지
+const CARD_SOURCE_LABEL = { easyshop: '이지샵', nice: '나이스' };
+
+// 출처별로 따로 저장된 카드내역을 하나로 합쳐 day.card 생성
+// (카드수수료·입금예정·계좌대사·영업이익은 모두 day.card를 보므로 기존 로직 그대로 동작)
+function mergeCardSources(sources) {
+  const merged = {
+    date: '', totalAmount: 0, totalFee: 0, totalNet: 0, count: 0,
+    depositDate: '', cardTxs: [], depositExpected: {}, bySource: {},
+  };
+  const depDates = [];
+  for (const [key, src] of Object.entries(sources)) {
+    if (!src) continue;
+    const label = CARD_SOURCE_LABEL[key] || key;
+    merged.date         = src.date;
+    merged.totalAmount += src.totalAmount || 0;
+    merged.totalFee    += src.totalFee    || 0;
+    merged.totalNet    += src.totalNet    || 0;
+    merged.count       += src.count       || 0;
+    merged.bySource[label] = { amount: src.totalAmount || 0, count: src.count || 0 };
+    (src.cardTxs || []).forEach(t => merged.cardTxs.push({ ...t, source: label }));
+    for (const [dep, byCo] of Object.entries(src.depositExpected || {})) {
+      if (!merged.depositExpected[dep]) merged.depositExpected[dep] = {};
+      for (const [co, amt] of Object.entries(byCo)) {
+        merged.depositExpected[dep][co] = (merged.depositExpected[dep][co] || 0) + amt;
+      }
+    }
+    if (src.depositDate) depDates.push(src.depositDate);
+  }
+  merged.depositDate = depDates.sort()[0] || '';
+  return merged;
+}
+
+async function saveCardUpload(req, res, sourceKey) {
   if (!req.file) return res.json({ ok: false, error: '파일 없음' });
   try {
     const days = await parseEasyshop(req.file.path);
     let lastDate = '';
     for (const parsed of days) {
       const existing = readJSON(dailyFile(parsed.date), { date: parsed.date });
-      existing.card  = parsed;
+      // 출처 구분 없이 저장된 예전 card는 어느 VAN 파일인지 알 수 없으므로 이번 업로드로 교체
+      if (!existing.cardSources) existing.cardSources = {};
+      existing.cardSources[sourceKey] = parsed;
+      existing.card = mergeCardSources(existing.cardSources);
       runMatching(existing);
       writeJSON(dailyFile(parsed.date), existing);
       lastDate = parsed.date;
     }
     res.json({ ok: true, count: days.length, date: lastDate });
   } catch (e) { res.json({ ok: false, error: e.message }); }
-});
+}
+
+// 이지샵 카드 업로드 (세차·유외상품) — 단일 날짜 또는 월별 파일 모두 처리
+app.post('/api/daily/upload-card', upload.single('file'), (req, res) => saveCardUpload(req, res, 'easyshop'));
+// 나이스정보통신 카드 업로드 (유류)
+app.post('/api/daily/upload-nice', upload.single('file'), (req, res) => saveCardUpload(req, res, 'nice'));
 
 // 매입단가 조회
 app.get('/api/daily/purchase-prices', (req, res) => {

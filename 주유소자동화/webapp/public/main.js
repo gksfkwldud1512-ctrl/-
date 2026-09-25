@@ -1248,6 +1248,11 @@ function initDailyUpload() {
   });
   document.getElementById('card-file-input')?.addEventListener('change', e => {
     if (e.target.files[0]) uploadCard(e.target.files[0]);
+    e.target.value = '';
+  });
+  document.getElementById('nice-file-input')?.addEventListener('change', e => {
+    if (e.target.files[0]) uploadCard(e.target.files[0], null, 'nice');
+    e.target.value = '';
   });
   document.getElementById('bank-expense-input')?.addEventListener('change', e => {
     if (e.target.files[0]) uploadBankExpenses(e.target.files[0]);
@@ -1290,18 +1295,21 @@ async function uploadBos(file) {
   document.getElementById('bos-file-input').value = '';
 }
 
-async function uploadCard(file, labelId) {
-  toast('이지샵 카드내역 업로드 중...', '');
+// source: 'easyshop' = 이지샵(세차·유외), 'nice' = 나이스정보통신(유류) — 서버에 출처별로 따로 저장됨
+async function uploadCard(file, labelId, source = 'easyshop') {
+  const srcName  = source === 'nice' ? '나이스' : '이지샵';
+  const endpoint = source === 'nice' ? '/api/daily/upload-nice' : '/api/daily/upload-card';
+  toast(`${srcName} 카드내역 업로드 중...`, '');
   const form = new FormData();
   form.append('file', file);
   try {
-    const res  = await fetch('/api/daily/upload-card', { method: 'POST', body: form });
+    const res  = await fetch(endpoint, { method: 'POST', body: form });
     const data = await res.json();
     if (data.ok) {
       const labelText = `✅ ${data.count > 1 ? data.count+'일치' : data.date} 업로드 완료`;
       const lbl = document.getElementById(labelId || 'deposit-card-label');
       if (lbl) lbl.textContent = labelText;
-      toast(`✅ 카드내역 업로드 완료`, 'success');
+      toast(`✅ ${srcName} 카드내역 업로드 완료`, 'success');
       switchToUploadedMonth(data.date);
       await loadDailyMonth();
       renderDepositVerification();
@@ -2088,13 +2096,18 @@ function buildMatchingModal(date) {
   // ── 카드 대사 섹션 (BOS ↔ 이지샵) ───────────────────────────
   let cardMatchSection = '';
   if (!m) {
-    cardMatchSection = '<p style="color:#94a3b8; font-size:12px; margin-top:8px;">BOS 또는 이지샵 데이터가 없어 카드 대사를 수행할 수 없습니다.</p>';
+    cardMatchSection = '<p style="color:#94a3b8; font-size:12px; margin-top:8px;">BOS 또는 카드(이지샵/나이스) 데이터가 없어 카드 대사를 수행할 수 없습니다.</p>';
   } else {
     const summaryClass = m.totalMatch ? 'match-summary-ok' : 'match-summary-err';
     const summaryIcon  = m.totalMatch ? '✅' : '⚠';
     const totalDiffStr = m.totalDiff !== 0
       ? `<span class="price-diff">&nbsp;(차액 ${Math.abs(m.totalDiff).toLocaleString()}원)</span>` : '';
 
+    // 출처(이지샵/나이스) 구분이 저장된 날짜만 출처 칸 표시 — 예전 업로드 데이터는 출처 정보 없음
+    const hasSource = m.bySource && Object.keys(m.bySource).length > 0;
+    const sourceTag = src => src
+      ? `<span style="border-radius:4px;padding:1px 6px;font-size:11px;${src === '나이스' ? 'background:#e0e7ff;color:#4338ca;' : 'background:#ccfbf1;color:#0f766e;'}">${esc(src)}</span>`
+      : '-';
     const typeOrder = ['bos_only', 'easy_only', 'amount_mismatch'];
     let errSections = '';
     typeOrder.forEach(type => {
@@ -2102,18 +2115,19 @@ function buildMatchingModal(date) {
       if (!list.length) return;
       errSections += `<p class="error-section-title" style="margin-top:16px;">${
         type === 'bos_only' ? '① BOS에만 있는 거래' :
-        type === 'easy_only' ? '② 이지샵에만 있는 거래' : '③ 금액 불일치'
+        type === 'easy_only' ? '② 카드(VAN)에만 있는 거래' : '③ 금액 불일치'
       }</p>
       <table class="error-table">
         <thead><tr>
-          <th>승인번호</th><th>카드사</th><th>카드번호</th><th>유종</th>
+          <th>승인번호</th>${hasSource && type !== 'bos_only' ? '<th>출처</th>' : ''}<th>카드사</th><th>카드번호</th><th>유종</th>
           ${type === 'easy_only' ? '<th>결제시간</th>' : ''}
           ${type === 'amount_mismatch'
-            ? '<th>BOS 금액</th><th>이지샵 금액</th><th>차액</th>'
-            : `<th>${type === 'bos_only' ? 'BOS' : '이지샵'} 금액</th>`}
+            ? '<th>BOS 금액</th><th>카드 금액</th><th>차액</th>'
+            : `<th>${type === 'bos_only' ? 'BOS' : '카드'} 금액</th>`}
         </tr></thead>
         <tbody>${list.map(e => `<tr>
           <td><code>${esc(e.approvalNo)}</code></td>
+          ${hasSource && type !== 'bos_only' ? `<td>${sourceTag(e.source)}</td>` : ''}
           <td>${esc(e.cardCompany)}</td>
           <td><code>${esc(e.cardNo)}</code></td>
           <td>${esc(e.product || e.fuel || '')}</td>
@@ -2153,7 +2167,7 @@ function buildMatchingModal(date) {
     const coTable = Object.keys(byCo).length ? `
       <p class="error-section-title" style="margin-top:12px;">카드사별 차이 요약</p>
       <table class="error-table" style="margin-bottom:4px;">
-        <thead><tr><th>카드사</th><th>이지샵만</th><th>BOS만</th><th>차액</th></tr></thead>
+        <thead><tr><th>카드사</th><th>카드만</th><th>BOS만</th><th>차액</th></tr></thead>
         <tbody>${coRows}</tbody>
       </table>` : '';
 
@@ -2208,7 +2222,9 @@ function buildMatchingModal(date) {
     cardMatchSection = `
       <div class="${summaryClass}">
         ${summaryIcon} BOS <strong>${m.bosTotal.toLocaleString()}원</strong>
-        &nbsp;/&nbsp; 이지샵 <strong>${m.easyTotal.toLocaleString()}원</strong>
+        &nbsp;/&nbsp; ${hasSource
+          ? Object.entries(m.bySource).map(([src, amt]) => `${esc(src)} ${amt.toLocaleString()}원`).join(' + ') + ` = 카드 <strong>${m.easyTotal.toLocaleString()}원</strong>`
+          : `카드 <strong>${m.easyTotal.toLocaleString()}원</strong>`}
         ${totalDiffStr}
         ${isResolved ? '&nbsp;<span style="color:#16a34a;font-size:12px;">✅ 사유 처리됨</span>' : ''}
       </div>
@@ -2222,7 +2238,7 @@ function buildMatchingModal(date) {
       <div class="modal-box" style="width:720px;">
         <div class="modal-head">📋 대사 현황 — <span>${date}</span></div>
         <div class="modal-body">
-          <p class="error-section-title">💳 카드 대사 (BOS ↔ 이지샵)</p>
+          <p class="error-section-title">💳 카드 대사 (BOS ↔ 이지샵+나이스)</p>
           ${cardMatchSection}
         </div>
         <div class="modal-foot">
