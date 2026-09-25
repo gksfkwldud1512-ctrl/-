@@ -1809,6 +1809,54 @@ app.get('/api/ar/summary', (req, res) => {
   }
 });
 
+// ── 거래처 마진 분석 보조 데이터 (고객판매현황 → 마진 분석) ──────────
+// 카드수수료율: 해당 월 일마감 카드내역의 수수료/매출.
+//   나이스 "통합거래조회"처럼 수수료 컬럼이 없는 파일(totalFee=0)은 제외하고 계산,
+//   해당 월에 수수료 데이터가 전혀 없으면 전체 기간 평균을 사용
+function cardFeeRateStats(ym) {
+  const month = { fee: 0, amount: 0 }, all = { fee: 0, amount: 0 };
+  const add = (acc, src) => {
+    if (!src || !(src.totalFee > 0) || !(src.totalAmount > 0)) return;
+    acc.fee += src.totalFee; acc.amount += src.totalAmount;
+  };
+  for (const f of fs.readdirSync(DAILY_DIR).filter(f => f.endsWith('.json'))) {
+    const d = readJSON(path.join(DAILY_DIR, f), {});
+    const srcs = d.cardSources ? Object.values(d.cardSources) : [d.card];
+    srcs.forEach(s => { add(all, s); if (f.startsWith(ym)) add(month, s); });
+  }
+  if (month.amount > 0) return { rate: month.fee / month.amount, source: 'month' };
+  if (all.amount > 0)   return { rate: all.fee / all.amount, source: 'all' };
+  return { rate: 0, source: 'none' };
+}
+
+app.get('/api/customer-margin-meta', (req, res) => {
+  try {
+    const ym = String(req.query.month || '');
+    if (!/^\d{4}-\d{2}$/.test(ym)) return res.json({ ok: false, error: 'month=YYYY-MM 필요' });
+    const fee = cardFeeRateStats(ym);
+
+    // 외상 결제지연: 업체별 평균/최대 지연개월 + 조회월 이전 청구분 중 미수 잔액
+    const { buildArMatrix, allocateArDeposits } = require('./lib/arLedger');
+    const arMatrix = buildArMatrix(DATA_DIR);
+    const alloc    = allocateArDeposits(arMatrix, readJSON(AR_DEPOSITS_FILE, []), loadArManualPaidSet());
+    const ar = {};
+    for (const name of arMatrix.byVendor.keys()) {
+      const months = alloc[name]?.months || [];
+      const lags = months.map(m => m.lagMonths).filter(l => l != null);
+      ar[name] = {
+        avgLag:  lags.length ? Math.round(lags.reduce((a, b) => a + b, 0) / lags.length * 10) / 10 : null,
+        maxLag:  lags.length ? Math.max(...lags) : null,
+        overdue: Math.round(months.filter(m => m.month < ym && m.remaining > 0)
+                                  .reduce((s, m) => s + m.remaining, 0)),
+      };
+    }
+    res.json({ ok: true, month: ym, cardFeeRate: fee.rate, cardFeeRateSource: fee.source, ar });
+  } catch (e) {
+    console.error('[customer-margin-meta]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // POST /api/ar/match — 미매칭 입금 건을 수동으로 업체에 지정 (vendorName=null이면 매칭 해제)
 app.post('/api/ar/match', (req, res) => {
   try {

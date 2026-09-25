@@ -2480,12 +2480,173 @@ async function loadCustomerSales() {
   const avgBuy = sumRes.ok ? (sumRes.avgBuyPriceByFuel || {}) : {};
   custSalesState.data   = custRes.ok ? custRes.customers : [];
   custSalesState.avgBuy = avgBuy;
+  custSalesState.ym     = ym;
+  custSalesState.marginMeta = null;
+  if (custSalesState.marginView) await loadCustMarginMeta();
   renderCustomerSales(custSalesState.data, avgBuy);
+}
+
+// ── 거래처 마진 분석 ─────────────────────────────────────────
+// 거래처×유종별로 L당 마진을 계산: 판매단가 − 월평균 매입원가(FIFO) − 카드수수료(카드결제만)
+// 오일뱅크 지원금(입고량 기준)은 모든 판매 L에 공통으로 붙으므로 "지원금 포함 기여" 칸에 따로 표시
+const MARGIN_FUELS = ['휘발유', '경유', '등유'];
+const GENERAL_CUSTOMER = '현금고객';   // 이름 없는 일반 고객 묶음 → 일반가(게시가) 기준
+
+async function toggleCustMarginView() {
+  custSalesState.marginView = !custSalesState.marginView;
+  const btn = document.getElementById('cust-margin-btn');
+  if (btn) btn.textContent = custSalesState.marginView ? '📋 판매현황 보기' : '📊 마진 분석';
+  if (custSalesState.marginView && !custSalesState.marginMeta) await loadCustMarginMeta();
+  renderCustomerSales(custSalesState.data, custSalesState.avgBuy);
+}
+
+async function loadCustMarginMeta() {
+  if (!custSalesState.ym) return;
+  const [meta, sup] = await Promise.all([
+    api('GET', `/api/customer-margin-meta?month=${custSalesState.ym}`),
+    api('GET', `/api/summary/${custSalesState.ym}`),
+  ]);
+  custSalesState.marginMeta = meta.ok ? meta : { cardFeeRate: 0, ar: {} };
+  // 오일뱅크 지원금 L당 환산 = 월 지원금 ÷ 월 유류 판매량
+  const q = sup.ok ? MARGIN_FUELS.reduce((s, f) => s + (sup.qty?.[f] || 0), 0) : 0;
+  custSalesState.marginMeta.supportPerL = q > 0 ? (sup.oilbankSupport || 0) / q : 0;
+}
+
+function setCustMarginFloor(v) {
+  custSalesState.marginFloor = Number(v) || 0;
+  renderCustomerSales(custSalesState.data, custSalesState.avgBuy);
+}
+
+function sortCustMarginBy(key) {
+  if (custSalesState.marginSort === key) custSalesState.marginDir = custSalesState.marginDir === 'asc' ? 'desc' : 'asc';
+  else { custSalesState.marginSort = key; custSalesState.marginDir = key === 'netL' ? 'asc' : 'desc'; }
+  renderCustomerSales(custSalesState.data, custSalesState.avgBuy);
+}
+
+function buildCustMarginRows(customers, avgBuy, meta) {
+  // 일반가: 현금고객(이름 없는 일반 고객) 평균 판매단가
+  const general = {};
+  MARGIN_FUELS.forEach(f => {
+    let q = 0, a = 0;
+    customers.filter(c => c.name === GENERAL_CUSTOMER).forEach(c => { q += c.fuels?.[f]?.qty || 0; a += c.fuels?.[f]?.amount || 0; });
+    general[f] = q > 0 ? a / q : null;
+  });
+  const rows = [];
+  for (const c of customers) {
+    for (const f of MARGIN_FUELS) {
+      const fd = c.fuels?.[f];
+      if (!fd || !(fd.qty > 0) || !avgBuy[f]) continue;
+      const price  = fd.amount / fd.qty;
+      const grossL = price - avgBuy[f];
+      const feeL   = c.payType === '신용카드' ? price * (meta.cardFeeRate || 0) : 0;
+      const netL   = grossL - feeL;
+      rows.push({
+        name: c.name, payType: c.payType, fuel: f, qty: fd.qty, price,
+        discL: general[f] != null && c.name !== GENERAL_CUSTOMER ? general[f] - price : null,
+        cost: avgBuy[f], grossL, feeL, netL,
+        contribL: netL + (meta.supportPerL || 0),
+        netTotal: netL * fd.qty,
+        ar: meta.ar?.[c.name] || null,
+      });
+    }
+  }
+  return { rows, general };
+}
+
+function renderCustMargin(customers, avgBuy) {
+  const body = document.getElementById('cust-sales-body');
+  const meta = custSalesState.marginMeta;
+  if (!meta) { body.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;">불러오는 중...</div>'; return; }
+  if (!Object.values(avgBuy || {}).some(Boolean)) {
+    body.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;">해당 월 매입단가 정보가 없어 마진을 계산할 수 없습니다.</div>';
+    return;
+  }
+  const floor  = custSalesState.marginFloor ?? 50;
+  const filter = custSalesState.filter;
+  const { rows: allRows, general } = buildCustMarginRows(customers, avgBuy, meta);
+  let rows = filter === '전체' ? allRows : allRows.filter(r => r.payType === filter);
+  if (!rows.length) { body.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;">해당 월/업체구분 데이터 없음</div>'; return; }
+
+  const key = custSalesState.marginSort || 'netL';
+  const dir = (custSalesState.marginDir || 'asc') === 'asc' ? 1 : -1;
+  rows = [...rows].sort((a, b) => key === 'name' ? dir * a.name.localeCompare(b.name) : dir * ((a[key] ?? -1e9) - (b[key] ?? -1e9)));
+
+  // 구간 요약 (카드수수료 차감 후 L당 마진 기준, 판매량 비중)
+  const totQ = rows.reduce((s, r) => s + r.qty, 0);
+  const bands = [[-Infinity, 0, '손해'], [0, 30, '0~30원'], [30, 60, '30~60원'], [60, 90, '60~90원'], [90, Infinity, '90원 이상']];
+  const bandHtml = bands.map(([lo, hi, label]) => {
+    const list = rows.filter(r => r.netL >= lo && r.netL < hi);
+    const q = list.reduce((s, r) => s + r.qty, 0);
+    if (!list.length) return '';
+    const warn = hi <= floor;
+    return `<span style="display:inline-block;margin:2px 4px;padding:4px 10px;border-radius:12px;font-size:12px;${warn ? 'background:#fee2e2;color:#b91c1c;' : 'background:#f1f5f9;color:#334155;'}">
+      ${label} · ${Math.round(q).toLocaleString()}L (${(q / totQ * 100).toFixed(1)}%) · ${list.length}건</span>`;
+  }).join('');
+  const below = rows.filter(r => r.netL < floor);
+  // 기준 미달 거래처를 기준선까지 올렸을 때 월 개선액 (판매량 유지 가정)
+  const upside = below.reduce((s, r) => s + (floor - r.netL) * r.qty, 0);
+
+  const rateTxt = meta.cardFeeRate ? `${(meta.cardFeeRate * 100).toFixed(2)}%${meta.cardFeeRateSource === 'all' ? ' (해당 월 수수료 데이터 없음 → 전체 기간 평균)' : ''}` : '데이터 없음';
+  const won  = v => v == null ? '-' : Math.round(v).toLocaleString();
+  const sgn  = v => v == null ? '-' : (v > 0 ? '+' : '') + Math.round(v).toLocaleString();
+  const arrow = k => key === k ? (dir === 1 ? ' ▲' : ' ▼') : '';
+  const th = (label, k, align = 'right', title = '') =>
+    `<th onclick="${k ? `sortCustMarginBy('${k}')` : ''}" title="${title}" style="padding:8px 8px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;white-space:nowrap;font-size:12px;text-align:${align};${k ? 'cursor:pointer;' : ''}">${label}${k ? arrow(k) : ''}</th>`;
+
+  const trs = rows.map(r => {
+    const bad = r.netL < floor;
+    const netColor = r.netL < 0 ? '#b91c1c' : bad ? '#dc2626' : '#16a34a';
+    const ar = r.payType === '외상' && r.ar ? r.ar : null;
+    const lateTxt = ar && ar.avgLag != null
+      ? `<span style="${ar.avgLag >= 2 ? 'color:#dc2626;font-weight:600;' : 'color:#64748b;'}">평균 ${ar.avgLag}개월</span>${ar.overdue > 0 ? `<br><span style="font-size:11px;color:#b45309;">미수 ${won(ar.overdue)}원</span>` : ''}`
+      : '-';
+    return `<tr style="border-bottom:1px solid #f1f5f9;${bad ? 'background:#fef2f2;' : ''}">
+      <td style="padding:6px 8px;font-weight:600;white-space:nowrap;">${esc(r.name)}</td>
+      <td style="padding:6px 8px;text-align:center;font-size:12px;">${r.payType === '신용카드' ? '카드' : esc(r.payType)}</td>
+      <td style="padding:6px 8px;text-align:center;font-size:12px;">${r.fuel}</td>
+      <td style="padding:6px 8px;text-align:right;">${Math.floor(r.qty).toLocaleString()}</td>
+      <td style="padding:6px 8px;text-align:right;">${won(r.price)}</td>
+      <td style="padding:6px 8px;text-align:right;color:#7c3aed;">${r.discL == null ? '-' : sgn(r.discL)}</td>
+      <td style="padding:6px 8px;text-align:right;color:#64748b;">${won(r.cost)}</td>
+      <td style="padding:6px 8px;text-align:right;">${won(r.grossL)}</td>
+      <td style="padding:6px 8px;text-align:right;color:#64748b;">${r.feeL ? '-' + won(r.feeL) : '-'}</td>
+      <td style="padding:6px 8px;text-align:right;font-weight:700;color:${netColor};">${won(r.netL)}</td>
+      <td style="padding:6px 8px;text-align:right;color:#0f766e;">${won(r.contribL)}</td>
+      <td style="padding:6px 8px;text-align:right;">${won(r.netTotal)}</td>
+      <td style="padding:6px 8px;text-align:right;font-size:12px;white-space:nowrap;">${lateTxt}</td>
+    </tr>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div style="padding:10px 14px;font-size:12px;color:#475569;line-height:1.8;">
+      <div>
+        <strong>최저마진 기준</strong>
+        <input type="number" value="${floor}" onchange="setCustMarginFloor(this.value)" style="width:60px;padding:2px 6px;border:1px solid #cbd5e1;border-radius:4px;">원/L
+        (카드수수료 차감 후) · 카드수수료율 ${rateTxt}
+        · 오일뱅크 지원금 L당 ${meta.supportPerL ? Math.round(meta.supportPerL) + '원' : '없음'}
+        · 일반가(현금고객) ${MARGIN_FUELS.filter(f => general[f]).map(f => `${f} ${won(general[f])}원`).join(' / ') || '-'}
+      </div>
+      <div>${bandHtml}</div>
+      <div style="color:#b91c1c;">기준 미달 <strong>${below.length}건</strong> · 기준선까지 올리면 월 약 <strong>${won(upside)}원</strong> 개선 (판매량 유지 가정)</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr>
+        ${th('업체명', 'name', 'left')}${th('구분', '', 'center')}${th('유종', '', 'center')}
+        ${th('판매량(L)', 'qty')}${th('평균단가', 'price')}
+        ${th('일반가 대비 할인', 'discL', 'right', '현금고객 평균단가 − 이 거래처 평균단가')}
+        ${th('매입원가', '')}${th('총마진/L', 'grossL')}${th('카드수수료/L', '')}
+        ${th('순마진/L', 'netL', 'right', '판매단가 − 매입원가 − 카드수수료')}
+        ${th('지원금 포함 기여/L', 'contribL', 'right', '순마진 + 오일뱅크 지원금(L당). 이 거래처가 빠지면 사라지는 L당 이익')}
+        ${th('월 순마진(원)', 'netTotal')}${th('결제지연(외상)', '')}
+      </tr></thead>
+      <tbody>${trs}</tbody>
+    </table>`;
 }
 
 function renderCustomerSales(customers, avgBuy) {
   const body = document.getElementById('cust-sales-body');
   if (!body) return;
+  if (custSalesState.marginView) return renderCustMargin(customers, avgBuy);
 
   const filter = custSalesState.filter;
   let filtered = filter === '전체' ? customers
