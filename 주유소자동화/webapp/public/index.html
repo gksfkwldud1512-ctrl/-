@@ -1271,6 +1271,9 @@
         <button class="btn-primary" onclick="showArUnresolvedModal()">
           ⚠ 미확정 배분 <span id="ar-unresolved-badge" class="badge badge-warn" style="display:none;"></span>
         </button>
+        <button class="btn-primary" onclick="showArCardModal()">
+          💳 현장 카드결제 매칭 <span id="ar-card-badge" class="badge badge-warn" style="display:none;"></span>
+        </button>
       </div>
     </div>
 
@@ -1294,6 +1297,34 @@
       </div>
       <div class="modal-body" style="overflow-x:auto;max-height:calc(85vh - 60px);overflow-y:auto;">
         <div id="ar-unmatched-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 외상 미수금: 월별 입금 내역 모달 (입금 칸 클릭) -->
+  <div id="ar-deposit-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-box" style="width:92vw;max-width:760px;max-height:85vh;">
+      <div class="modal-head" style="display:flex;align-items:center;justify-content:space-between;">
+        <span id="ar-deposit-title">입금 내역</span>
+        <button style="background:none;border:none;color:#fff;font-size:16px;cursor:pointer;"
+                onclick="document.getElementById('ar-deposit-modal').style.display='none'">✕</button>
+      </div>
+      <div class="modal-body" style="overflow-x:auto;max-height:calc(85vh - 60px);overflow-y:auto;">
+        <div id="ar-deposit-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 외상 미수금: 현장 카드결제 매칭 모달 -->
+  <div id="ar-card-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-box" style="width:95vw;max-width:1100px;max-height:88vh;">
+      <div class="modal-head" style="display:flex;align-items:center;justify-content:space-between;">
+        현장 카드결제 매칭 (BOS에 없고 이지샵·나이스에만 있는 큰 카드결제 → 외상대금 입금으로 지정)
+        <button style="background:none;border:none;color:#fff;font-size:16px;cursor:pointer;"
+                onclick="document.getElementById('ar-card-modal').style.display='none'">✕</button>
+      </div>
+      <div class="modal-body" style="overflow-x:auto;max-height:calc(88vh - 60px);overflow-y:auto;">
+        <div id="ar-card-body"></div>
       </div>
     </div>
   </div>

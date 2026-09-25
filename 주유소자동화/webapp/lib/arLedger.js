@@ -105,14 +105,16 @@ function decomposeUnits(deposits) {
     if (primaryAmount !== 0) {
       units.push({
         depositId: d.id, vendorName: d.matchedVendor, amount: primaryAmount,
-        date: d.date, note: d.note || '', manualMonthAssign: d.monthAssign || null,
+        date: d.date, note: d.note || '', payer: d.payer || '', isCard: !!d.isCard,
+        manualMonthAssign: d.monthAssign || null,
         isSplit: false, splitIndex: null, sourceFragment: null,
       });
     }
     splits.forEach((s, idx) => {
       units.push({
         depositId: d.id, vendorName: s.vendorName, amount: s.amount,
-        date: d.date, note: d.note || '', manualMonthAssign: s.monthAssign || null,
+        date: d.date, note: d.note || '', payer: d.payer || '', isCard: !!d.isCard,
+        manualMonthAssign: s.monthAssign || null,
         isSplit: true, splitIndex: idx, sourceFragment: s.sourceFragment || null,
       });
     });
@@ -172,7 +174,10 @@ function findGreedyWindow(months, amount, forceAccept = false) {
 // manualPaid: Set of "업체명|YYYY-MM" — 카드결제 등 은행입금이 아예 없어 자동/수동 매칭
 // 대상이 될 입금 자체가 없는 업체(예: 카드로만 결제받는 거래처)를 위해, 사람이 "이 달은
 // 완납 처리"로 직접 확정한 달. 실제 입금 기록 없이 해당 월 charge=paid로 강제 처리.
-function allocateArDeposits(arMatrix, deposits, manualPaid = new Set()) {
+// discountVendors: { 업체명: { maxDiff } } — 거래명세서에서 직접 할인해 입금하는 업체.
+//   입금이 있는 달의 부족액이 maxDiff 이하면 미수가 아니라 할인(discount)으로 보고 잔액 0 처리.
+// 카드 유닛(isCard): 현장 카드결제를 사람이 업체·월에 매칭한 것 — 월 지정(monthAssign) 필수, 근거 "card".
+function allocateArDeposits(arMatrix, deposits, manualPaid = new Set(), discountVendors = {}) {
   const result = {};
   const units = decomposeUnits(deposits);
   const unitsByVendor = new Map();
@@ -182,7 +187,7 @@ function allocateArDeposits(arMatrix, deposits, manualPaid = new Set()) {
   });
 
   const unitMeta = u => ({
-    depositId: u.depositId, date: u.date, amount: u.amount, note: u.note,
+    depositId: u.depositId, date: u.date, amount: u.amount, note: u.note, payer: u.payer,
     isSplit: u.isSplit, splitIndex: u.splitIndex, sourceFragment: u.sourceFragment,
   });
 
@@ -216,7 +221,7 @@ function allocateArDeposits(arMatrix, deposits, manualPaid = new Set()) {
       // 0순위: 수동 오버라이드
       if (u.manualMonthAssign && u.manualMonthAssign.length) {
         applyToMonths(u.manualMonthAssign, u.date);
-        allocations.push({ ...unitMeta(u), appliedTo: u.manualMonthAssign, source: 'manual' });
+        allocations.push({ ...unitMeta(u), appliedTo: u.manualMonthAssign, source: u.isCard ? 'card' : 'manual' });
         continue;
       }
 
@@ -260,13 +265,26 @@ function allocateArDeposits(arMatrix, deposits, manualPaid = new Set()) {
       }
     });
 
-    const totalCharge = months.reduce((s, m) => s + m.charge, 0);
-    const totalPaid   = months.reduce((s, m) => s + m.paid, 0);
+    // 할인 입금 업체: 입금이 있었고 부족액이 허용 차액 이내면 할인으로 확정
+    const disc = discountVendors[vendor];
+    if (disc) {
+      const maxDiff = Number(disc.maxDiff) || 0;
+      months.forEach(m => {
+        if (m.paid > 0 && m.remaining > 0 && m.remaining <= maxDiff) {
+          m.discount = m.remaining;
+          m.remaining = 0;
+        }
+      });
+    }
+
+    const totalCharge   = months.reduce((s, m) => s + m.charge, 0);
+    const totalPaid     = months.reduce((s, m) => s + m.paid, 0);
+    const totalDiscount = months.reduce((s, m) => s + (m.discount || 0), 0);
 
     result[vendor] = {
       months, allocations, unresolved,
-      totalCharge, totalPaid,
-      remaining: totalCharge - totalPaid,
+      totalCharge, totalPaid, totalDiscount,
+      remaining: totalCharge - totalPaid - totalDiscount,
       surplus, beforeTrackCount, beforeTrackAmount,
     };
   }

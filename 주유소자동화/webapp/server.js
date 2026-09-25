@@ -62,6 +62,24 @@ const AR_MANUAL_PAID_FILE  = path.join(DATA_DIR, 'ar_manual_paid.json');
 function loadArManualPaidSet() {
   return new Set(readJSON(AR_MANUAL_PAID_FILE, []).map(x => `${x.vendorName}|${x.month}`));
 }
+
+const AR_CARD_PAYMENTS_FILE = path.join(DATA_DIR, 'ar_card_payments.json');
+const AR_DISCOUNT_FILE      = path.join(DATA_DIR, 'ar_discount_vendors.json');
+
+// 미수 배분에 쓰는 입금 목록 = 통장 입금(ar_deposits) + 사람이 매칭한 현장 카드결제
+// 카드결제는 대상 월이 확정된 수동 입금으로 취급 (근거 "card")
+function loadArDepositsWithCards() {
+  const cards = readJSON(AR_CARD_PAYMENTS_FILE, []).map(c => ({
+    id: `card_${c.id}`, date: c.date, month: c.date.slice(0, 7), amount: c.amount,
+    payer: `카드 ${c.cardCompany || ''} ${c.cardNo || ''}`.trim(),
+    note: `현장 카드결제 (승인 ${c.approvalNo})`,
+    matchedVendor: c.vendorName, manual: true, isCard: true, splits: [],
+    monthAssign: [{ month: c.month, amount: c.amount }],
+  }));
+  return readJSON(AR_DEPOSITS_FILE, []).concat(cards);
+}
+
+function loadArDiscountVendors() { return readJSON(AR_DISCOUNT_FILE, {}); }
 const ASSET_BANK_FILE      = path.join(DATA_DIR, 'asset_bank_balances.json');
 const ASSET_LOANS_FILE     = path.join(DATA_DIR, 'asset_loans.json');
 
@@ -1444,7 +1462,7 @@ function computeReceivableTotal(arMatrix, allDeposits, ym) {
     byVendor: new Map([...arMatrix.byVendor].map(([name, arr]) => [name, arr.filter(x => x.month <= ym)])),
   };
   const depositsAsOf = allDeposits.filter(d => d.date <= cutoff);
-  const alloc = allocateArDeposits(matrixAsOf, depositsAsOf, loadArManualPaidSet());
+  const alloc = allocateArDeposits(matrixAsOf, depositsAsOf, loadArManualPaidSet(), loadArDiscountVendors());
   return Object.values(alloc).reduce((sum, a) => sum + Math.max(0, a.remaining), 0);
 }
 
@@ -1465,7 +1483,7 @@ app.get('/api/asset-overview', (req, res) => {
     const loans    = readJSON(ASSET_LOANS_FILE, []);
     const loanTotal = loans.reduce((s, l) => s + (Number(l.amount) || 0), 0);
     const arMatrix   = buildArMatrix(DATA_DIR);
-    const allDeposits = readJSON(AR_DEPOSITS_FILE, []);
+    const allDeposits = loadArDepositsWithCards();
 
     const rows = months.map(month => {
       const bank = findBankBalanceForMonth(balances, month);
@@ -1771,7 +1789,8 @@ app.get('/api/ar/summary', (req, res) => {
     const arMatrix  = buildArMatrix(DATA_DIR);
     const deposits  = readJSON(AR_DEPOSITS_FILE, []);
     const aliasMap  = readJSON(AR_ALIASES_FILE, {});
-    const alloc     = allocateArDeposits(arMatrix, deposits, loadArManualPaidSet());
+    const discounts = loadArDiscountVendors();
+    const alloc     = allocateArDeposits(arMatrix, loadArDepositsWithCards(), loadArManualPaidSet(), discounts);
 
     const vendors = [...arMatrix.byVendor.keys()].sort((a, b) => a.localeCompare(b, 'ko')).map(name => {
       const a = alloc[name];
@@ -1783,6 +1802,8 @@ app.get('/api/ar/summary', (req, res) => {
         unresolved: a.unresolved,        // 이 업체 몫 중 대상월 미확정인 것들
         totalCharge: a.totalCharge,
         totalPaid:   a.totalPaid,
+        totalDiscount: a.totalDiscount || 0,
+        discountSetting: discounts[name] || null,   // 할인 입금 업체 설정 { maxDiff }
         remaining:   a.remaining,
         surplus:     a.surplus,
         matched:     a.remaining <= 0,
@@ -1838,7 +1859,7 @@ app.get('/api/customer-margin-meta', (req, res) => {
     // 외상 결제지연: 업체별 평균/최대 지연개월 + 조회월 이전 청구분 중 미수 잔액
     const { buildArMatrix, allocateArDeposits } = require('./lib/arLedger');
     const arMatrix = buildArMatrix(DATA_DIR);
-    const alloc    = allocateArDeposits(arMatrix, readJSON(AR_DEPOSITS_FILE, []), loadArManualPaidSet());
+    const alloc    = allocateArDeposits(arMatrix, loadArDepositsWithCards(), loadArManualPaidSet(), loadArDiscountVendors());
     const ar = {};
     for (const name of arMatrix.byVendor.keys()) {
       const months = alloc[name]?.months || [];
@@ -1952,6 +1973,105 @@ app.delete('/api/ar/mark-paid', (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     console.error('[ar/mark-paid:delete]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── 현장 카드결제 매칭 ────────────────────────────────────────
+// 일마감 카드 대사의 "카드에만 있는 거래"(BOS에 없음) 중 큰 금액은 대부분 외상대금을
+// 현장에서 카드로 결제한 것 → 후보로 모아 사람이 업체·월에 매칭하면 그 달 입금으로 반영
+const AR_CARD_MIN_AMOUNT = 300000;
+
+function prevMonth(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+}
+
+app.get('/api/ar/card-candidates', (req, res) => {
+  try {
+    const minAmount = Number(req.query.min) || AR_CARD_MIN_AMOUNT;
+    const { buildArMatrix } = require('./lib/arLedger');
+    const arMatrix   = buildArMatrix(DATA_DIR);
+    const matched    = readJSON(AR_CARD_PAYMENTS_FILE, []);
+    const matchedIds = new Set(matched.map(c => c.id));
+
+    // 추천 근거 1: 외상 업체 월 매출과 금액 정확히 일치 (결제일 이전 달만)
+    const charges = [];
+    for (const [name, arr] of arMatrix.byVendor) arr.forEach(m => charges.push({ name, month: m.month, charge: m.charge }));
+    // 추천 근거 2: 같은 카드번호로 예전에 매칭한 업체
+    const byCardNo = {};
+    matched.forEach(c => { if (c.cardNo) byCardNo[c.cardNo] = c.vendorName; });
+
+    const candidates = [];
+    for (const f of fs.readdirSync(DAILY_DIR).filter(f => f.endsWith('.json')).sort()) {
+      const d = readJSON(path.join(DAILY_DIR, f), {});
+      for (const e of d.matching?.errors || []) {
+        if (e.type !== 'easy_only' || !(e.easyAmount >= minAmount)) continue;
+        const date = f.slice(0, 10);
+        const id = `${date}|${e.approvalNo}`;
+        if (matchedIds.has(id)) continue;
+        const exact = charges.filter(c => c.charge === e.easyAmount && c.month < date.slice(0, 7));
+        let suggestion = null;
+        if (exact.length === 1) {
+          suggestion = { vendorName: exact[0].name, month: exact[0].month, reason: '금액 일치' };
+        } else if (e.cardNo && byCardNo[e.cardNo]) {
+          suggestion = { vendorName: byCardNo[e.cardNo], month: prevMonth(date.slice(0, 7)), reason: '같은 카드' };
+        }
+        candidates.push({
+          id, date, approvalNo: e.approvalNo, cardCompany: e.cardCompany, cardNo: e.cardNo,
+          amount: e.easyAmount, transTime: e.transTime || '', source: e.source || '', suggestion,
+        });
+      }
+    }
+    candidates.sort((a, b) => b.date.localeCompare(a.date));
+    matched.sort((a, b) => b.date.localeCompare(a.date));
+    res.json({ ok: true, minAmount, candidates, matched });
+  } catch (e) {
+    console.error('[ar/card-candidates]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/ar/card-payments', (req, res) => {
+  try {
+    const { id, date, approvalNo, cardCompany, cardNo, amount, vendorName, month } = req.body;
+    if (!id || !vendorName || !/^\d{4}-\d{2}$/.test(month || '') || !(Number(amount) > 0)) {
+      return res.status(400).json({ ok: false, error: '업체와 대상 월을 선택하세요.' });
+    }
+    const list = readJSON(AR_CARD_PAYMENTS_FILE, []).filter(c => c.id !== id);
+    list.push({ id, date, approvalNo, cardCompany, cardNo, amount: Number(amount), vendorName, month,
+                matchedAt: new Date().toISOString() });
+    writeJSON(AR_CARD_PAYMENTS_FILE, list);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[ar/card-payments:post]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.delete('/api/ar/card-payments', (req, res) => {
+  try {
+    writeJSON(AR_CARD_PAYMENTS_FILE, readJSON(AR_CARD_PAYMENTS_FILE, []).filter(c => c.id !== req.body.id));
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[ar/card-payments:delete]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── 할인 입금 업체 (거래명세서에서 직접 할인해 몇만원 적게 입금하는 업체) ──
+// maxDiff > 0 이면 지정, 0/빈값이면 해제
+app.post('/api/ar/discount-vendors', (req, res) => {
+  try {
+    const { vendorName, maxDiff } = req.body;
+    if (!vendorName) return res.status(400).json({ ok: false, error: 'vendorName 필요' });
+    const map = loadArDiscountVendors();
+    if (Number(maxDiff) > 0) map[vendorName] = { maxDiff: Number(maxDiff) };
+    else delete map[vendorName];
+    writeJSON(AR_DISCOUNT_FILE, map);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[ar/discount-vendors]', e);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
