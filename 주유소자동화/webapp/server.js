@@ -201,6 +201,31 @@ function buildStatementVendor(target, vendors, merges) {
   return { ...target, txs, totalCredit: (target.totalCredit || 0) + add, total: (target.total || 0) + add };
 }
 
+// ── 거래명세서 유외상품만 발행 업체 ──────────────────────────────
+// data/statement_nonfuel_only.json = ["업체명", ...]  (월 구분 없이 계속 적용)
+// 유류(휘발유·경유·등유)를 유가보조금 카드(주유전용)로 결제하는 업체 — BOS엔 외상으로
+// 잡히지만 카드로 이미 결제됐으므로 거래명세서엔 요소수·유록스 등 유외상품만 넣는다.
+const STATEMENT_NONFUEL_FILE = path.join(DATA_DIR, 'statement_nonfuel_only.json');
+const STATEMENT_FUELS = new Set(['휘발유', '경유', '등유']);
+
+function isStatementNonFuelOnly(name) {
+  return readJSON(STATEMENT_NONFUEL_FILE, []).includes(name);
+}
+
+function toNonFuelOnly(v) {
+  const txs = (v.txs || []).filter(t => !STATEMENT_FUELS.has(t.product));
+  const amt = txs.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+  return { ...v, txs, totalCredit: amt, total: amt, hasCredit: txs.length > 0 };
+}
+
+// 업체 목록 표시용: 유외상품만 발행 업체에 명세서 금액 표시 (금액 필드는 그대로)
+function annotateNonFuelOnly(vendors) {
+  const list = readJSON(STATEMENT_NONFUEL_FILE, []);
+  return vendors.map(v => list.includes(v.name)
+    ? { ...v, statementNonFuelOnly: true, statementNonFuelAmount: toNonFuelOnly(v).totalCredit }
+    : v);
+}
+
 function readJSON(file, def) {
   try { if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch (e) { console.error('[readJSON]', file, e.message); }
@@ -275,7 +300,7 @@ app.post('/api/parse-excel', upload.single('file'), (req, res) => {
 app.get('/api/vendors', (req, res) => {
   const year  = req.query.year  || new Date().getFullYear();
   const month = req.query.month || new Date().getMonth() + 1;
-  res.json({ ok: true, vendors: annotateStatementMerges(getVendors(year, month), year, month) });
+  res.json({ ok: true, vendors: annotateNonFuelOnly(annotateStatementMerges(getVendors(year, month), year, month)) });
 });
 
 // ── 월별 업로드 현황 ──────────────────────────────────────────
@@ -606,9 +631,11 @@ app.post('/api/generate', async (req, res) => {
     const selected  = names
       .map(n => vendors.find(v => v.name === n))
       .filter(v => v?.hasCredit)
-      .map(v => buildStatementVendor(v, vendors, merges));
+      .map(v => buildStatementVendor(v, vendors, merges))
+      .map(v => isStatementNonFuelOnly(v.name) ? toNonFuelOnly(v) : v)
+      .filter(v => v.hasCredit);
 
-    if (!selected.length) return res.status(400).json({ ok: false, error: '선택한 업체 중 외상 거래가 없습니다.' });
+    if (!selected.length) return res.status(400).json({ ok: false, error: '선택한 업체 중 거래명세서에 넣을 외상 거래가 없습니다.' });
 
     const { generateStatements } = require('./lib/statementGenerator');
     const files = await generateStatements(selected, customers, OUTPUT_DIR, issueDate, year, month, printMethods || {}, splitDelivery || {});

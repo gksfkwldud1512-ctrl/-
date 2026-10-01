@@ -511,7 +511,8 @@ function renderVendors() {
     const creditCell = (credit > 0
       ? `<strong>${credit.toLocaleString()}원</strong>`
       : `<span style="color:#94a3b8">-</span>`)
-      + (mergedAdd ? `<div style="font-size:11px;color:#7c3aed;">+ ${mergedFrom.map(x => `${esc(x.name)} ${x.credit.toLocaleString()}`).join(', ')}<br>= 명세서 ${(credit + mergedAdd).toLocaleString()}원</div>` : '');
+      + (mergedAdd ? `<div style="font-size:11px;color:#7c3aed;">+ ${mergedFrom.map(x => `${esc(x.name)} ${x.credit.toLocaleString()}`).join(', ')}<br>= 명세서 ${(credit + mergedAdd).toLocaleString()}원</div>` : '')
+      + (v.statementNonFuelOnly ? `<div style="font-size:11px;color:#0369a1;" title="유류는 유가보조금 카드로 결제됨 — 거래명세서엔 유외상품만 포함">유외상품만 → 명세서 ${(v.statementNonFuelAmount || 0).toLocaleString()}원</div>` : '');
 
     const otherCell = other > 0
       ? `${other.toLocaleString()}원`
