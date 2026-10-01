@@ -161,6 +161,46 @@ function getVendors(year, month) {
   return readJSON(vendorFile(year, month), []);
 }
 
+// ── 거래명세서 업체 합산 (업체 통합) ─────────────────────────────
+// data/statement_merges.json = { "YYYY-MM": { "합쳐질 업체": "받는 업체" } }
+// 예) 명신이 현대스크랩으로 통합 — BOS는 10월부터 현대스크랩으로 기록하므로 9월만 지정.
+// 거래명세서 생성 시에만 합산한다. vendors_YYYY_MM.json 원본·미수확인·고객판매현황은 그대로.
+const STATEMENT_MERGES_FILE = path.join(DATA_DIR, 'statement_merges.json');
+
+function getStatementMerges(year, month) {
+  const ym = `${year}-${String(month).padStart(2, '0')}`;
+  return readJSON(STATEMENT_MERGES_FILE, {})[ym] || {};
+}
+
+// 업체 목록에 합산 정보 표시용 필드 추가 (금액 필드는 건드리지 않음 → 합계 중복 없음)
+//   합쳐지는 업체: statementMergedInto = 받는 업체명
+//   받는 업체:     statementMergedFrom = [{ name, credit }]
+function annotateStatementMerges(vendors, year, month) {
+  const merges = getStatementMerges(year, month);
+  return vendors.map(v => {
+    if (merges[v.name]) return { ...v, statementMergedInto: merges[v.name] };
+    const from = Object.entries(merges)
+      .filter(([src, dst]) => dst === v.name)
+      .map(([src]) => vendors.find(x => x.name === src))
+      .filter(Boolean)
+      .map(s => ({ name: s.name, credit: s.totalCredit || 0 }));
+    return from.length ? { ...v, statementMergedFrom: from } : v;
+  });
+}
+
+// 거래명세서용 업체 객체: 받는 업체에 합쳐질 업체의 외상 거래를 붙이고 날짜순 정렬
+function buildStatementVendor(target, vendors, merges) {
+  const sources = Object.entries(merges)
+    .filter(([src, dst]) => dst === target.name)
+    .map(([src]) => vendors.find(x => x.name === src))
+    .filter(v => v?.hasCredit);
+  if (!sources.length) return target;
+  const txs = target.txs.concat(...sources.map(s => s.txs))
+    .slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const add = sources.reduce((s, x) => s + (x.totalCredit || 0), 0);
+  return { ...target, txs, totalCredit: (target.totalCredit || 0) + add, total: (target.total || 0) + add };
+}
+
 function readJSON(file, def) {
   try { if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch (e) { console.error('[readJSON]', file, e.message); }
@@ -225,7 +265,7 @@ app.post('/api/parse-excel', upload.single('file'), (req, res) => {
       primaryVendors = first ? buildVendorsFromRows(first).vendors : [];
     }
 
-    res.json({ ok: true, vendors: primaryVendors, savedMonths });
+    res.json({ ok: true, vendors: annotateStatementMerges(primaryVendors, year, month), savedMonths });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -235,7 +275,7 @@ app.post('/api/parse-excel', upload.single('file'), (req, res) => {
 app.get('/api/vendors', (req, res) => {
   const year  = req.query.year  || new Date().getFullYear();
   const month = req.query.month || new Date().getMonth() + 1;
-  res.json({ ok: true, vendors: getVendors(year, month) });
+  res.json({ ok: true, vendors: annotateStatementMerges(getVendors(year, month), year, month) });
 });
 
 // ── 월별 업로드 현황 ──────────────────────────────────────────
@@ -559,10 +599,14 @@ app.post('/api/generate', async (req, res) => {
 
     const vendors   = getVendors(year, month);
     const customers = readJSON(CUSTOMERS_FILE, []);
+    // 업체 통합: 합쳐질 업체를 선택하면 받는 업체로 바꿔서 한 번만 생성 (중복 발행 방지)
+    const merges    = getStatementMerges(year, month);
+    const names     = [...new Set(vendorNames.map(n => merges[n] || n))];
     // 외상 거래가 있는 업체만 생성
-    const selected  = vendorNames
+    const selected  = names
       .map(n => vendors.find(v => v.name === n))
-      .filter(v => v?.hasCredit);
+      .filter(v => v?.hasCredit)
+      .map(v => buildStatementVendor(v, vendors, merges));
 
     if (!selected.length) return res.status(400).json({ ok: false, error: '선택한 업체 중 외상 거래가 없습니다.' });
 

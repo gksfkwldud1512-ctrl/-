@@ -113,7 +113,7 @@
         "cardCompany": "신한카드",
         "cardNo": "",
         "product": "휘발유",
-        "amount": 30000,
+        "amount": -27000,
         "bosPayType": "신용카드"
       },
       {
@@ -121,7 +121,7 @@
         "cardCompany": "신한카드",
         "cardNo": "",
         "product": "휘발유",
-        "amount": -27000,
+        "amount": 30000,
         "bosPayType": "신용카드"
       },
       {
@@ -356,7 +356,7 @@
     "totalFee": 0,
     "totalNet": 3361222,
     "count": 38,
-    "depositDate": "2026-09-30",
+    "depositDate": "2026-09-29",
     "cardTxs": [
       {
         "approvalNo": "16009011",
@@ -703,6 +703,7 @@
     ],
     "depositExpected": {
       "2026-09-30": {
+        "비씨카드": 869972,
         "KB국민카드": 850284
       }
     },
@@ -743,7 +744,7 @@
       "totalFee": 0,
       "totalNet": 3361222,
       "count": 38,
-      "depositDate": "2026-09-30",
+      "depositDate": "2026-09-29",
       "cardTxs": [
         {
           "approvalNo": "16009011",
@@ -1052,6 +1053,7 @@
       ],
       "depositExpected": {
         "2026-09-30": {
+          "비씨카드": 869972,
           "KB국민카드": 850284
         }
       }

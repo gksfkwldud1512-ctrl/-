@@ -500,20 +500,27 @@ function renderVendors() {
 
     // 외상 업체: 체크박스 + 거래명세서 생성 가능
     // 카드/현금 업체: 체크박스 없음 (판매량 확인용)
-    const checkCell = v.hasCredit
+    // 업체 통합: 합쳐지는 업체(예: 명신)는 받는 업체(현대스크랩) 거래명세서에 포함 → 따로 발행 안 함
+    const mergedInto = v.statementMergedInto;
+    const mergedFrom = v.statementMergedFrom || [];
+    const checkCell = (v.hasCredit && !mergedInto)
       ? `<input type="checkbox" class="vendor-check" value="${esc(v.name)}">`
       : '';
 
-    const creditCell = credit > 0
+    const mergedAdd = mergedFrom.reduce((s, x) => s + x.credit, 0);
+    const creditCell = (credit > 0
       ? `<strong>${credit.toLocaleString()}원</strong>`
-      : `<span style="color:#94a3b8">-</span>`;
+      : `<span style="color:#94a3b8">-</span>`)
+      + (mergedAdd ? `<div style="font-size:11px;color:#7c3aed;">+ ${mergedFrom.map(x => `${esc(x.name)} ${x.credit.toLocaleString()}`).join(', ')}<br>= 명세서 ${(credit + mergedAdd).toLocaleString()}원</div>` : '');
 
     const otherCell = other > 0
       ? `${other.toLocaleString()}원`
       : `<span style="color:#94a3b8">-</span>`;
 
     const stmtDone = state.completion.statements.includes(v.name);
-    const statCell = v.hasCredit
+    const statCell = mergedInto
+      ? `<span class="badge" style="background:#ede9fe;color:#6d28d9" title="이 업체 외상 거래는 ${esc(mergedInto)} 거래명세서에 합산됩니다">${esc(mergedInto)}에 합산</span>`
+      : v.hasCredit
       ? (hasFile
           ? (stmtDone
               ? '<span class="badge badge-done">완료</span>'
@@ -521,7 +528,7 @@ function renderVendors() {
           : '<span class="badge badge-no">미생성</span>')
       : '<span class="badge" style="background:#f1f5f9;color:#94a3b8">해당없음</span>';
 
-    const dlCell = (v.hasCredit && hasFile)
+    const dlCell = (v.hasCredit && hasFile && !mergedInto)
       ? (isSplit
           ? `<a href="/api/download/${encodeURIComponent(splitFile1)}" class="btn-link" download>주유</a>
              <a href="/api/download/${encodeURIComponent(splitFile2)}" class="btn-link" download style="margin-left:4px">배달</a>`
@@ -548,7 +555,7 @@ function renderVendors() {
 
     return `<tr>
       <td class="col-chk">${checkCell}</td>
-      <td>${esc(v.name)}${errorBadge}</td>
+      <td>${esc(v.name)}${errorBadge}${mergedInto ? `<div style="font-size:11px;color:#6d28d9;">→ ${esc(mergedInto)} 거래명세서에 포함</div>` : ''}</td>
       <td class="col-num">${creditCell}</td>
       <td class="col-num">${otherCell}</td>
       <td class="col-num">${total.toLocaleString()}원</td>
