@@ -1,5 +1,6 @@
 'use strict';
 const XLSX = require('xlsx');
+const { readWorkbookAuto } = require('./xlsxReader');
 
 const FUEL_TYPES = new Set(['휘발유', '경유', '등유']);
 const CAR_WASH   = '세차';
@@ -16,8 +17,8 @@ function detectFormat(headerRow) {
   return { payTypeCol: 8, cardCoCol: 20, approvalCol: 21, outTypeCol: 15, cardNoCol: -1 };
 }
 
-function parseBosDaily(filePath) {
-  const wb   = XLSX.readFile(filePath);
+async function parseBosDaily(filePath) {
+  const wb   = await readWorkbookAuto(filePath);
   const ws   = wb.Sheets[wb.SheetNames[0]];
   const raw  = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
@@ -92,8 +93,8 @@ function bosCardNo(raw) {
 //   판매전표 상세조회: h2[4]='고객명', h2[8]='결제구분' → custCol=4, payCol=8, prodCol=11, qtyCol=12, priceCol=13, amtCol=14
 //   판매전표리스트:     h2[8]='고객명', h2[6]='결제구분' → custCol=8, payCol=6,  prodCol=11, qtyCol=12, priceCol=13, amtCol=14
 //   배달판매전표리스트: h2[8]='고객명', h2[6]='결제구분' → custCol=8, payCol=6,  prodCol=11, qtyCol=12, priceCol=13, amtCol=14
-function parseCustomerSales(filePath) {
-  const wb   = XLSX.readFile(filePath);
+async function parseCustomerSales(filePath) {
+  const wb   = await readWorkbookAuto(filePath);
   const ws   = wb.Sheets[wb.SheetNames[0]];
   const raw  = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
@@ -123,11 +124,13 @@ function parseCustomerSales(filePath) {
   const dataRows  = raw.slice(3).filter(r => r[1]);
   const monthMap  = {};
   const FUELS     = new Set(['휘발유', '경유', '등유']);
+  const monthHasDay1 = new Set(); // 월 1일 데이터가 포함된 월만 신뢰(아래 참고)
 
   dataRows.forEach(r => {
     const dateStr = String(r[1] || '').trim();
     if (!dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) return;
     const ym     = dateStr.slice(0, 7);
+    if (dateStr.endsWith('-01')) monthHasDay1.add(ym);
 
     const rawName   = String(r[custCol] || '').trim();
     const custName  = rawName || '현금고객';
@@ -170,8 +173,17 @@ function parseCustomerSales(filePath) {
   });
 
   // 집계 정리
+  // saveCustomerSales()는 고객별로 "덮어쓰기" 병합을 하므로, 해당 월 1일부터
+  // 시작하지 않는 파일(예: 8/20~9/13처럼 임의 기간 조회)을 그대로 반영하면
+  // 그 기간에 등장한 고객의 월 누적 합계가 부분 기간 합계로 잘못 덮어써진다.
+  // BOS에서 정상적으로 받는 파일은 항상 해당 월 1일부터 시작하므로, 1일 데이터가
+  // 없는 월은 부분조회 파일로 간주해 고객 집계 대상에서 제외한다.
   const result = {};
   for (const [ym, custMap] of Object.entries(monthMap)) {
+    if (!monthHasDay1.has(ym)) {
+      console.warn(`[parseCustomerSales] ${ym} 데이터에 1일자가 없어 부분조회 파일로 판단, 고객 집계에서 제외`);
+      continue;
+    }
     result[ym] = Object.values(custMap).map(c => {
       const fuels = {};
       for (const [fuel, fd] of Object.entries(c.fuels)) {

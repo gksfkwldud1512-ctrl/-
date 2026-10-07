@@ -10,17 +10,21 @@ function parseDate(val) {
   return String(val).replace(/-/g, '/');
 }
 
-// BOS "판매전표 상세조회" Excel 파싱
+// BOS "판매전표 상세조회" Excel에서 데이터 행만 추출 (헤더 3줄 스킵)
 // 컬럼: r[1]=판매일자, r[3]=고객번호, r[4]=고객명, r[6]=주유대상물(차량번호),
 //        r[8]=결제구분, r[11]=제품명, r[12]=판매수량, r[13]=판매단가, r[14]=판매금액,
 //        r[15]=출고형태("배달"/"스탠드"), r[17]=면세구분
-function parseExcel(filePath) {
+function readExcelRows(filePath) {
   const wb = XLSX.readFile(filePath);
   const ws = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(ws, { header: 1 })
+  return XLSX.utils.sheet_to_json(ws, { header: 1 })
     .slice(3)
     .filter(r => r[0] != null);
+}
 
+// rows(위 readExcelRows 결과)로부터 업체별 집계 생성.
+// 여러 달이 섞인 파일에서 특정 월만 뽑아 재구성할 때 등 rows를 미리 필터링해서 넘길 수 있음.
+function buildVendorsFromRows(rows) {
   const custMap = {};
   const fuelSummary = {};  // { 'YYYY/MM/DD': { '휘발유': {qty, amount}, ... } }
   const FUEL_SET = new Set(['휘발유', '경유', '등유']);
@@ -134,6 +138,10 @@ function parseExcel(filePath) {
   };
 }
 
+function parseExcel(filePath) {
+  return buildVendorsFromRows(readExcelRows(filePath));
+}
+
 // 배달판매전표리스트 Excel 파싱 (별도 배달 리포트 형식)
 // 컬럼: r[1]=판매일자, r[6]=결제구분, r[7]=고객코드, r[8]=고객명,
 //        r[11]=제품명, r[12]=판매수량, r[13]=판매단가, r[14]=판매금액, r[19]=과면세
@@ -198,4 +206,4 @@ function parseExcelRows(filePath, sheetName) {
   return XLSX.utils.sheet_to_json(ws, { defval: '' });
 }
 
-module.exports = { parseExcel, parseDeliveryExcel, parseExcelRows };
+module.exports = { parseExcel, parseDeliveryExcel, parseExcelRows, readExcelRows, buildVendorsFromRows };

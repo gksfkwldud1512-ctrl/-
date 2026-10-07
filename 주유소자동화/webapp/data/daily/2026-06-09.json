@@ -9,7 +9,7 @@
       },
       "경유": {
         "qty": 12055.3,
-        "amount": 24194499
+        "amount": 24208659
       },
       "등유": {
         "qty": 0,
@@ -24,8 +24,8 @@
     },
     "byPay": {
       "현금": 0,
-      "신용카드": 19951024,
-      "외상": 5643402
+      "신용카드": 20676370,
+      "외상": 4932216
     },
     "cardTxs": [
       {
@@ -947,6 +947,14 @@
         "product": "경유",
         "amount": 100000,
         "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "77380023",
+        "cardCompany": "BC카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 725346,
+        "bosPayType": "신용카드"
       }
     ]
   },
@@ -1797,11 +1805,22 @@
     }
   },
   "matching": {
-    "bosTotal": 19951024,
+    "bosTotal": 20676370,
     "easyTotal": 19951024,
-    "totalDiff": 0,
-    "totalMatch": true,
-    "errors": [],
-    "hasError": false
+    "totalDiff": 725346,
+    "totalMatch": false,
+    "errors": [
+      {
+        "type": "bos_only",
+        "approvalNo": "77380023",
+        "cardCompany": "BC카드",
+        "cardNo": "",
+        "product": "경유",
+        "bosAmount": 725346,
+        "easyAmount": null,
+        "diff": 725346
+      }
+    ],
+    "hasError": true
   }
 }

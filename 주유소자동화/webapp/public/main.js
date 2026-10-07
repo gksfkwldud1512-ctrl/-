@@ -119,6 +119,9 @@ function initTabs() {
   document.querySelectorAll('#subnav-monthly .tab-btn').forEach(btn => {
     btn.addEventListener('click', () => switchSubTab(btn.dataset.tab));
   });
+  document.querySelectorAll('#subnav-summary .tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchSummarySubTab(btn.dataset.tab));
+  });
 }
 
 function switchGroup(group) {
@@ -141,10 +144,12 @@ function switchGroup(group) {
   const subnav        = document.getElementById('subnav');
   const subnavDaily   = document.getElementById('subnav-daily');
   const subnavMonthly = document.getElementById('subnav-monthly');
-  if (group === 'daily' || group === 'monthly') {
+  const subnavSummary = document.getElementById('subnav-summary');
+  if (group === 'daily' || group === 'monthly' || group === 'summary') {
     subnav.classList.remove('hidden');
     if (subnavDaily)   subnavDaily.style.display   = group === 'daily'   ? '' : 'none';
     if (subnavMonthly) subnavMonthly.style.display = group === 'monthly' ? '' : 'none';
+    if (subnavSummary) subnavSummary.style.display = group === 'summary' ? '' : 'none';
   } else {
     subnav.classList.add('hidden');
   }
@@ -158,8 +163,26 @@ function switchGroup(group) {
     const activeTab = document.querySelector('#subnav-monthly .tab-btn.active')?.dataset.tab || 'statements';
     switchSubTab(activeTab);
   } else if (group === 'summary') {
-    loadSummary();
+    const activeTab = document.querySelector('#subnav-summary .tab-btn.active')?.dataset.tab || 'summary-main';
+    switchSummarySubTab(activeTab);
   }
+}
+
+function switchSummarySubTab(tab) {
+  document.querySelectorAll('#subnav-summary .tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+  const gs = document.getElementById('group-summary');
+  if (gs) { gs.style.display = 'block'; gs.classList.add('active'); }
+  ['summary-main', 'summary-assets'].forEach(t => {
+    const el = document.getElementById(`tab-${t}`);
+    if (!el) return;
+    const show = t === tab;
+    el.style.display = show ? 'block' : 'none';
+    el.classList.toggle('active', show);
+  });
+  if (tab === 'summary-main')   loadSummary();
+  if (tab === 'summary-assets') loadAssetOverview();
 }
 
 function switchDailySubTab(tab) {
@@ -195,7 +218,7 @@ function switchSubTab(tab) {
   const section = document.getElementById(`tab-${tab}`);
   if (section) { section.style.display = 'block'; section.classList.add('active'); }
   if (tab === 'vendorprices') loadVendorPrices();
-  if (tab === 'settings')     loadArSummary();
+  if (tab === 'archeck')      loadArSummary();
   renderAll();
 }
 
@@ -477,20 +500,28 @@ function renderVendors() {
 
     // 외상 업체: 체크박스 + 거래명세서 생성 가능
     // 카드/현금 업체: 체크박스 없음 (판매량 확인용)
-    const checkCell = v.hasCredit
+    // 업체 통합: 합쳐지는 업체(예: 명신)는 받는 업체(현대스크랩) 거래명세서에 포함 → 따로 발행 안 함
+    const mergedInto = v.statementMergedInto;
+    const mergedFrom = v.statementMergedFrom || [];
+    const checkCell = (v.hasCredit && !mergedInto)
       ? `<input type="checkbox" class="vendor-check" value="${esc(v.name)}">`
       : '';
 
-    const creditCell = credit > 0
+    const mergedAdd = mergedFrom.reduce((s, x) => s + x.credit, 0);
+    const creditCell = (credit > 0
       ? `<strong>${credit.toLocaleString()}원</strong>`
-      : `<span style="color:#94a3b8">-</span>`;
+      : `<span style="color:#94a3b8">-</span>`)
+      + (mergedAdd ? `<div style="font-size:11px;color:#7c3aed;">+ ${mergedFrom.map(x => `${esc(x.name)} ${x.credit.toLocaleString()}`).join(', ')}<br>= 명세서 ${(credit + mergedAdd).toLocaleString()}원</div>` : '')
+      + (v.statementNonFuelOnly ? `<div style="font-size:11px;color:#0369a1;" title="유류는 유가보조금 카드로 결제됨 — 거래명세서엔 유외상품만 포함">유외상품만 → 명세서 ${(v.statementNonFuelAmount || 0).toLocaleString()}원</div>` : '');
 
     const otherCell = other > 0
       ? `${other.toLocaleString()}원`
       : `<span style="color:#94a3b8">-</span>`;
 
     const stmtDone = state.completion.statements.includes(v.name);
-    const statCell = v.hasCredit
+    const statCell = mergedInto
+      ? `<span class="badge" style="background:#ede9fe;color:#6d28d9" title="이 업체 외상 거래는 ${esc(mergedInto)} 거래명세서에 합산됩니다">${esc(mergedInto)}에 합산</span>`
+      : v.hasCredit
       ? (hasFile
           ? (stmtDone
               ? '<span class="badge badge-done">완료</span>'
@@ -498,7 +529,7 @@ function renderVendors() {
           : '<span class="badge badge-no">미생성</span>')
       : '<span class="badge" style="background:#f1f5f9;color:#94a3b8">해당없음</span>';
 
-    const dlCell = (v.hasCredit && hasFile)
+    const dlCell = (v.hasCredit && hasFile && !mergedInto)
       ? (isSplit
           ? `<a href="/api/download/${encodeURIComponent(splitFile1)}" class="btn-link" download>주유</a>
              <a href="/api/download/${encodeURIComponent(splitFile2)}" class="btn-link" download style="margin-left:4px">배달</a>`
@@ -525,7 +556,7 @@ function renderVendors() {
 
     return `<tr>
       <td class="col-chk">${checkCell}</td>
-      <td>${esc(v.name)}${errorBadge}</td>
+      <td>${esc(v.name)}${errorBadge}${mergedInto ? `<div style="font-size:11px;color:#6d28d9;">→ ${esc(mergedInto)} 거래명세서에 포함</div>` : ''}</td>
       <td class="col-num">${creditCell}</td>
       <td class="col-num">${otherCell}</td>
       <td class="col-num">${total.toLocaleString()}원</td>
@@ -1047,6 +1078,10 @@ async function uploadExcel(file) {
       if (errorCount > 0) {
         setTimeout(() => toast(`⚠ ${errorCount}개 업체에서 오류 가능성이 발견됐습니다. 업체명 옆 [오류확인] 버튼을 확인하세요.`, 'warn'), 1000);
       }
+      // 업로드한 파일에 여러 달치가 섞여 있으면 자동으로 각 달에 나눠 저장됨
+      if (data.savedMonths && data.savedMonths.length > 1) {
+        setTimeout(() => toast(`📅 파일에 여러 달 데이터가 있어 ${data.savedMonths.join(', ')} 각각에 자동 반영했습니다.`, 'success'), 1800);
+      }
 
       const [mRes, fRes, profRes] = await Promise.all([
         api('GET', `/api/monthly-status?year=${state.year}`),
@@ -1221,6 +1256,11 @@ function initDailyUpload() {
   });
   document.getElementById('card-file-input')?.addEventListener('change', e => {
     if (e.target.files[0]) uploadCard(e.target.files[0]);
+    e.target.value = '';
+  });
+  document.getElementById('nice-file-input')?.addEventListener('change', e => {
+    if (e.target.files[0]) uploadCard(e.target.files[0], null, 'nice');
+    e.target.value = '';
   });
   document.getElementById('bank-expense-input')?.addEventListener('change', e => {
     if (e.target.files[0]) uploadBankExpenses(e.target.files[0]);
@@ -1263,18 +1303,21 @@ async function uploadBos(file) {
   document.getElementById('bos-file-input').value = '';
 }
 
-async function uploadCard(file, labelId) {
-  toast('이지샵 카드내역 업로드 중...', '');
+// source: 'easyshop' = 이지샵(세차·유외), 'nice' = 나이스정보통신(유류) — 서버에 출처별로 따로 저장됨
+async function uploadCard(file, labelId, source = 'easyshop') {
+  const srcName  = source === 'nice' ? '나이스' : '이지샵';
+  const endpoint = source === 'nice' ? '/api/daily/upload-nice' : '/api/daily/upload-card';
+  toast(`${srcName} 카드내역 업로드 중...`, '');
   const form = new FormData();
   form.append('file', file);
   try {
-    const res  = await fetch('/api/daily/upload-card', { method: 'POST', body: form });
+    const res  = await fetch(endpoint, { method: 'POST', body: form });
     const data = await res.json();
     if (data.ok) {
       const labelText = `✅ ${data.count > 1 ? data.count+'일치' : data.date} 업로드 완료`;
       const lbl = document.getElementById(labelId || 'deposit-card-label');
       if (lbl) lbl.textContent = labelText;
-      toast(`✅ 카드내역 업로드 완료`, 'success');
+      toast(`✅ ${srcName} 카드내역 업로드 완료`, 'success');
       switchToUploadedMonth(data.date);
       await loadDailyMonth();
       renderDepositVerification();
@@ -1705,18 +1748,18 @@ async function saveOpeningStock() {
     '등유':   Number(document.getElementById('opening-input-등유')?.value)   || 0,
   };
   if (!stocks['휘발유'] && !stocks['경유'] && !stocks['등유']) {
-    showToast('최소 1개 유종의 기초재고를 입력하세요', 'error'); return;
+    toast('최소 1개 유종의 기초재고를 입력하세요', 'error'); return;
   }
-  showToast('기초재고 저장 중...');
+  toast('기초재고 저장 중...');
   const r = await api('POST', '/api/base-stock', { date, stocks });
   if (r.ok) {
-    showToast(`✅ ${date} 기초재고 저장 완료`, 'success');
+    toast(`✅ ${date} 기초재고 저장 완료`, 'success');
     toggleOpeningStockEdit();
     await refreshOpeningStockBar();
     const tankDate = document.getElementById('tank-date-input')?.value;
     if (tankDate) loadTankStatus(tankDate);
   } else {
-    showToast('❌ ' + r.error, 'error');
+    toast('❌ ' + r.error, 'error');
   }
 }
 
@@ -1846,23 +1889,44 @@ function renderTankStatus(tanks, date) {
   }
 }
 
-function calcDailyProfit(day) {
+// 일별 영업이익을 구성요소별로 분해해서 반환
+//   fuel  : 유종(휘발유/경유/등유) 판매이익 = 매출 − 판매량×FIFO매입단가
+//   etc   : 유외상품 이익(매출−수기원가) + 세차 매출(원가 없음)
+//   cardFee: 카드 수수료(차감 항목)
+//   total : 영업이익 = fuel + etc − cardFee
+// 화면에서 유종이익과 유외·세차이익을 따로 보여주기 위해 분해 형태로 돌려준다.
+function calcDailyProfitBreakdown(day) {
   const bos = day.bos;
   if (!bos || !bos.date) return null;
+  if (!dailyState.purchasePrices.length) return null;   // 매입단가 없으면 계산 불가
 
-  // 단가가 하나도 없으면 null
-  if (!dailyState.purchasePrices.length) return null;
-
-  let profit = 0;
-  ['휘발유', '경유', '등유'].forEach(fuel => {
-    const f   = bos.fuels?.[fuel];
-    const buy = getPriceForDate(bos.date, fuel);
-    if (f && buy) profit += f.amount - (f.qty * buy);
+  let fuel = 0;
+  ['휘발유', '경유', '등유'].forEach(f => {
+    const fd  = bos.fuels?.[f];
+    const buy = getPriceForDate(bos.date, f);
+    if (fd && buy) fuel += fd.amount - (fd.qty * buy);
   });
-  profit += (bos.carwash?.amount || 0);
-  profit += (bos.others?.amount  || 0) - (day.otherCost || 0);
-  profit -= (day.card?.totalFee  || 0);  // 카드 수수료 차감
-  return Math.round(profit);
+
+  const etc     = (bos.carwash?.amount || 0) + (bos.others?.amount || 0) - (day.otherCost || 0);
+  const cardFee = day.card?.totalFee || 0;
+
+  // 반올림하지 않은 원값도 함께 반환 — 합계 행은 원값으로 누적한 뒤 마지막에 한 번만
+  // 반올림해야 종합현황 탭의 월 영업이익과 원 단위까지 정확히 일치한다
+  // (일별로 반올림해서 더하면 한 달치가 쌓여 몇 원씩 어긋남)
+  return {
+    fuel:    Math.round(fuel),
+    etc:     Math.round(etc),
+    cardFee: Math.round(cardFee),
+    total:   Math.round(fuel + etc - cardFee),
+    rawFuel: fuel,
+    rawEtc:  etc,
+    rawCardFee: cardFee,
+  };
+}
+
+function calcDailyProfit(day) {
+  const b = calcDailyProfitBreakdown(day);
+  return b ? b.total : null;
 }
 
 function renderDailyTable() {
@@ -1870,12 +1934,13 @@ function renderDailyTable() {
   if (!tbody) return;
 
   if (!dailyState.days.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="25">BOS 데이터를 업로드하면 현황이 표시됩니다</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="28">BOS 데이터를 업로드하면 현황이 표시됩니다</td></tr>';
     updateDailySummary(null);
     return;
   }
 
-  let totals = { 휘발유L: 0, 경유L: 0, 등유L: 0, 휘발유A: 0, 경유A: 0, 등유A: 0, otherA: 0, carwashA: 0, profit: 0, cardFee: 0 };
+  let totals = { 휘발유L: 0, 경유L: 0, 등유L: 0, 휘발유A: 0, 경유A: 0, 등유A: 0, otherA: 0, carwashA: 0,
+                 profit: 0, cardFee: 0, profitFuel: 0, profitEtc: 0 };
 
   const rows = dailyState.days.map(day => {
     const bos  = day.bos;
@@ -1893,14 +1958,18 @@ function renderDailyTable() {
     const cwA = bos?.carwash?.amount || 0;  // 세차
     const otC = day.otherCost || 0;
     const cardFee = card?.totalFee || 0;
-    const profit  = calcDailyProfit(day);
+    const brk     = calcDailyProfitBreakdown(day);
+    const profit  = brk ? brk.total : null;
 
     totals.휘발유L += gL; totals.경유L += dL; totals.등유L += kL;
     totals.휘발유A += gA; totals.경유A += dA; totals.등유A += kA;
     totals.otherA  += otA;
     totals.carwashA += cwA;
-    totals.profit  += profit ?? 0;
     totals.cardFee += cardFee;
+    // 합계는 원값(raw)으로 누적 → 표시할 때 한 번만 반올림 (종합현황 월 영업이익과 정확히 일치)
+    totals.profit     += brk?.rawFuel != null ? (brk.rawFuel + brk.rawEtc - brk.rawCardFee) : 0;
+    totals.profitFuel += brk?.rawFuel ?? 0;
+    totals.profitEtc  += brk?.rawEtc  ?? 0;
 
     const drum  = v  => v > 0 ? Math.floor(v / 200).toLocaleString() : '-';
     const litL  = v  => v > 0 ? Math.floor(v).toLocaleString() : '-';
@@ -1908,6 +1977,9 @@ function renderDailyTable() {
     const price = (a, q) => q > 0 ? Math.round(a / q).toLocaleString() + '원' : '-';
     const buyPr = (d, f) => { const p = getPriceForDate(d, f); return p ? p.toLocaleString() + '원' : '-'; };
     const pf    = profit != null ? `<span class="${profit >= 0 ? 'profit-pos' : 'profit-neg'}">${profit.toLocaleString()}원</span>` : '-';
+    const money = v => v != null ? `<span class="${v >= 0 ? 'profit-pos' : 'profit-neg'}">${v.toLocaleString()}원</span>` : '-';
+    const pfFuel = brk ? money(brk.fuel) : '-';   // 유종(휘발유·경유·등유) 이익만
+    const pfEtc  = brk ? money(brk.etc)  : '-';   // 유외상품 + 세차 이익
 
     const m      = day.matching;
     const bm     = calcBankMatch(day);
@@ -1947,7 +2019,9 @@ function renderDailyTable() {
       <td class="daily-col-date">${md}</td>
       <td class="group-summary-cell">${totalDrum}</td>
       <td class="group-summary-cell" style="font-weight:600;">${totalSales > 0 ? totalSales.toLocaleString() + '원' : '-'}</td>
-      <td class="group-summary-cell daily-col-profit">${pf}</td>
+      <td class="group-summary-cell daily-col-profit">${pfFuel}</td>
+      <td class="group-summary-cell daily-col-profit">${pfEtc}</td>
+      <td class="group-summary-cell daily-col-profit" style="font-weight:600;">${pf}</td>
       <td>${litL(gL)}</td><td>${drum(gL)}</td><td>${won(gA)}</td><td>${price(gA,gL)}</td><td>${buyPr(date,'휘발유')}</td>
       <td>${litL(dL)}</td><td>${drum(dL)}</td><td>${won(dA)}</td><td>${price(dA,dL)}</td><td>${buyPr(date,'경유')}</td>
       <td>${litL(kL)}</td><td>${drum(kL)}</td><td>${won(kA)}</td><td>${price(kA,kL)}</td><td>${buyPr(date,'등유')}</td>
@@ -1963,6 +2037,10 @@ function renderDailyTable() {
   });
 
   const hasPriceData = dailyState.purchasePrices.length > 0;
+  // 원값 누적분을 여기서 한 번만 반올림
+  totals.profit     = Math.round(totals.profit);
+  totals.profitFuel = Math.round(totals.profitFuel);
+  totals.profitEtc  = Math.round(totals.profitEtc);
   const totalPf    = hasPriceData
     ? `<span class="${totals.profit >= 0 ? 'profit-pos' : 'profit-neg'}">${totals.profit.toLocaleString()}원</span>`
     : '단가 미입력';
@@ -1971,11 +2049,18 @@ function renderDailyTable() {
   const totalAllDrum = Math.floor(totalAllL / 200).toLocaleString();
 
   const totalAllSales = totals.휘발유A + totals.경유A + totals.등유A + totals.otherA + totals.carwashA;
+  const totalPfFuel = hasPriceData
+    ? `<span class="${totals.profitFuel >= 0 ? 'profit-pos' : 'profit-neg'}">${totals.profitFuel.toLocaleString()}원</span>` : '-';
+  const totalPfEtc = hasPriceData
+    ? `<span class="${totals.profitEtc >= 0 ? 'profit-pos' : 'profit-neg'}">${totals.profitEtc.toLocaleString()}원</span>` : '-';
+
   const totalRow = `<tr class="total-row">
     <td class="daily-col-date">합계</td>
     <td class="group-summary-cell">${totalAllDrum}</td>
     <td class="group-summary-cell" style="font-weight:700;">${totalAllSales.toLocaleString()}원</td>
-    <td class="group-summary-cell daily-col-profit">${totalPf}</td>
+    <td class="group-summary-cell daily-col-profit">${totalPfFuel}</td>
+    <td class="group-summary-cell daily-col-profit">${totalPfEtc}</td>
+    <td class="group-summary-cell daily-col-profit" style="font-weight:700;">${totalPf}</td>
     <td>${Math.floor(totals.휘발유L).toLocaleString()}</td><td>${Math.floor(totals.휘발유L/200).toLocaleString()}</td><td>${totals.휘발유A.toLocaleString()}</td><td>-</td><td>-</td>
     <td>${Math.floor(totals.경유L).toLocaleString()}</td><td>${Math.floor(totals.경유L/200).toLocaleString()}</td><td>${totals.경유A.toLocaleString()}</td><td>-</td><td>-</td>
     <td>${Math.floor(totals.등유L).toLocaleString()}</td><td>${Math.floor(totals.등유L/200).toLocaleString()}</td><td>${totals.등유A.toLocaleString()}</td><td>-</td><td>-</td>
@@ -2019,13 +2104,18 @@ function buildMatchingModal(date) {
   // ── 카드 대사 섹션 (BOS ↔ 이지샵) ───────────────────────────
   let cardMatchSection = '';
   if (!m) {
-    cardMatchSection = '<p style="color:#94a3b8; font-size:12px; margin-top:8px;">BOS 또는 이지샵 데이터가 없어 카드 대사를 수행할 수 없습니다.</p>';
+    cardMatchSection = '<p style="color:#94a3b8; font-size:12px; margin-top:8px;">BOS 또는 카드(이지샵/나이스) 데이터가 없어 카드 대사를 수행할 수 없습니다.</p>';
   } else {
     const summaryClass = m.totalMatch ? 'match-summary-ok' : 'match-summary-err';
     const summaryIcon  = m.totalMatch ? '✅' : '⚠';
     const totalDiffStr = m.totalDiff !== 0
       ? `<span class="price-diff">&nbsp;(차액 ${Math.abs(m.totalDiff).toLocaleString()}원)</span>` : '';
 
+    // 출처(이지샵/나이스) 구분이 저장된 날짜만 출처 칸 표시 — 예전 업로드 데이터는 출처 정보 없음
+    const hasSource = m.bySource && Object.keys(m.bySource).length > 0;
+    const sourceTag = src => src
+      ? `<span style="border-radius:4px;padding:1px 6px;font-size:11px;${src === '나이스' ? 'background:#e0e7ff;color:#4338ca;' : 'background:#ccfbf1;color:#0f766e;'}">${esc(src)}</span>`
+      : '-';
     const typeOrder = ['bos_only', 'easy_only', 'amount_mismatch'];
     let errSections = '';
     typeOrder.forEach(type => {
@@ -2033,18 +2123,19 @@ function buildMatchingModal(date) {
       if (!list.length) return;
       errSections += `<p class="error-section-title" style="margin-top:16px;">${
         type === 'bos_only' ? '① BOS에만 있는 거래' :
-        type === 'easy_only' ? '② 이지샵에만 있는 거래' : '③ 금액 불일치'
+        type === 'easy_only' ? '② 카드(VAN)에만 있는 거래' : '③ 금액 불일치'
       }</p>
       <table class="error-table">
         <thead><tr>
-          <th>승인번호</th><th>카드사</th><th>카드번호</th><th>유종</th>
+          <th>승인번호</th>${hasSource && type !== 'bos_only' ? '<th>출처</th>' : ''}<th>카드사</th><th>카드번호</th><th>유종</th>
           ${type === 'easy_only' ? '<th>결제시간</th>' : ''}
           ${type === 'amount_mismatch'
-            ? '<th>BOS 금액</th><th>이지샵 금액</th><th>차액</th>'
-            : `<th>${type === 'bos_only' ? 'BOS' : '이지샵'} 금액</th>`}
+            ? '<th>BOS 금액</th><th>카드 금액</th><th>차액</th>'
+            : `<th>${type === 'bos_only' ? 'BOS' : '카드'} 금액</th>`}
         </tr></thead>
         <tbody>${list.map(e => `<tr>
           <td><code>${esc(e.approvalNo)}</code></td>
+          ${hasSource && type !== 'bos_only' ? `<td>${sourceTag(e.source)}</td>` : ''}
           <td>${esc(e.cardCompany)}</td>
           <td><code>${esc(e.cardNo)}</code></td>
           <td>${esc(e.product || e.fuel || '')}</td>
@@ -2084,7 +2175,7 @@ function buildMatchingModal(date) {
     const coTable = Object.keys(byCo).length ? `
       <p class="error-section-title" style="margin-top:12px;">카드사별 차이 요약</p>
       <table class="error-table" style="margin-bottom:4px;">
-        <thead><tr><th>카드사</th><th>이지샵만</th><th>BOS만</th><th>차액</th></tr></thead>
+        <thead><tr><th>카드사</th><th>카드만</th><th>BOS만</th><th>차액</th></tr></thead>
         <tbody>${coRows}</tbody>
       </table>` : '';
 
@@ -2139,7 +2230,9 @@ function buildMatchingModal(date) {
     cardMatchSection = `
       <div class="${summaryClass}">
         ${summaryIcon} BOS <strong>${m.bosTotal.toLocaleString()}원</strong>
-        &nbsp;/&nbsp; 이지샵 <strong>${m.easyTotal.toLocaleString()}원</strong>
+        &nbsp;/&nbsp; ${hasSource
+          ? Object.entries(m.bySource).map(([src, amt]) => `${esc(src)} ${amt.toLocaleString()}원`).join(' + ') + ` = 카드 <strong>${m.easyTotal.toLocaleString()}원</strong>`
+          : `카드 <strong>${m.easyTotal.toLocaleString()}원</strong>`}
         ${totalDiffStr}
         ${isResolved ? '&nbsp;<span style="color:#16a34a;font-size:12px;">✅ 사유 처리됨</span>' : ''}
       </div>
@@ -2153,7 +2246,7 @@ function buildMatchingModal(date) {
       <div class="modal-box" style="width:720px;">
         <div class="modal-head">📋 대사 현황 — <span>${date}</span></div>
         <div class="modal-body">
-          <p class="error-section-title">💳 카드 대사 (BOS ↔ 이지샵)</p>
+          <p class="error-section-title">💳 카드 대사 (BOS ↔ 이지샵+나이스)</p>
           ${cardMatchSection}
         </div>
         <div class="modal-foot">
@@ -2395,12 +2488,173 @@ async function loadCustomerSales() {
   const avgBuy = sumRes.ok ? (sumRes.avgBuyPriceByFuel || {}) : {};
   custSalesState.data   = custRes.ok ? custRes.customers : [];
   custSalesState.avgBuy = avgBuy;
+  custSalesState.ym     = ym;
+  custSalesState.marginMeta = null;
+  if (custSalesState.marginView) await loadCustMarginMeta();
   renderCustomerSales(custSalesState.data, avgBuy);
+}
+
+// ── 거래처 마진 분석 ─────────────────────────────────────────
+// 거래처×유종별로 L당 마진을 계산: 판매단가 − 월평균 매입원가(FIFO) − 카드수수료(카드결제만)
+// 오일뱅크 지원금(입고량 기준)은 모든 판매 L에 공통으로 붙으므로 "지원금 포함 기여" 칸에 따로 표시
+const MARGIN_FUELS = ['휘발유', '경유', '등유'];
+const GENERAL_CUSTOMER = '현금고객';   // 이름 없는 일반 고객 묶음 → 일반가(게시가) 기준
+
+async function toggleCustMarginView() {
+  custSalesState.marginView = !custSalesState.marginView;
+  const btn = document.getElementById('cust-margin-btn');
+  if (btn) btn.textContent = custSalesState.marginView ? '📋 판매현황 보기' : '📊 마진 분석';
+  if (custSalesState.marginView && !custSalesState.marginMeta) await loadCustMarginMeta();
+  renderCustomerSales(custSalesState.data, custSalesState.avgBuy);
+}
+
+async function loadCustMarginMeta() {
+  if (!custSalesState.ym) return;
+  const [meta, sup] = await Promise.all([
+    api('GET', `/api/customer-margin-meta?month=${custSalesState.ym}`),
+    api('GET', `/api/summary/${custSalesState.ym}`),
+  ]);
+  custSalesState.marginMeta = meta.ok ? meta : { cardFeeRate: 0, ar: {} };
+  // 오일뱅크 지원금 L당 환산 = 월 지원금 ÷ 월 유류 판매량
+  const q = sup.ok ? MARGIN_FUELS.reduce((s, f) => s + (sup.qty?.[f] || 0), 0) : 0;
+  custSalesState.marginMeta.supportPerL = q > 0 ? (sup.oilbankSupport || 0) / q : 0;
+}
+
+function setCustMarginFloor(v) {
+  custSalesState.marginFloor = Number(v) || 0;
+  renderCustomerSales(custSalesState.data, custSalesState.avgBuy);
+}
+
+function sortCustMarginBy(key) {
+  if (custSalesState.marginSort === key) custSalesState.marginDir = custSalesState.marginDir === 'asc' ? 'desc' : 'asc';
+  else { custSalesState.marginSort = key; custSalesState.marginDir = key === 'netL' ? 'asc' : 'desc'; }
+  renderCustomerSales(custSalesState.data, custSalesState.avgBuy);
+}
+
+function buildCustMarginRows(customers, avgBuy, meta) {
+  // 일반가: 현금고객(이름 없는 일반 고객) 평균 판매단가
+  const general = {};
+  MARGIN_FUELS.forEach(f => {
+    let q = 0, a = 0;
+    customers.filter(c => c.name === GENERAL_CUSTOMER).forEach(c => { q += c.fuels?.[f]?.qty || 0; a += c.fuels?.[f]?.amount || 0; });
+    general[f] = q > 0 ? a / q : null;
+  });
+  const rows = [];
+  for (const c of customers) {
+    for (const f of MARGIN_FUELS) {
+      const fd = c.fuels?.[f];
+      if (!fd || !(fd.qty > 0) || !avgBuy[f]) continue;
+      const price  = fd.amount / fd.qty;
+      const grossL = price - avgBuy[f];
+      const feeL   = c.payType === '신용카드' ? price * (meta.cardFeeRate || 0) : 0;
+      const netL   = grossL - feeL;
+      rows.push({
+        name: c.name, payType: c.payType, fuel: f, qty: fd.qty, price,
+        discL: general[f] != null && c.name !== GENERAL_CUSTOMER ? general[f] - price : null,
+        cost: avgBuy[f], grossL, feeL, netL,
+        contribL: netL + (meta.supportPerL || 0),
+        netTotal: netL * fd.qty,
+        ar: meta.ar?.[c.name] || null,
+      });
+    }
+  }
+  return { rows, general };
+}
+
+function renderCustMargin(customers, avgBuy) {
+  const body = document.getElementById('cust-sales-body');
+  const meta = custSalesState.marginMeta;
+  if (!meta) { body.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;">불러오는 중...</div>'; return; }
+  if (!Object.values(avgBuy || {}).some(Boolean)) {
+    body.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;">해당 월 매입단가 정보가 없어 마진을 계산할 수 없습니다.</div>';
+    return;
+  }
+  const floor  = custSalesState.marginFloor ?? 50;
+  const filter = custSalesState.filter;
+  const { rows: allRows, general } = buildCustMarginRows(customers, avgBuy, meta);
+  let rows = filter === '전체' ? allRows : allRows.filter(r => r.payType === filter);
+  if (!rows.length) { body.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;">해당 월/업체구분 데이터 없음</div>'; return; }
+
+  const key = custSalesState.marginSort || 'netL';
+  const dir = (custSalesState.marginDir || 'asc') === 'asc' ? 1 : -1;
+  rows = [...rows].sort((a, b) => key === 'name' ? dir * a.name.localeCompare(b.name) : dir * ((a[key] ?? -1e9) - (b[key] ?? -1e9)));
+
+  // 구간 요약 (카드수수료 차감 후 L당 마진 기준, 판매량 비중)
+  const totQ = rows.reduce((s, r) => s + r.qty, 0);
+  const bands = [[-Infinity, 0, '손해'], [0, 30, '0~30원'], [30, 60, '30~60원'], [60, 90, '60~90원'], [90, Infinity, '90원 이상']];
+  const bandHtml = bands.map(([lo, hi, label]) => {
+    const list = rows.filter(r => r.netL >= lo && r.netL < hi);
+    const q = list.reduce((s, r) => s + r.qty, 0);
+    if (!list.length) return '';
+    const warn = hi <= floor;
+    return `<span style="display:inline-block;margin:2px 4px;padding:4px 10px;border-radius:12px;font-size:12px;${warn ? 'background:#fee2e2;color:#b91c1c;' : 'background:#f1f5f9;color:#334155;'}">
+      ${label} · ${Math.round(q).toLocaleString()}L (${(q / totQ * 100).toFixed(1)}%) · ${list.length}건</span>`;
+  }).join('');
+  const below = rows.filter(r => r.netL < floor);
+  // 기준 미달 거래처를 기준선까지 올렸을 때 월 개선액 (판매량 유지 가정)
+  const upside = below.reduce((s, r) => s + (floor - r.netL) * r.qty, 0);
+
+  const rateTxt = meta.cardFeeRate ? `${(meta.cardFeeRate * 100).toFixed(2)}%${meta.cardFeeRateSource === 'all' ? ' (해당 월 수수료 데이터 없음 → 전체 기간 평균)' : ''}` : '데이터 없음';
+  const won  = v => v == null ? '-' : Math.round(v).toLocaleString();
+  const sgn  = v => v == null ? '-' : (v > 0 ? '+' : '') + Math.round(v).toLocaleString();
+  const arrow = k => key === k ? (dir === 1 ? ' ▲' : ' ▼') : '';
+  const th = (label, k, align = 'right', title = '') =>
+    `<th onclick="${k ? `sortCustMarginBy('${k}')` : ''}" title="${title}" style="padding:8px 8px;background:#f1f5f9;border-bottom:2px solid #e2e8f0;white-space:nowrap;font-size:12px;text-align:${align};${k ? 'cursor:pointer;' : ''}">${label}${k ? arrow(k) : ''}</th>`;
+
+  const trs = rows.map(r => {
+    const bad = r.netL < floor;
+    const netColor = r.netL < 0 ? '#b91c1c' : bad ? '#dc2626' : '#16a34a';
+    const ar = r.payType === '외상' && r.ar ? r.ar : null;
+    const lateTxt = ar && ar.avgLag != null
+      ? `<span style="${ar.avgLag >= 2 ? 'color:#dc2626;font-weight:600;' : 'color:#64748b;'}">평균 ${ar.avgLag}개월</span>${ar.overdue > 0 ? `<br><span style="font-size:11px;color:#b45309;">미수 ${won(ar.overdue)}원</span>` : ''}`
+      : '-';
+    return `<tr style="border-bottom:1px solid #f1f5f9;${bad ? 'background:#fef2f2;' : ''}">
+      <td style="padding:6px 8px;font-weight:600;white-space:nowrap;">${esc(r.name)}</td>
+      <td style="padding:6px 8px;text-align:center;font-size:12px;">${r.payType === '신용카드' ? '카드' : esc(r.payType)}</td>
+      <td style="padding:6px 8px;text-align:center;font-size:12px;">${r.fuel}</td>
+      <td style="padding:6px 8px;text-align:right;">${Math.floor(r.qty).toLocaleString()}</td>
+      <td style="padding:6px 8px;text-align:right;">${won(r.price)}</td>
+      <td style="padding:6px 8px;text-align:right;color:#7c3aed;">${r.discL == null ? '-' : sgn(r.discL)}</td>
+      <td style="padding:6px 8px;text-align:right;color:#64748b;">${won(r.cost)}</td>
+      <td style="padding:6px 8px;text-align:right;">${won(r.grossL)}</td>
+      <td style="padding:6px 8px;text-align:right;color:#64748b;">${r.feeL ? '-' + won(r.feeL) : '-'}</td>
+      <td style="padding:6px 8px;text-align:right;font-weight:700;color:${netColor};">${won(r.netL)}</td>
+      <td style="padding:6px 8px;text-align:right;color:#0f766e;">${won(r.contribL)}</td>
+      <td style="padding:6px 8px;text-align:right;">${won(r.netTotal)}</td>
+      <td style="padding:6px 8px;text-align:right;font-size:12px;white-space:nowrap;">${lateTxt}</td>
+    </tr>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div style="padding:10px 14px;font-size:12px;color:#475569;line-height:1.8;">
+      <div>
+        <strong>최저마진 기준</strong>
+        <input type="number" value="${floor}" onchange="setCustMarginFloor(this.value)" style="width:60px;padding:2px 6px;border:1px solid #cbd5e1;border-radius:4px;">원/L
+        (카드수수료 차감 후) · 카드수수료율 ${rateTxt}
+        · 오일뱅크 지원금 L당 ${meta.supportPerL ? Math.round(meta.supportPerL) + '원' : '없음'}
+        · 일반가(현금고객) ${MARGIN_FUELS.filter(f => general[f]).map(f => `${f} ${won(general[f])}원`).join(' / ') || '-'}
+      </div>
+      <div>${bandHtml}</div>
+      <div style="color:#b91c1c;">기준 미달 <strong>${below.length}건</strong> · 기준선까지 올리면 월 약 <strong>${won(upside)}원</strong> 개선 (판매량 유지 가정)</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr>
+        ${th('업체명', 'name', 'left')}${th('구분', '', 'center')}${th('유종', '', 'center')}
+        ${th('판매량(L)', 'qty')}${th('평균단가', 'price')}
+        ${th('일반가 대비 할인', 'discL', 'right', '현금고객 평균단가 − 이 거래처 평균단가')}
+        ${th('매입원가', '')}${th('총마진/L', 'grossL')}${th('카드수수료/L', '')}
+        ${th('순마진/L', 'netL', 'right', '판매단가 − 매입원가 − 카드수수료')}
+        ${th('지원금 포함 기여/L', 'contribL', 'right', '순마진 + 오일뱅크 지원금(L당). 이 거래처가 빠지면 사라지는 L당 이익')}
+        ${th('월 순마진(원)', 'netTotal')}${th('결제지연(외상)', '')}
+      </tr></thead>
+      <tbody>${trs}</tbody>
+    </table>`;
 }
 
 function renderCustomerSales(customers, avgBuy) {
   const body = document.getElementById('cust-sales-body');
   if (!body) return;
+  if (custSalesState.marginView) return renderCustMargin(customers, avgBuy);
 
   const filter = custSalesState.filter;
   let filtered = filter === '전체' ? customers
@@ -2515,7 +2769,7 @@ function exportTankStatus() {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  showToast(`📥 탱크현황 Excel 다운로드 중... (${from} ~ ${to})`);
+  toast(`📥 탱크현황 Excel 다운로드 중... (${from} ~ ${to})`);
 }
 
 // ── 입금검증 ─────────────────────────────────────────────────────
@@ -2523,34 +2777,34 @@ function exportTankStatus() {
 async function uploadDepositBos(input) {
   const file = input.files[0]; if (!file) return;
   const fd = new FormData(); fd.append('file', file);
-  showToast('BOS 시재현황 업로드 중...');
+  toast('BOS 시재현황 업로드 중...');
   try {
     const r = await fetch('/api/deposit/upload-bos', { method:'POST', body:fd });
     const d = await r.json();
     if (d.ok) {
       const lbl = document.getElementById('deposit-bos-label');
       if (lbl) lbl.textContent = `✓ ${d.count}건 (${d.from}~${d.to})`;
-      showToast(`✅ BOS 시재현황 ${d.count}건 업로드 완료`, 'success');
+      toast(`✅ BOS 시재현황 ${d.count}건 업로드 완료`, 'success');
       loadDepositMatch();
-    } else showToast('❌ ' + d.error, 'error');
-  } catch(e) { showToast('❌ 오류: ' + e.message, 'error'); }
+    } else toast('❌ ' + d.error, 'error');
+  } catch(e) { toast('❌ 오류: ' + e.message, 'error'); }
   input.value = '';
 }
 
 async function uploadDepositEasy(input) {
   const file = input.files[0]; if (!file) return;
   const fd = new FormData(); fd.append('file', file);
-  showToast('이지샵 입금내역 업로드 중...');
+  toast('이지샵 입금내역 업로드 중...');
   try {
     const r = await fetch('/api/deposit/upload-easy', { method:'POST', body:fd });
     const d = await r.json();
     if (d.ok) {
       const lbl = document.getElementById('deposit-easy-label');
       if (lbl) lbl.textContent = `✓ 누적 ${d.total}건`;
-      showToast(`✅ 이지샵 입금내역 ${d.count}건 추가 (총 ${d.total}건)`, 'success');
+      toast(`✅ 이지샵 입금내역 ${d.count}건 추가 (총 ${d.total}건)`, 'success');
       loadDepositMatch();
-    } else showToast('❌ ' + d.error, 'error');
-  } catch(e) { showToast('❌ 오류: ' + e.message, 'error'); }
+    } else toast('❌ ' + d.error, 'error');
+  } catch(e) { toast('❌ 오류: ' + e.message, 'error'); }
   input.value = '';
 }
 
@@ -2741,7 +2995,7 @@ async function resetDepositData() {
   if (sum) sum.innerHTML = '';
   const res = document.getElementById('deposit-result');
   if (res) res.innerHTML = '<div style="padding:40px;text-align:center;color:#94a3b8;">초기화 완료</div>';
-  showToast('입금검증 데이터 초기화 완료');
+  toast('입금검증 데이터 초기화 완료');
 }
 
 // ── BOS PostgreSQL 연결 테스트 ──────────────────────────────────
@@ -2749,19 +3003,19 @@ async function testBosDb() {
   const btn = document.getElementById('btn-test-bos-db');
   if (btn) { btn.disabled = true; btn.textContent = '접속 시도 중...'; }
   try {
-    showToast('BOS DB 접속 조합을 시도 중입니다 (최대 30초)...');
+    toast('BOS DB 접속 조합을 시도 중입니다 (최대 30초)...');
     const r = await fetch('/api/test-bos-db', { method: 'POST' });
     const d = await r.json();
     if (d.ok) {
       const tbl = d.tables.join(', ') || '(없음)';
-      showToast(`✅ DB 접속 성공! user=${d.user} db=${d.database}\n테이블: ${tbl}`, 'success');
+      toast(`✅ DB 접속 성공! user=${d.user} db=${d.database}\n테이블: ${tbl}`, 'success');
       console.log('[BOS DB 접속 성공]', d);
       alert(`✅ BOS DB 접속 성공!\n\n접속 정보:\n  user: ${d.user}\n  password: ${d.password}\n  database: ${d.database}\n\n테이블 목록:\n  ${d.tables.join('\n  ')}\n\n이 정보를 개발자에게 전달하면 DB 동기화 기능을 완성할 수 있습니다.`);
     } else {
-      showToast('❌ ' + d.error, 'error');
+      toast('❌ ' + d.error, 'error');
     }
   } catch (err) {
-    showToast('❌ 테스트 오류: ' + err.message, 'error');
+    toast('❌ 테스트 오류: ' + err.message, 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '🔌 DB 연결 테스트'; }
   }
@@ -2775,13 +3029,13 @@ async function syncTankActuals() {
     const r = await fetch('/api/sync-tank-actuals', { method: 'POST' });
     const d = await r.json();
     if (d.ok) {
-      showToast(`✅ 탱크 실재고 반영 완료 — ${d.count}일치 (${d.from} ~ ${d.to})`);
+      toast(`✅ 탱크 실재고 반영 완료 — ${d.count}일치 (${d.from} ~ ${d.to})`);
       loadStockVariance();
     } else {
-      showToast('❌ ' + d.error, 'error');
+      toast('❌ ' + d.error, 'error');
     }
   } catch (err) {
-    showToast('❌ 동기화 오류: ' + err.message, 'error');
+    toast('❌ 동기화 오류: ' + err.message, 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '🔄 바탕화면 파일 자동 반영'; }
   }
@@ -2797,16 +3051,16 @@ document.addEventListener('DOMContentLoaded', () => {
       const fd = new FormData();
       fd.append('file', file);
       try {
-        showToast('탱크 실재고 업로드 중...');
+        toast('탱크 실재고 업로드 중...');
         const r = await fetch('/api/upload-tank-actuals', { method: 'POST', body: fd });
         const d = await r.json();
         if (d.ok) {
-          showToast(`탱크 실재고 ${d.count}일치 업로드 완료 (${d.from} ~ ${d.to})`);
+          toast(`탱크 실재고 ${d.count}일치 업로드 완료 (${d.from} ~ ${d.to})`);
           loadStockVariance();
         } else {
-          showToast('업로드 실패: ' + d.error, 'error');
+          toast('업로드 실패: ' + d.error, 'error');
         }
-      } catch (err) { showToast('업로드 오류: ' + err.message, 'error'); }
+      } catch (err) { toast('업로드 오류: ' + err.message, 'error'); }
       e.target.value = '';
     });
   }
@@ -2988,13 +3242,34 @@ function renderSummary(data) {
         ${td(amt > 0 ? amt.toLocaleString()+'원' : '-', true)}
       </tr>`;
     });
-    const etcAmt = (data.sales?.carwash||0) + (data.sales?.others||0);
+    // 유종 소계 → 세차·유외 이익 → 카드수수료 차감 → 합계 순으로 보여줘야
+    // "유종 합 ≠ 총 영업이익"으로 보이던 혼란이 없어진다 (셋을 더하면 정확히 합계가 됨)
+    const fuelProfit = data.fuelProfit ?? null;
+    rows.push(`<tr style="background:#f8fafc;border-top:1px solid #e2e8f0;">
+      ${td('<span style="color:#64748b;">유종 소계</span>')} ${td('-',true)} ${td('-',true)} ${td('-',true)}
+      ${td(fuelProfit != null ? `<span style="color:${fuelProfit>=0?'#16a34a':'#dc2626'};font-weight:700;">${fuelProfit.toLocaleString()}원</span>` : '-', true)}
+      ${td('-',true)}
+    </tr>`);
+
+    const etcAmt    = (data.sales?.carwash||0) + (data.sales?.others||0);
+    const etcProfit = data.etcProfit ?? null;
+    const otherCost = data.otherCost || 0;
     rows.push(`<tr style="background:#f8fafc;">
-      ${td('세차+유외')} ${td('-',true)} ${td('-',true)} ${td('-',true)} ${td('-',true)}
+      ${td(`세차+유외${otherCost ? `<span style="font-size:11px;color:#94a3b8;"> (원가 ${otherCost.toLocaleString()}원 차감)</span>` : ''}`)}
+      ${td('-',true)} ${td('-',true)} ${td('-',true)}
+      ${td(etcProfit != null ? `<span style="color:${etcProfit>=0?'#16a34a':'#dc2626'};font-weight:700;">${etcProfit.toLocaleString()}원</span>` : '-', true)}
       ${td(etcAmt > 0 ? etcAmt.toLocaleString()+'원' : '-', true)}
     </tr>`);
+
+    const cardFee = data.cardFee || 0;
+    rows.push(`<tr style="background:#f8fafc;">
+      ${td('<span style="color:#64748b;">카드 수수료</span>')} ${td('-',true)} ${td('-',true)} ${td('-',true)}
+      ${td(cardFee ? `<span style="color:#dc2626;font-weight:700;">-${cardFee.toLocaleString()}원</span>` : '-', true)}
+      ${td('-',true)}
+    </tr>`);
+
     rows.push(`<tr style="background:#f1f5f9;border-top:2px solid #e2e8f0;">
-      ${td('합계',false,true)} ${td('-',true,true)} ${td('-',true,true)} ${td('-',true,true)}
+      ${td('영업이익 합계',false,true)} ${td('-',true,true)} ${td('-',true,true)} ${td('-',true,true)}
       ${td(data.profit!=null?`<span style="color:${data.profit>=0?'#16a34a':'#dc2626'};font-weight:700;">${data.profit.toLocaleString()}원</span>`:'-',true,true)}
       ${td((data.revenue||0).toLocaleString()+'원',true,true)}
     </tr>`);
@@ -3804,17 +4079,48 @@ async function deleteOilbankSupport(id) {
 // 외상 미수금 입금 확인 (월마감 → 설정 탭 우측)
 // ════════════════════════════════════════════════════════════
 
-const arState = { months: [], vendors: [], unmatched: [], expandedVendor: null };
+const arState = {
+  months: [], vendors: [], unmatched: [], unresolvedAllocations: [],
+  cardCandidates: [], cardMatched: [], cardMin: 300000,
+  expandedVendor: null, splitFormFor: null,
+  sortField: 'remaining', sortDir: 'desc',
+};
+
+function setArSort(field) {
+  if (arState.sortField === field) {
+    arState.sortDir = arState.sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    arState.sortField = field;
+    arState.sortDir = field === 'name' ? 'asc' : 'desc';
+  }
+  renderArVendorTable();
+}
 
 async function loadArSummary() {
   const res = await api('GET', '/api/ar/summary');
   if (!res.ok) { toast(res.error || '외상 입금 현황 조회 실패', 'error'); return; }
-  arState.months    = res.months;
-  arState.vendors   = res.vendors;
-  arState.unmatched = res.unmatched;
+  arState.months               = res.months;
+  arState.vendors               = res.vendors;
+  arState.unmatched             = res.unmatched;
+  arState.unresolvedAllocations = res.unresolvedAllocations || [];
   renderArSummaryCards();
   renderArVendorTable();
   renderArUnmatchedBadge();
+  renderArUnresolvedBadge();
+  await loadArCardCandidates();
+}
+
+// 현장 카드결제 후보(카드에만 있는 큰 결제) — 배지 건수 + 모달 목록
+async function loadArCardCandidates() {
+  const res = await api('GET', `/api/ar/card-candidates?min=${arState.cardMin}`);
+  if (!res.ok) return;
+  arState.cardCandidates = res.candidates;
+  arState.cardMatched    = res.matched;
+  const badge = document.getElementById('ar-card-badge');
+  if (badge) {
+    badge.textContent   = res.candidates.length;
+    badge.style.display = res.candidates.length ? '' : 'none';
+  }
 }
 
 function arNum(v) { return (v || 0).toLocaleString() + '원'; }
@@ -3825,6 +4131,7 @@ function renderArSummaryCards() {
   const totalCharge = arState.vendors.reduce((s, v) => s + v.totalCharge, 0);
   const totalPaid   = arState.vendors.reduce((s, v) => s + v.totalPaid, 0);
   const totalRemain = arState.vendors.reduce((s, v) => s + v.remaining, 0);
+  const totalDisc   = arState.vendors.reduce((s, v) => s + (v.totalDiscount || 0), 0);
 
   const card = (label, val, color) => `
     <div style="flex:1;min-width:100px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;">
@@ -3835,6 +4142,7 @@ function renderArSummaryCards() {
   box.innerHTML =
     card('총 거래대금', totalCharge) +
     card('총 입금액', totalPaid, '#0f766e') +
+    (totalDisc ? card('할인 처리', totalDisc, '#64748b') : '') +
     card('총 미수잔액', totalRemain, totalRemain > 0 ? '#dc2626' : '#16a34a') +
     `<div style="flex:1;min-width:100px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;">
        <div style="font-size:11px;color:#64748b;">미매칭 입금</div>
@@ -3865,21 +4173,45 @@ function renderArVendorTable() {
   }
 
   const months = arState.months;
-  // 미수 있는 업체 우선 정렬(잔액 많은 순), 완납 업체는 뒤로
-  const sorted = arState.vendors.slice().sort((a, b) => b.remaining - a.remaining);
+  const dir = arState.sortDir === 'asc' ? 1 : -1;
+  const sorted = arState.vendors.slice().sort((a, b) => {
+    if (arState.sortField === 'name') return a.name.localeCompare(b.name, 'ko') * dir;
+    return (a.remaining - b.remaining) * dir;
+  });
+  const arrow = (field) => arState.sortField === field ? (arState.sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+  const monthLabel = ym => `${Number(ym.slice(5, 7))}월`;
+
+  // 월별 합계 (매출 / 입금 / 할인)
+  const totals = {};
+  months.forEach(m => { totals[m] = { charge: 0, paid: 0 }; });
+  arState.vendors.forEach(v => v.months.forEach(m => {
+    if (!totals[m.month]) return;
+    totals[m.month].charge += m.charge || 0;
+    totals[m.month].paid   += m.paid   || 0;
+  }));
 
   box.innerHTML = `
     <table style="width:100%;font-size:12px;border-collapse:collapse;white-space:nowrap;">
       <thead>
         <tr style="background:#f1f5f9;position:sticky;top:0;z-index:2;">
-          <th rowspan="2" style="padding:6px;text-align:left;position:sticky;left:0;background:#f1f5f9;z-index:3;">업체명</th>
-          ${months.map(m => `<th colspan="2" style="padding:6px;text-align:center;border-left:1px solid #e2e8f0;">${m}</th>`).join('')}
-          <th rowspan="2" style="padding:6px;text-align:center;border-left:1px solid #e2e8f0;">상태</th>
+          <th rowspan="2" style="padding:6px;text-align:left;position:sticky;left:0;background:#f1f5f9;z-index:3;cursor:pointer;user-select:none;"
+              onclick="setArSort('name')" title="클릭하여 정렬">거래처명${arrow('name')}</th>
+          ${months.map(m => `<th colspan="2" style="padding:6px;text-align:center;border-left:1px solid #e2e8f0;" title="${m}">${monthLabel(m)}</th>`).join('')}
+          <th rowspan="2" style="padding:6px;text-align:center;border-left:1px solid #e2e8f0;cursor:pointer;user-select:none;"
+              onclick="setArSort('remaining')" title="클릭하여 정렬(잔액 기준)">상태${arrow('remaining')}</th>
         </tr>
         <tr style="background:#f8fafc;font-size:10px;color:#64748b;position:sticky;top:25px;z-index:2;">
-          ${months.map(() => '<th style="padding:2px 6px;font-weight:400;border-left:1px solid #e2e8f0;">거래금액</th><th style="padding:2px 6px;font-weight:400;">입금금액</th>').join('')}
+          ${months.map(() => '<th style="padding:2px 6px;font-weight:400;border-left:1px solid #e2e8f0;">매출</th><th style="padding:2px 6px;font-weight:400;" title="그 달 매출에 대해 들어온 입금 (클릭하면 입금일·입금자 확인)">입금</th>').join('')}
         </tr>
       </thead>
+      <tfoot>
+        <tr style="background:#f1f5f9;font-weight:700;border-top:2px solid #94a3b8;position:sticky;bottom:0;">
+          <td style="padding:6px;position:sticky;left:0;background:#f1f5f9;">합계</td>
+          ${months.map(m => `<td style="padding:4px 6px;text-align:right;border-left:1px solid #e2e8f0;">${totals[m].charge.toLocaleString()}</td>
+                             <td style="padding:4px 6px;text-align:right;color:#0f766e;">${totals[m].paid.toLocaleString()}</td>`).join('')}
+          <td></td>
+        </tr>
+      </tfoot>
       <tbody>
         ${sorted.map(v => {
           const byMonth = {};
@@ -3889,14 +4221,35 @@ function renderArVendorTable() {
             : v.totalPaid > 0
               ? '<span class="badge badge-warn">일부</span>'
               : '<span class="badge badge-fail">미입금</span>';
+          const aliasTag = (v.aliases && v.aliases.length)
+            ? ` <span style="font-size:10px;color:#94a3b8;" title="통장 입금계좌명">(${v.aliases.map(esc).join(', ')})</span>` : '';
+          const surplusTag = v.surplus > 0
+            ? ` <span style="font-size:10px;color:#0369a1;">(초과 ${arNum(v.surplus)})</span>` : '';
+          const beforeTrackTag = v.beforeTrackAmount > 0
+            ? ` <span style="font-size:10px;color:#94a3b8;" title="BOS 거래대금 자료가 없는 기간(추적 시작월 이전)의 입금이라 반영 안 됨">(추적이전 ${arNum(v.beforeTrackAmount)} 제외)</span>` : '';
+          const unresolvedTag = (v.unresolved && v.unresolved.length)
+            ? ` <span class="badge badge-warn" style="font-size:10px;">미확정 ${v.unresolved.length}건</span>` : '';
+          const discountTag = v.discountSetting
+            ? ` <span class="badge" style="font-size:10px;background:#e2e8f0;color:#475569;" title="할인 입금 업체 (허용 차액 ${arNum(v.discountSetting.maxDiff)})">할인업체</span>` : '';
           return `<tr style="border-bottom:1px solid #f1f5f9;cursor:pointer;" onclick="toggleArVendorDetail('${esc(v.name)}')">
-            <td style="padding:6px;position:sticky;left:0;background:#fff;">${esc(v.name)}${v.surplus > 0 ? ` <span style="font-size:10px;color:#0369a1;">(초과 ${arNum(v.surplus)})</span>` : ''}</td>
+            <td style="padding:6px;position:sticky;left:0;background:#fff;">${esc(v.name)}${discountTag}${aliasTag}${surplusTag}${beforeTrackTag}${unresolvedTag}</td>
             ${months.map(m => {
               const d = byMonth[m];
               if (!d) return '<td colspan="2" style="text-align:center;color:#cbd5e1;border-left:1px solid #f1f5f9;">-</td>';
-              const paidColor = d.paid >= d.charge ? '#16a34a' : (d.paid > 0 ? '#d97706' : '#dc2626');
+              // remaining: 0=정확히 일치, 양수=부족(미입금 포함), 음수=그 달만 초과입금
+              // (다른 달과 상계하지 않음 — 달마다 실제로 있었던 그대로 표시)
+              let paidColor, diffTag;
+              if (d.paid === 0 && !d.manualPaidCard) { paidColor = '#dc2626'; diffTag = '<span style="font-size:10px;color:#dc2626;margin-left:3px;">미입금</span>'; }
+              else if (d.remaining === 0 && d.discount) { paidColor = '#16a34a'; diffTag = `<span style="font-size:10px;color:#64748b;margin-left:3px;">할인 -${d.discount.toLocaleString()}</span>`; }
+              else if (d.remaining === 0) { paidColor = '#16a34a'; diffTag = ''; }
+              else if (d.remaining > 0) { paidColor = '#d97706'; diffTag = `<span style="font-size:10px;color:#d97706;margin-left:3px;">부족 -${d.remaining.toLocaleString()}</span>`; }
+              else { paidColor = '#0369a1'; diffTag = `<span style="font-size:10px;color:#0369a1;margin-left:3px;">초과 +${(-d.remaining).toLocaleString()}</span>`; }
+              const lag = d.lagMonths != null
+                ? `<span style="font-size:10px;color:#64748b;margin-left:3px;">(+${d.lagMonths}개월)</span>` : '';
               return `<td style="padding:4px 6px;text-align:right;border-left:1px solid #f1f5f9;">${(d.charge || 0).toLocaleString()}</td>
-                      <td style="padding:4px 6px;text-align:right;color:${paidColor};">${(d.paid || 0).toLocaleString()}</td>`;
+                      <td style="padding:4px 6px;text-align:right;color:${paidColor};white-space:nowrap;cursor:pointer;text-decoration:underline dotted;"
+                          title="클릭: 입금일·입금자명 보기"
+                          onclick="event.stopPropagation();showArDepositModal('${esc(v.name)}','${m}')">${(d.paid || 0).toLocaleString()}${lag}${diffTag}</td>`;
             }).join('')}
             <td style="padding:6px;text-align:center;border-left:1px solid #f1f5f9;">${status}</td>
           </tr>`;
@@ -3919,26 +4272,98 @@ function renderArVendorDetail() {
   const v = arState.vendors.find(x => x.name === arState.expandedVendor);
   if (!v) { box.innerHTML = ''; return; }
 
-  const monthRows = v.months.map(m => `
+  const monthRows = v.months.map(m => {
+    // remaining: 0=일치, 양수=부족(달마다 그대로 표시, 다른달과 상계 안함), 음수=그 달만 초과입금
+    const remColor = m.remaining === 0 ? '#16a34a' : (m.remaining > 0 ? '#dc2626' : '#0369a1');
+    const remLabel = m.remaining === 0 ? '0원' : (m.remaining > 0 ? arNum(m.remaining) + ' 부족' : arNum(-m.remaining) + ' 초과');
+    const cardBtn = m.manualPaidCard
+      ? `<button style="font-size:10px;padding:1px 5px;margin-left:6px;color:#dc2626;" onclick="unmarkArPaidCard('${esc(v.name)}','${m.month}')">✕카드결제 취소</button>`
+      : `<button style="font-size:10px;padding:1px 5px;margin-left:6px;" onclick="markArPaidCard('${esc(v.name)}','${m.month}')">입금 확인(카드결제)</button>`;
+    return `
     <tr style="border-bottom:1px solid #f1f5f9;">
-      <td style="padding:4px 6px;">${m.month}</td>
-      <td style="padding:4px 6px;text-align:right;">${arNum(m.charge)}</td>
-      <td style="padding:4px 6px;text-align:right;">${arNum(m.paid)}</td>
-      <td style="padding:4px 6px;text-align:right;${m.remaining > 0 ? 'color:#dc2626;' : 'color:#16a34a;'}">${arNum(m.remaining)}</td>
-    </tr>`).join('');
+      <td style="padding:1px 6px;line-height:1.2;">${m.month}</td>
+      <td style="padding:1px 6px;line-height:1.2;text-align:right;">${arNum(m.charge)}</td>
+      <td style="padding:1px 6px;line-height:1.2;text-align:right;">${arNum(m.paid)}${m.lagMonths != null ? ` <span style="font-size:10px;color:#64748b;">(+${m.lagMonths}개월)</span>` : ''}</td>
+      <td style="padding:1px 6px;line-height:1.2;text-align:right;color:${remColor};">${remLabel}${m.manualPaidCard ? ' <span class="badge badge-done" style="font-size:10px;">카드결제</span>' : ''}</td>
+      <td style="padding:1px 6px;line-height:1.2;">${cardBtn}</td>
+    </tr>`;
+  }).join('');
+
+  const SOURCE_LABEL = {
+    manual: '<span class="badge badge-done" style="font-size:10px;">수동</span>',
+    note: '<span class="badge badge-ok" style="font-size:10px;">비고</span>',
+    estimate: '<span class="badge badge-warn" style="font-size:10px;">추정</span>',
+    unresolved: '<span class="badge badge-fail" style="font-size:10px;">미확정</span>',
+    'before-track': '<span class="badge" style="font-size:10px;background:#e2e8f0;">추적이전</span>',
+    card: '<span class="badge" style="font-size:10px;background:#fce7f3;color:#9d174d;">카드</span>',
+  };
+  const otherVendorOptions = arState.vendors
+    .filter(x => x.name !== v.name)
+    .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+    .map(x => `<option value="${esc(x.name)}">${esc(x.name)}</option>`).join('');
 
   const allocRows = v.allocations.length
-    ? v.allocations.map(a => `
-        <tr style="border-bottom:1px solid #f1f5f9;">
-          <td style="padding:4px 6px;">${a.date}</td>
+    ? v.allocations.map(a => {
+        const splitBtn = a.source === 'card' ? ''   // 카드결제는 통장 입금이 아니라 분할 대상 아님 (카드 매칭 창에서 취소)
+          : !a.isSplit
+          ? `<button style="font-size:10px;padding:1px 5px;margin-left:4px;" onclick="toggleArSplitForm('${a.depositId}')">➕분할</button>`
+          : `<button style="font-size:10px;padding:1px 5px;margin-left:4px;color:#dc2626;"
+                     onclick="removeArSplit('${a.depositId}', ${a.splitIndex})">✕분할취소</button>`;
+        const formRow = (arState.splitFormFor === a.depositId) ? `
+          <tr style="background:#f8fafc;">
+            <td colspan="5" style="padding:6px;">
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                <span style="font-size:11px;color:#64748b;">이 입금(${arNum(a.amount)}) 중</span>
+                <select id="ar-split-vendor" style="font-size:11px;padding:2px 4px;">
+                  <option value="">-- 업체 선택 --</option>${otherVendorOptions}
+                </select>
+                <input type="number" id="ar-split-amount" placeholder="금액" style="font-size:11px;padding:2px 6px;width:100px;">
+                <span style="font-size:11px;color:#64748b;">원은 그 업체 몫</span>
+                <button style="font-size:11px;padding:2px 6px;" onclick="addArSplit('${a.depositId}')">확인</button>
+                <button style="font-size:11px;padding:2px 6px;" onclick="toggleArSplitForm(null)">취소</button>
+              </div>
+            </td>
+          </tr>` : '';
+        return `<tr style="border-bottom:1px solid #f1f5f9;">
+          <td style="padding:4px 6px;white-space:nowrap;">${a.date}${a.isSplit ? ` <span style="font-size:10px;color:#7c3aed;">(분할${a.sourceFragment ? ': ' + esc(a.sourceFragment) : ''})</span>` : ''}</td>
           <td style="padding:4px 6px;text-align:right;">${arNum(a.amount)}</td>
-          <td style="padding:4px 6px;">${a.appliedTo.map(x => `${x.month}(${arNum(x.amount)})`).join(', ') || '(미배정)'}</td>
-        </tr>`).join('')
-    : `<tr><td colspan="3" style="padding:8px;text-align:center;color:#94a3b8;">매칭된 입금 내역이 없습니다.</td></tr>`;
+          <td style="padding:4px 6px;">${a.appliedTo.map(x => `${x.month}(${arNum(x.amount)})`).join(', ') || '<span style="color:#94a3b8;">(미배정)</span>'}</td>
+          <td style="padding:4px 6px;">${SOURCE_LABEL[a.source] || ''}</td>
+          <td style="padding:4px 6px;color:#64748b;">${esc(a.note) || '-'}${splitBtn}</td>
+        </tr>${formRow}`;
+      }).join('')
+    : `<tr><td colspan="5" style="padding:8px;text-align:center;color:#94a3b8;">매칭된 입금 내역이 없습니다.</td></tr>`;
+
+  const aliasChips = (v.aliases || []).map(a => `
+    <span style="display:inline-flex;align-items:center;gap:4px;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:1px 6px;font-size:11px;">
+      ${esc(a)}
+      <button style="border:none;background:none;color:#0369a1;cursor:pointer;font-size:10px;padding:0;"
+              onclick="removeArAlias('${esc(v.name)}','${esc(a)}')">✕</button>
+    </span>`).join('');
 
   box.innerHTML = `
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;">
       <strong style="font-size:13px;">${esc(v.name)} — 상세</strong>
+
+      <div style="font-size:11px;color:#64748b;margin:8px 0 4px;">입금계좌명(통장 적요와 업체명이 다를 때 등록)</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+        ${aliasChips || '<span style="font-size:11px;color:#94a3b8;">등록된 입금계좌명 없음</span>'}
+        <input type="text" id="ar-alias-input" placeholder="입금계좌명 입력"
+               style="font-size:11px;padding:2px 6px;border:1px solid #cbd5e1;border-radius:4px;width:120px;">
+        <button style="font-size:11px;padding:2px 6px;" onclick="addArAlias('${esc(v.name)}')">추가</button>
+      </div>
+
+      <div style="font-size:11px;color:#64748b;margin:6px 0 4px;">할인 입금 업체 (거래명세서에서 직접 할인해 몇만원 적게 입금하는 업체 — 허용 차액 이내 부족분은 미수 대신 "할인"으로 처리)</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+        <label style="font-size:11px;display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" id="ar-disc-check" ${v.discountSetting ? 'checked' : ''}> 할인 입금 업체
+        </label>
+        <span style="font-size:11px;color:#64748b;">허용 차액</span>
+        <input type="number" id="ar-disc-max" value="${v.discountSetting?.maxDiff || 100000}"
+               style="font-size:11px;padding:2px 6px;border:1px solid #cbd5e1;border-radius:4px;width:100px;">원
+        <button style="font-size:11px;padding:2px 6px;" onclick="saveArDiscount('${esc(v.name)}')">저장</button>
+        ${v.totalDiscount ? `<span style="font-size:11px;color:#64748b;">할인 처리 합계 ${arNum(v.totalDiscount)}</span>` : ''}
+      </div>
 
       <div style="font-size:11px;color:#64748b;margin:6px 0 2px;">월별 미수 현황</div>
       <table style="width:100%;font-size:11px;border-collapse:collapse;margin-bottom:8px;">
@@ -3947,6 +4372,7 @@ function renderArVendorDetail() {
           <th style="padding:4px 6px;text-align:right;">거래대금</th>
           <th style="padding:4px 6px;text-align:right;">충당액</th>
           <th style="padding:4px 6px;text-align:right;">잔액</th>
+          <th style="padding:4px 6px;"></th>
         </tr></thead>
         <tbody>${monthRows}</tbody>
       </table>
@@ -3957,10 +4383,195 @@ function renderArVendorDetail() {
           <th style="padding:4px 6px;text-align:left;">입금일</th>
           <th style="padding:4px 6px;text-align:right;">입금액</th>
           <th style="padding:4px 6px;text-align:left;">충당된 월</th>
+          <th style="padding:4px 6px;text-align:left;">근거</th>
+          <th style="padding:4px 6px;text-align:left;">비고(통장 원문)</th>
         </tr></thead>
         <tbody>${allocRows}</tbody>
       </table>
     </div>`;
+}
+
+// ── 할인 입금 업체 설정 ──────────────────────────────────────
+async function saveArDiscount(vendorName) {
+  const checked = document.getElementById('ar-disc-check')?.checked;
+  const maxDiff = Number(document.getElementById('ar-disc-max')?.value) || 0;
+  if (checked && !maxDiff) return toast('허용 차액을 입력하세요.', 'warn');
+  const res = await api('POST', '/api/ar/discount-vendors', { vendorName, maxDiff: checked ? maxDiff : 0 });
+  if (!res.ok) return toast(res.error || '저장 실패', 'error');
+  toast(checked ? `${vendorName} 할인 입금 업체로 지정` : `${vendorName} 할인 입금 업체 해제`, 'success');
+  await loadArSummary();
+  renderArVendorDetail();
+}
+
+// ── 월별 입금 내역 모달 (표의 입금 칸 클릭) ────────────────────
+// 그 업체의 그 달 매출에 충당된 입금(통장·카드·분할)을 입금일·입금자명과 함께 표시
+const AR_SOURCE_TEXT = { manual: '수동 지정', note: '비고 월표기', estimate: '금액 추정', card: '현장 카드결제' };
+
+function showArDepositModal(vendorName, month) {
+  const v = arState.vendors.find(x => x.name === vendorName);
+  if (!v) return;
+  const m = v.months.find(x => x.month === month) || { charge: 0, paid: 0, remaining: 0 };
+  const rows = v.allocations
+    .map(a => ({ a, part: a.appliedTo.find(x => x.month === month) }))
+    .filter(x => x.part);
+
+  const diffTxt = m.discount ? `<span style="color:#64748b;">할인 ${arNum(m.discount)} (완납 처리)</span>`
+    : m.remaining > 0 ? `<span style="color:#dc2626;">부족 ${arNum(m.remaining)}</span>`
+    : m.remaining < 0 ? `<span style="color:#0369a1;">초과 ${arNum(-m.remaining)}</span>`
+    : '<span style="color:#16a34a;">일치</span>';
+
+  document.getElementById('ar-deposit-title').textContent = `${vendorName} · ${Number(month.slice(5, 7))}월 입금 내역`;
+  document.getElementById('ar-deposit-body').innerHTML = `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin-bottom:10px;">
+      <div>매출 <strong>${arNum(m.charge)}</strong></div>
+      <div>입금 <strong style="color:#0f766e;">${arNum(m.paid)}</strong></div>
+      <div>${diffTxt}</div>
+      ${m.manualPaidCard ? '<div><span class="badge badge-done">카드결제 완납 처리</span></div>' : ''}
+    </div>
+    ${rows.length ? `
+    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+      <thead><tr style="background:#f1f5f9;">
+        <th style="padding:6px;text-align:left;">입금일</th>
+        <th style="padding:6px;text-align:left;">입금자명 (통장 적요)</th>
+        <th style="padding:6px;text-align:right;">입금액</th>
+        <th style="padding:6px;text-align:right;">이 달에 충당</th>
+        <th style="padding:6px;text-align:left;">근거</th>
+        <th style="padding:6px;text-align:left;">비고</th>
+      </tr></thead>
+      <tbody>${rows.map(({ a, part }) => `
+        <tr style="border-bottom:1px solid #f1f5f9;">
+          <td style="padding:6px;white-space:nowrap;">${a.date}</td>
+          <td style="padding:6px;">${esc(a.payer || '-')}${a.isSplit ? ' <span style="font-size:10px;color:#7c3aed;">(분할)</span>' : ''}</td>
+          <td style="padding:6px;text-align:right;white-space:nowrap;">${arNum(a.amount)}</td>
+          <td style="padding:6px;text-align:right;white-space:nowrap;font-weight:600;">${arNum(part.amount)}</td>
+          <td style="padding:6px;">${AR_SOURCE_TEXT[a.source] || a.source}</td>
+          <td style="padding:6px;color:#64748b;">${esc(a.note || '-')}${a.appliedTo.length > 1 ? `<br><span style="font-size:10px;">여러 달 충당: ${a.appliedTo.map(x => `${Number(x.month.slice(5, 7))}월 ${arNum(x.amount)}`).join(', ')}</span>` : ''}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`
+    : '<div style="padding:16px;text-align:center;color:#94a3b8;">이 달 매출에 매칭된 입금이 없습니다.<br><small>현장 카드결제라면 [💳 현장 카드결제 매칭]에서 지정하세요.</small></div>'}`;
+  document.getElementById('ar-deposit-modal').style.display = 'flex';
+}
+
+// ── 현장 카드결제 매칭 모달 ───────────────────────────────────
+async function showArCardModal() {
+  await loadArCardCandidates();
+  renderArCardModalBody();
+  document.getElementById('ar-card-modal').style.display = 'flex';
+}
+
+async function setArCardMin(v) {
+  arState.cardMin = Number(v) || 300000;
+  await loadArCardCandidates();
+  renderArCardModalBody();
+}
+
+function renderArCardModalBody() {
+  const body = document.getElementById('ar-card-body');
+  const vendorOptions = sel => arState.vendors
+    .slice().sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+    .map(v => `<option value="${esc(v.name)}" ${v.name === sel ? 'selected' : ''}>${esc(v.name)}</option>`).join('');
+  const monthOptions = sel => arState.months
+    .map(m => `<option value="${m}" ${m === sel ? 'selected' : ''}>${Number(m.slice(5, 7))}월 (${m.slice(0, 4)})</option>`).join('');
+
+  const candRows = arState.cardCandidates.map((c, i) => {
+    const s = c.suggestion;
+    return `<tr style="border-bottom:1px solid #f1f5f9;${s ? 'background:#f0fdf4;' : ''}">
+      <td style="padding:6px;white-space:nowrap;">${c.date}<br><span style="font-size:10px;color:#94a3b8;">${esc(c.transTime)}</span></td>
+      <td style="padding:6px;white-space:nowrap;">${esc(c.cardCompany)}<br><code style="font-size:10px;">${esc(c.cardNo)}</code></td>
+      <td style="padding:6px;text-align:right;font-weight:600;white-space:nowrap;">${arNum(c.amount)}</td>
+      <td style="padding:6px;font-size:11px;">${s ? `<span style="color:#15803d;">${esc(s.vendorName)} ${Number(s.month.slice(5, 7))}월</span><br><span style="color:#64748b;">(${esc(s.reason)})</span>` : '<span style="color:#94a3b8;">-</span>'}</td>
+      <td style="padding:6px;">
+        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
+          <select id="ar-card-v-${i}" style="font-size:11px;padding:2px 4px;max-width:170px;"><option value="">-- 업체 --</option>${vendorOptions(s?.vendorName)}</select>
+          <select id="ar-card-m-${i}" style="font-size:11px;padding:2px 4px;"><option value="">-- 월 --</option>${monthOptions(s?.month)}</select>
+          <button style="font-size:11px;padding:2px 8px;" onclick="confirmArCard(${i})">확정</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const matchedRows = arState.cardMatched.map(c => `
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:6px;white-space:nowrap;">${c.date}</td>
+      <td style="padding:6px;white-space:nowrap;">${esc(c.cardCompany || '')} <code style="font-size:10px;">${esc(c.cardNo || '')}</code></td>
+      <td style="padding:6px;text-align:right;">${arNum(c.amount)}</td>
+      <td style="padding:6px;">${esc(c.vendorName)} · ${Number(c.month.slice(5, 7))}월</td>
+      <td style="padding:6px;"><button style="font-size:11px;padding:2px 6px;color:#dc2626;" onclick="removeArCard('${esc(c.id)}')">취소</button></td>
+    </tr>`).join('');
+
+  body.innerHTML = `
+    <div style="font-size:12px;color:#475569;margin-bottom:8px;line-height:1.7;">
+      일마감 카드 대사에서 <strong>BOS에는 없고 카드(이지샵·나이스)에만 있는 결제</strong> 중
+      <input type="number" value="${arState.cardMin}" onchange="setArCardMin(this.value)" style="width:90px;font-size:11px;padding:2px 6px;">원 이상입니다.
+      외상대금을 현장에서 카드로 받은 건을 업체·대상 월에 지정하면 그 달 입금으로 반영됩니다.
+      <br><span style="color:#15803d;">초록색</span> = 추천 (외상 월 매출과 금액 일치 또는 예전에 같은 카드로 매칭한 업체). 카드 데이터는 일마감 카드 업로드가 시작된 5월부터 있습니다.
+    </div>
+    <p style="font-weight:700;margin:8px 0 4px;">매칭 대기 ${arState.cardCandidates.length}건</p>
+    ${arState.cardCandidates.length ? `
+    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+      <thead><tr style="background:#f1f5f9;">
+        <th style="padding:6px;text-align:left;">결제일</th><th style="padding:6px;text-align:left;">카드</th>
+        <th style="padding:6px;text-align:right;">금액</th><th style="padding:6px;text-align:left;">추천</th>
+        <th style="padding:6px;text-align:left;">업체 · 대상 월 지정</th>
+      </tr></thead>
+      <tbody>${candRows}</tbody>
+    </table>` : '<div style="padding:12px;color:#94a3b8;">매칭할 카드결제가 없습니다.</div>'}
+    <p style="font-weight:700;margin:16px 0 4px;">매칭 완료 ${arState.cardMatched.length}건</p>
+    ${arState.cardMatched.length ? `
+    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+      <thead><tr style="background:#f1f5f9;">
+        <th style="padding:6px;text-align:left;">결제일</th><th style="padding:6px;text-align:left;">카드</th>
+        <th style="padding:6px;text-align:right;">금액</th><th style="padding:6px;text-align:left;">업체 · 월</th><th></th>
+      </tr></thead>
+      <tbody>${matchedRows}</tbody>
+    </table>` : '<div style="padding:12px;color:#94a3b8;">아직 없음</div>'}`;
+}
+
+async function confirmArCard(idx) {
+  const c = arState.cardCandidates[idx];
+  const vendorName = document.getElementById(`ar-card-v-${idx}`)?.value;
+  const month      = document.getElementById(`ar-card-m-${idx}`)?.value;
+  if (!vendorName || !month) return toast('업체와 대상 월을 선택하세요.', 'warn');
+  const res = await api('POST', '/api/ar/card-payments', { ...c, vendorName, month });
+  if (!res.ok) return toast(res.error || '매칭 실패', 'error');
+  toast(`${vendorName} ${Number(month.slice(5, 7))}월 입금으로 반영`, 'success');
+  await loadArSummary();
+  renderArCardModalBody();
+}
+
+async function removeArCard(id) {
+  const res = await api('DELETE', '/api/ar/card-payments', { id });
+  if (!res.ok) return toast(res.error || '취소 실패', 'error');
+  await loadArSummary();
+  renderArCardModalBody();
+}
+
+// ── 입금 분할(다른 업체 몫 떼어내기) ──────────────────────────
+function toggleArSplitForm(depositId) {
+  arState.splitFormFor = (arState.splitFormFor === depositId) ? null : depositId;
+  renderArVendorDetail();
+}
+
+async function addArSplit(depositId) {
+  const vendorName = document.getElementById('ar-split-vendor')?.value;
+  const amount = Number(document.getElementById('ar-split-amount')?.value) || 0;
+  if (!vendorName) return toast('업체를 선택하세요.', 'warn');
+  if (!amount) return toast('금액을 입력하세요.', 'warn');
+  const res = await api('POST', '/api/ar/split', { depositId, vendorName, amount });
+  if (!res.ok) return toast(res.error || '분할 등록 실패', 'error');
+  toast('분할 등록 완료', 'success');
+  arState.splitFormFor = null;
+  await loadArSummary();
+  renderArVendorDetail();
+}
+
+async function removeArSplit(depositId, splitIndex) {
+  const res = await api('DELETE', '/api/ar/split', { depositId, splitIndex });
+  if (!res.ok) return toast(res.error || '분할 삭제 실패', 'error');
+  toast('분할 삭제 완료', 'success');
+  await loadArSummary();
+  renderArVendorDetail();
 }
 
 // ── 미매칭 입금 모달 (수동 지정) ──────────────────────────────
@@ -4022,3 +4633,230 @@ async function confirmArMatch(depositId, vendorName) {
   await loadArSummary();
   renderArUnmatchedModalBody();
 }
+
+// ── 카드결제 등 은행입금 매칭 대상이 없는 업체의 월별 완납 수동 확정 ──
+async function markArPaidCard(vendorName, month) {
+  const res = await api('POST', '/api/ar/mark-paid', { vendorName, month });
+  if (!res.ok) return toast(res.error || '처리 실패', 'error');
+  toast(`${month} 카드결제 완납 처리 완료`, 'success');
+  await loadArSummary();
+  renderArVendorDetail();
+}
+
+async function unmarkArPaidCard(vendorName, month) {
+  const res = await api('DELETE', '/api/ar/mark-paid', { vendorName, month });
+  if (!res.ok) return toast(res.error || '취소 실패', 'error');
+  await loadArSummary();
+  renderArVendorDetail();
+}
+
+// ── 미확정 배분(자동판별 실패 건) 수동 확정 모달 ──────────────────
+function renderArUnresolvedBadge() {
+  const badge = document.getElementById('ar-unresolved-badge');
+  if (!badge) return;
+  if (arState.unresolvedAllocations.length) {
+    badge.textContent = arState.unresolvedAllocations.length;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function showArUnresolvedModal() {
+  renderArUnresolvedModalBody();
+  document.getElementById('ar-unresolved-modal').style.display = 'flex';
+}
+
+function arUnresolvedTargetKey(u) {
+  return u.isSplit ? `${u.depositId}__split${u.splitIndex}` : `${u.depositId}__primary`;
+}
+
+function renderArUnresolvedModalBody() {
+  const body = document.getElementById('ar-unresolved-body');
+  if (!body) return;
+
+  if (!arState.unresolvedAllocations.length) {
+    body.innerHTML = `<div style="padding:24px;text-align:center;color:#94a3b8;">미확정 배분이 없습니다.</div>`;
+    return;
+  }
+
+  body.innerHTML = arState.unresolvedAllocations.map(u => {
+    const key = arUnresolvedTargetKey(u);
+    const vendor = arState.vendors.find(v => v.name === u.vendorName);
+    const months = vendor ? vendor.months : [];
+    const suggestedMap = new Map((u.suggestedWindow || []).map(a => [a.month, a.amount]));
+    const monthRows = months.map(m => {
+      const suggestedAmt = suggestedMap.get(m.month);
+      const checked = suggestedAmt != null ? 'checked' : '';
+      const amtVal = suggestedAmt != null ? suggestedAmt : (m.remaining > 0 ? m.remaining : '');
+      return `
+        <label style="display:flex;align-items:center;gap:4px;padding:2px 0;">
+          <input type="checkbox" id="ar-unres-chk-${key}-${m.month}" ${checked}
+                 onchange="document.getElementById('ar-unres-amt-${key}-${m.month}').disabled = !this.checked;">
+          <span style="width:64px;display:inline-block;">${m.month}</span>
+          <span style="font-size:10px;color:#94a3b8;">(거래 ${arNum(m.charge)} / 잔액 ${arNum(m.remaining)})</span>
+          <input type="number" id="ar-unres-amt-${key}-${m.month}" value="${amtVal}"
+                 ${checked ? '' : 'disabled'} style="font-size:11px;padding:1px 4px;width:100px;margin-left:auto;">
+        </label>`;
+    }).join('');
+
+    return `
+      <div style="border:1px solid #e2e8f0;border-radius:6px;padding:8px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+          <div><b>${esc(u.vendorName)}</b>${u.isSplit ? ` <span style="color:#7c3aed;">(분할${u.sourceFragment ? ': ' + esc(u.sourceFragment) : ''})</span>` : ''}</div>
+          <div>${u.date} / ${arNum(u.amount)}원</div>
+        </div>
+        ${u.note ? `<div style="font-size:11px;color:#64748b;margin-bottom:4px;">비고: ${esc(u.note)}</div>` : ''}
+        <div style="max-height:160px;overflow-y:auto;font-size:12px;">${monthRows || '<span style="color:#94a3b8;">해당 업체의 거래월 데이터가 없습니다.</span>'}</div>
+        <div style="text-align:right;margin-top:6px;">
+          <button style="font-size:11px;padding:2px 8px;" onclick="confirmArUnresolvedAllocation('${key}', '${u.depositId}', ${u.isSplit ? u.splitIndex : 'null'}, ${JSON.stringify(months.map(m => m.month)).replace(/"/g, '&quot;')})">확정</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function confirmArUnresolvedAllocation(key, depositId, splitIndex, monthList) {
+  const monthAssign = [];
+  monthList.forEach(month => {
+    const chk = document.getElementById(`ar-unres-chk-${key}-${month}`);
+    if (!chk || !chk.checked) return;
+    const amt = Number(document.getElementById(`ar-unres-amt-${key}-${month}`)?.value) || 0;
+    if (amt > 0) monthAssign.push({ month, amount: amt });
+  });
+  if (!monthAssign.length) return toast('배정할 월과 금액을 선택하세요.', 'warn');
+
+  const target = (splitIndex == null) ? 'primary' : { splitIndex };
+  const res = await api('POST', '/api/ar/resolve-allocation', { depositId, target, monthAssign });
+  if (!res.ok) return toast(res.error || '확정 실패', 'error');
+  toast('배분 확정 완료', 'success');
+  await loadArSummary();
+  renderArUnresolvedModalBody();
+}
+
+// ── 업체명 옆 입금계좌명(별칭) 등록/삭제 ────────────────────────
+async function addArAlias(vendorName) {
+  const input = document.getElementById('ar-alias-input');
+  const alias = input?.value.trim();
+  if (!alias) return toast('입금계좌명을 입력하세요.', 'warn');
+  const res = await api('POST', '/api/ar/aliases', { vendorName, alias });
+  if (!res.ok) return toast(res.error || '등록 실패', 'error');
+  toast('입금계좌명 등록 완료 (다음 업로드부터 자동매칭됩니다)', 'success');
+  await loadArSummary();
+  renderArVendorDetail();
+}
+
+async function removeArAlias(vendorName, alias) {
+  const res = await api('DELETE', '/api/ar/aliases', { vendorName, alias });
+  if (!res.ok) return toast(res.error || '삭제 실패', 'error');
+  await loadArSummary();
+  renderArVendorDetail();
+}
+
+// ── 자산현황 ─────────────────────────────────────────────────
+const assetState = { months: [], rows: [], loans: [], bankBalances: [], editingBankMonth: null };
+
+async function loadAssetOverview() {
+  const res = await api('GET', '/api/asset-overview');
+  if (!res.ok) { toast(res.error || '자산현황 조회 실패', 'error'); return; }
+  assetState.months       = res.months;
+  assetState.rows         = res.rows;
+  assetState.loans        = res.loans;
+  assetState.bankBalances = res.bankBalances;
+  renderAssetLoans();
+  renderAssetTable();
+}
+
+function renderAssetLoans() {
+  const tbody = document.getElementById('asset-loan-tbody');
+  const totalEl = document.getElementById('asset-loan-total');
+  if (!tbody) return;
+  const total = assetState.loans.reduce((s, l) => s + (l.amount || 0), 0);
+  if (totalEl) totalEl.textContent = `대출총액 ${arNum(total)}`;
+
+  tbody.innerHTML = assetState.loans.length ? assetState.loans.map(l => `
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:6px;">${esc(l.name)}</td>
+      <td style="padding:6px;text-align:right;">${arNum(l.amount)}</td>
+      <td style="padding:6px;text-align:right;">${l.interestRate ? l.interestRate + '%' : '-'}</td>
+      <td style="padding:6px;color:#64748b;">${esc(l.memo) || '-'}</td>
+      <td style="padding:6px;text-align:center;">
+        <button style="font-size:11px;padding:2px 6px;color:#dc2626;" onclick="deleteLoan('${l.id}')">삭제</button>
+      </td>
+    </tr>`).join('') : `<tr><td colspan="5" style="padding:16px;text-align:center;color:#94a3b8;">등록된 대출이 없습니다.</td></tr>`;
+}
+
+async function addLoan() {
+  const name = document.getElementById('asset-loan-name')?.value.trim();
+  const amount = Number(document.getElementById('asset-loan-amount')?.value) || 0;
+  const interestRate = Number(document.getElementById('asset-loan-rate')?.value) || 0;
+  const memo = document.getElementById('asset-loan-memo')?.value.trim() || '';
+  if (!name) return toast('대출명을 입력하세요.', 'warn');
+  if (!amount) return toast('금액을 입력하세요.', 'warn');
+  const res = await api('POST', '/api/asset/loans', { name, amount, interestRate, memo });
+  if (!res.ok) return toast(res.error || '대출 등록 실패', 'error');
+  toast('대출 등록 완료', 'success');
+  ['asset-loan-name', 'asset-loan-amount', 'asset-loan-rate', 'asset-loan-memo'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  await loadAssetOverview();
+}
+
+async function deleteLoan(id) {
+  const res = await api('DELETE', `/api/asset/loans/${id}`);
+  if (!res.ok) return toast(res.error || '삭제 실패', 'error');
+  await loadAssetOverview();
+}
+
+function renderAssetTable() {
+  const tbody = document.getElementById('asset-table-tbody');
+  if (!tbody) return;
+  if (!assetState.rows.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="padding:16px;text-align:center;color:#94a3b8;">일마감 데이터가 없습니다.</td></tr>`;
+    return;
+  }
+  // 최신 달이 위로 오도록 역순 표시
+  const rows = assetState.rows.slice().reverse();
+  tbody.innerHTML = rows.map(r => {
+    const editing = assetState.editingBankMonth === r.month;
+    const bankCell = editing ? `
+      <div style="display:flex;gap:4px;align-items:center;justify-content:flex-end;">
+        <input type="date" id="asset-bank-date-${r.month}" value="${r.bankDate || `${r.month}-01`}" style="font-size:11px;padding:2px 4px;width:120px;">
+        <input type="number" id="asset-bank-amount-${r.month}" value="${r.bankAmount || ''}" placeholder="금액" style="font-size:11px;padding:2px 4px;width:100px;">
+        <button style="font-size:11px;padding:2px 6px;" onclick="saveBankBalance('${r.month}')">저장</button>
+        <button style="font-size:11px;padding:2px 6px;" onclick="toggleBankEdit(null)">취소</button>
+      </div>` : `
+      <span style="cursor:pointer;" onclick="toggleBankEdit('${r.month}')" title="클릭해서 수정">
+        ${r.bankDate ? arNum(r.bankAmount) : '<span style="color:#94a3b8;">입력 필요</span>'}
+        ${r.bankCarried ? `<span style="font-size:10px;color:#94a3b8;"> (${r.bankDate} 이월)</span>` : ''}
+        ✏️
+      </span>`;
+    const netColor = r.netWorth >= 0 ? '#0f172a' : '#dc2626';
+    return `<tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:6px;font-weight:600;">${r.month}</td>
+      <td style="padding:6px;text-align:right;">${bankCell}</td>
+      <td style="padding:6px;text-align:right;">${arNum(r.inventoryValue)}</td>
+      <td style="padding:6px;text-align:right;">${arNum(r.receivableValue)}</td>
+      <td style="padding:6px;text-align:right;">${arNum(r.loanTotal)}</td>
+      <td style="padding:6px;text-align:right;font-weight:700;color:${netColor};">${arNum(r.netWorth)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function toggleBankEdit(month) {
+  assetState.editingBankMonth = month;
+  renderAssetTable();
+}
+
+async function saveBankBalance(month) {
+  const date = document.getElementById(`asset-bank-date-${month}`)?.value;
+  const amount = Number(document.getElementById(`asset-bank-amount-${month}`)?.value);
+  if (!date) return toast('기준일을 입력하세요.', 'warn');
+  if (!amount && amount !== 0) return toast('금액을 입력하세요.', 'warn');
+  const res = await api('POST', '/api/asset/bank-balance', { date, amount });
+  if (!res.ok) return toast(res.error || '저장 실패', 'error');
+  toast('통장금액 저장 완료', 'success');
+  assetState.editingBankMonth = null;
+  await loadAssetOverview();
+}
+
+// ── 업체별 결제주기 설정 ──────────────────────────────────────

@@ -723,9 +723,9 @@
       }
     },
     "carwash": 0,
-    "others": 228000,
+    "others": 260000,
     "totalQty": 2122,
-    "totalAmount": 4437504
+    "totalAmount": 4469504
   },
   {
     "name": "하이포크개인",
@@ -1610,6 +1610,32 @@
     "others": 0,
     "totalQty": 464.59,
     "totalAmount": 947000
+  },
+  {
+    "name": "서보산업(주)",
+    "custNo": "0000067",
+    "payType": "신용카드",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 354,
+        "amount": 725346,
+        "avgPrice": 2049
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 354,
+    "totalAmount": 725346
   },
   {
     "name": "서보산업(주)",

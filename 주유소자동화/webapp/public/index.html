@@ -18,8 +18,13 @@
       <button class="main-tab active" data-group="monthly">월마감</button>
     </nav>
   </div>
-  <!-- subnav: 일마감 and 월마감 groups both use this -->
+  <!-- subnav: 종합/일마감/월마감 groups all use this -->
   <div class="subnav" id="subnav">
+    <!-- 종합 subnav -->
+    <div class="subnav-inner" id="subnav-summary" style="display:none;">
+      <button class="tab-btn active" data-tab="summary-main">종합현황</button>
+      <button class="tab-btn" data-tab="summary-assets">자산현황</button>
+    </div>
     <!-- 일마감 subnav -->
     <div class="subnav-inner" id="subnav-daily" style="display:none;">
       <button class="tab-btn active" data-tab="daily-main">일마감</button>
@@ -35,6 +40,7 @@
       <button class="tab-btn" data-tab="email">메일 발송</button>
       <button class="tab-btn" data-tab="hometax">세금계산서 일괄발행</button>
       <button class="tab-btn" data-tab="settings">설정</button>
+      <button class="tab-btn" data-tab="archeck">미수확인</button>
     </div>
   </div>
 </header>
@@ -53,7 +59,7 @@
             <div style="font-weight:700;color:#15803d;margin-bottom:8px;">① 일마감 (매일)</div>
             <ol style="margin:0;padding-left:18px;font-size:13px;color:#374151;line-height:1.8;">
               <li>BOS 데이터 업로드</li>
-              <li>이지샵 카드내역 업로드</li>
+              <li>이지샵(세차·유외) + 나이스(유류) 카드내역 업로드</li>
               <li>매입단가·입고이력 확인/수정</li>
               <li>카드 대사 확인</li>
             </ol>
@@ -101,9 +107,15 @@
               <td style="padding:10px 14px;"><span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 6px;font-size:11px;">.xlsx/.xls</span></td>
             </tr>
             <tr style="border-bottom:1px solid #f1f5f9;background:#f8fafc;">
-              <td style="padding:10px 14px;font-weight:600;">이지샵 카드내역</td>
-              <td style="padding:10px 14px;color:#64748b;">이지샵(VAN) → 승인내역 조회 → Excel</td>
-              <td style="padding:10px 14px;">일마감 탭 → 💳 이지샵 카드내역 업로드</td>
+              <td style="padding:10px 14px;font-weight:600;">이지샵 카드내역 (세차·유외)</td>
+              <td style="padding:10px 14px;color:#64748b;">이지샵(VAN) → 신용거래내역조회 → Excel</td>
+              <td style="padding:10px 14px;">일마감 탭 → 💳 이지샵 카드내역 (세차·유외)</td>
+              <td style="padding:10px 14px;"><span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 6px;font-size:11px;">.xlsx/.xls</span></td>
+            </tr>
+            <tr style="border-bottom:1px solid #f1f5f9;background:#f8fafc;">
+              <td style="padding:10px 14px;font-weight:600;">나이스 카드내역 (유류)</td>
+              <td style="padding:10px 14px;color:#64748b;">나이스정보통신 → 통합거래조회 → Excel (2026-09-04~)</td>
+              <td style="padding:10px 14px;">일마감 탭 → 💳 나이스 카드내역 (유류)</td>
               <td style="padding:10px 14px;"><span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 6px;font-size:11px;">.xlsx/.xls</span></td>
             </tr>
             <tr style="border-bottom:1px solid #f1f5f9;">
@@ -202,9 +214,9 @@
       <div style="padding:16px;font-size:13px;line-height:1.8;color:#374151;">
         <ol style="padding-left:20px;line-height:2.2;">
           <li><strong>BOS 업로드</strong> → 일마감에서 당일 카드 승인내역 파싱</li>
-          <li><strong>이지샵 업로드</strong> → VAN사 실제 승인내역 파싱</li>
-          <li><strong>승인번호 기준 매칭</strong> → BOS ↔ 이지샵 자동 대사</li>
-          <li><strong>불일치 확인</strong>: <span style="background:#fee2e2;color:#dc2626;border-radius:4px;padding:1px 6px;">BOS만</span> <span style="background:#fef9c3;color:#ca8a04;border-radius:4px;padding:1px 6px;">이지샵만</span> <span style="background:#fce7f3;color:#be185d;border-radius:4px;padding:1px 6px;">금액 불일치</span></li>
+          <li><strong>이지샵(세차·유외) + 나이스(유류) 업로드</strong> → VAN사 실제 승인내역 파싱 (따로 저장, 서로 덮어쓰지 않음)</li>
+          <li><strong>승인번호 기준 매칭</strong> → BOS ↔ (이지샵+나이스 합계) 자동 대사</li>
+          <li><strong>불일치 확인</strong>: <span style="background:#fee2e2;color:#dc2626;border-radius:4px;padding:1px 6px;">BOS만</span> <span style="background:#fef9c3;color:#ca8a04;border-radius:4px;padding:1px 6px;">카드(VAN)만</span> <span style="background:#fce7f3;color:#be185d;border-radius:4px;padding:1px 6px;">금액 불일치</span></li>
           <li>분할결제(동일 승인번호 복수건)는 합산 후 비교</li>
         </ol>
       </div>
@@ -214,6 +226,8 @@
 
   <!-- ───── 대분류: 종합 ───── -->
   <section id="group-summary" class="group-content">
+
+  <div id="tab-summary-main" class="tab-content">
 
     <!-- 툴바: 조회 년월 -->
     <div class="toolbar">
@@ -337,6 +351,68 @@
       </div>
     </div>
 
+  </div><!-- /tab-summary-main -->
+
+  <!-- ───── 종합 서브탭: 자산현황 ───── -->
+  <div id="tab-summary-assets" class="tab-content" style="display:none;">
+
+    <div class="notice notice-info">
+      💰 통장금액(수기 입력)·재고금액(매입가 기준 자동, 그 달 1일 기준)·채권금액(미수 잔액
+      자동, 그 달 말일 기준)·대출을 종합한 월별 자산현황입니다. 재고금액·채권금액은
+      각 월 시점에 맞춰 매번 다시 계산됩니다.
+    </div>
+
+    <!-- 대출 관리 -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <h2>대출 관리</h2>
+        <div id="asset-loan-total" style="font-size:13px;color:#64748b;"></div>
+      </div>
+      <div style="padding:12px;">
+        <table style="width:100%;font-size:13px;border-collapse:collapse;">
+          <thead>
+            <tr style="background:#f1f5f9;">
+              <th style="padding:6px;text-align:left;">대출명</th>
+              <th style="padding:6px;text-align:right;">금액</th>
+              <th style="padding:6px;text-align:right;">이자율</th>
+              <th style="padding:6px;text-align:left;">메모</th>
+              <th style="padding:6px;"></th>
+            </tr>
+          </thead>
+          <tbody id="asset-loan-tbody"></tbody>
+        </table>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9;">
+          <input type="text"   id="asset-loan-name" placeholder="대출명" style="font-size:13px;padding:4px 8px;width:140px;">
+          <input type="number" id="asset-loan-amount" placeholder="금액" style="font-size:13px;padding:4px 8px;width:120px;">
+          <input type="number" id="asset-loan-rate" placeholder="이자율(%)" step="0.01" style="font-size:13px;padding:4px 8px;width:100px;">
+          <input type="text"   id="asset-loan-memo" placeholder="메모(선택)" style="font-size:13px;padding:4px 8px;width:140px;">
+          <button class="btn-primary" onclick="addLoan()">+ 대출 추가</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 월별 자산현황 표 -->
+    <div class="card">
+      <div class="card-header"><h2>월별 자산현황</h2></div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;font-size:13px;border-collapse:collapse;white-space:nowrap;">
+          <thead>
+            <tr style="background:#f1f5f9;">
+              <th style="padding:6px;text-align:left;">월</th>
+              <th style="padding:6px;text-align:right;">통장금액</th>
+              <th style="padding:6px;text-align:right;">재고금액<br><span style="font-size:10px;font-weight:400;color:#94a3b8;">(매입가 기준)</span></th>
+              <th style="padding:6px;text-align:right;">채권금액<br><span style="font-size:10px;font-weight:400;color:#94a3b8;">(그 달 말일 기준)</span></th>
+              <th style="padding:6px;text-align:right;">대출총액</th>
+              <th style="padding:6px;text-align:right;">순자산</th>
+            </tr>
+          </thead>
+          <tbody id="asset-table-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /tab-summary-assets -->
+
   </section>
 
   <!-- ───── 대분류: 일마감 ───── -->
@@ -411,7 +487,11 @@
         </button>
         <input type="file" id="card-file-input" accept=".xlsx,.xls" hidden>
         <button class="btn-upload btn-teal" onclick="document.getElementById('card-file-input').click()">
-          💳 이지샵 카드내역 업로드
+          💳 이지샵 카드내역 (세차·유외)
+        </button>
+        <input type="file" id="nice-file-input" accept=".xlsx,.xls" hidden>
+        <button class="btn-upload btn-teal" style="background:#4f46e5;border-color:#4f46e5;" onclick="document.getElementById('nice-file-input').click()">
+          💳 나이스 카드내역 (유류)
         </button>
       </div>
     </div>
@@ -526,14 +606,18 @@
       <details style="padding:0 16px 12px; font-size:12px; color:#64748b;">
         <summary style="cursor:pointer; font-weight:600; color:#475569; user-select:none;">영업이익 계산 방법 보기</summary>
         <div style="margin-top:10px; padding:12px; background:#f8fafc; border-radius:6px; line-height:2;">
-          <strong>영업이익 =</strong><br>
+          <strong>영업이익 = 유종이익 + 유외·세차이익 − 카드 수수료</strong><br>
+          <br>
+          <strong>① 유종이익</strong><br>
           &nbsp;&nbsp;(휘발유 매출 − 휘발유 수량 × 매입단가)<br>
           &nbsp;+ (경유 매출 − 경유 수량 × 매입단가)<br>
           &nbsp;+ (등유 매출 − 등유 수량 × 매입단가)<br>
-          &nbsp;+ 세차 매출<br>
+          <strong>② 유외·세차이익</strong><br>
+          &nbsp;&nbsp;세차 매출 (원가 없음)<br>
           &nbsp;+ (유외상품 매출 − 수기 입력 원가)<br>
-          &nbsp;− <strong>카드 수수료</strong> (이지샵 업로드 시 자동 반영)<br>
+          <strong>③ 카드 수수료</strong> (이지샵 업로드 시 자동 반영, 차감)<br>
           <br>
+          <span style="color:#94a3b8;">※ 표의 유종이익·유외·세차이익·영업이익(합계) 3개 열이 위 ①②③에 그대로 대응합니다</span><br>
           <span style="color:#94a3b8;">※ 매입단가 미입력 시 이익 계산 불가 ("−" 표시)</span><br>
           <span style="color:#94a3b8;">※ 매입단가는 적용 시작일 기준으로 자동 선택됩니다</span>
         </div>
@@ -545,13 +629,18 @@
               <th rowspan="2" class="daily-col-date">날짜</th>
               <th rowspan="2" class="group-summary">합계<br>드럼</th>
               <th rowspan="2" class="group-summary" style="min-width:90px;">판매금액</th>
-              <th rowspan="2" class="daily-col-profit group-summary" style="min-width:80px;">영업이익</th>
+              <th rowspan="2" class="daily-col-profit group-summary" style="min-width:80px;"
+                  title="휘발유+경유+등유 판매이익 (매출 − 판매량×FIFO매입단가)">유종<br>이익</th>
+              <th rowspan="2" class="daily-col-profit group-summary" style="min-width:80px;"
+                  title="세차 매출 + (유외상품 매출 − 수기 원가)">유외·세차<br>이익</th>
+              <th rowspan="2" class="daily-col-profit group-summary" style="min-width:90px;"
+                  title="영업이익 = 유종이익 + 유외·세차이익 − 카드수수료">영업이익<br>(합계)</th>
               <th colspan="5" class="group-gasoline">휘발유</th>
               <th colspan="5" class="group-diesel">경유</th>
               <th colspan="5" class="group-kerosene">등유</th>
               <th colspan="2" class="group-other">유외상품</th>
               <th colspan="1" class="group-carwash">세차</th>
-              <th colspan="2" class="group-card">카드(이지샵)</th>
+              <th colspan="2" class="group-card">카드(이지샵+나이스)</th>
               <th rowspan="2" class="daily-col-profit">영업이익</th>
               <th rowspan="2" class="group-match">카드대사</th>
             </tr>
@@ -566,7 +655,7 @@
           </thead>
           <tbody id="daily-tbody">
             <tr class="empty-row">
-              <td colspan="26">BOS 데이터를 업로드하면 현황이 표시됩니다</td>
+              <td colspan="28">BOS 데이터를 업로드하면 현황이 표시됩니다</td>
             </tr>
           </tbody>
         </table>
@@ -736,6 +825,9 @@
             <button class="btn-filter" data-pay="외상" onclick="setCustFilter('외상',this)">외상</button>
             <button class="btn-filter" data-pay="신용카드" onclick="setCustFilter('신용카드',this)">카드</button>
             <button class="btn-filter" data-pay="현금" onclick="setCustFilter('현금',this)">현금</button>
+            <button class="btn-upload" id="cust-margin-btn" onclick="toggleCustMarginView()" style="background:#0f766e;border-color:#0f766e;padding:4px 10px;font-size:12px;">
+              📊 마진 분석
+            </button>
             <button class="btn-upload btn-purple" id="rebuild-cust-btn" onclick="rebuildCustomerSales()" style="background:#7c3aed;border-color:#7c3aed;padding:4px 10px;font-size:12px;">
               🔄 재분석
             </button>
@@ -1117,10 +1209,6 @@
 
   <!-- ───── Tab 5: 설정 ───── -->
   <section id="tab-settings" class="tab-content">
-   <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">
-
-    <!-- 좌: 기존 설정 카드 -->
-    <div style="flex:1 1 420px;min-width:320px;display:flex;flex-direction:column;gap:16px;">
     <div class="card settings-card">
       <div class="card-header"><h2>네이버 메일 SMTP 설정</h2></div>
       <div class="settings-guide">
@@ -1163,35 +1251,40 @@
         <div id="cert-pass-status" style="font-size:13px; color:#64748b;"></div>
       </div>
     </div>
+  </section>
+
+  <!-- ── Tab: 미수확인 ── -->
+  <section id="tab-archeck" class="tab-content" style="display:none;">
+
+    <div class="notice notice-info">
+      💰 BOS 외상 거래대금과 통장 입금을 자동 매칭해 업체별 미수 현황을 보여줍니다.<br>
+      [일마감→지출목록] "수시입출예금 업로드" 시 자동 반영됩니다.
     </div>
 
-    <!-- 우: 외상 미수금 입금 확인 -->
-    <div style="flex:1 1 480px;min-width:360px;border-left:1px solid #e2e8f0;padding-left:16px;">
-      <div style="display:flex;align-items:center;gap:8px;padding:4px 0 10px;flex-wrap:wrap;">
-        <strong style="font-size:14px;">💰 외상 미수금 입금 확인</strong>
-        <span style="font-size:11px;color:#64748b;">
-          [일마감→지출목록] "수시입출예금 업로드" 시 자동 반영
-        </span>
-        <button style="margin-left:auto;font-size:12px;padding:4px 8px;" onclick="loadArSummary()">🔄 새로고침</button>
-      </div>
-
-      <div id="ar-summary-cards" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;"></div>
-
-      <!-- 하위 목록: 미수확인 -->
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-        <span class="tab-btn active" style="cursor:default;">미수확인</span>
-        <button style="margin-left:auto;font-size:12px;padding:4px 8px;" onclick="showArUnmatchedModal()">
+    <div class="toolbar">
+      <div class="toolbar-group" id="ar-summary-cards" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+      <div class="toolbar-group" style="margin-left:auto;">
+        <button onclick="loadArSummary()">🔄 새로고침</button>
+        <button class="btn-primary" onclick="showArUnmatchedModal()">
           ⚠ 미매칭 입금 <span id="ar-unmatched-badge" class="badge badge-warn" style="display:none;"></span>
         </button>
+        <button class="btn-primary" onclick="showArUnresolvedModal()">
+          ⚠ 미확정 배분 <span id="ar-unresolved-badge" class="badge badge-warn" style="display:none;"></span>
+        </button>
+        <button class="btn-primary" onclick="showArCardModal()">
+          💳 현장 카드결제 매칭 <span id="ar-card-badge" class="badge badge-warn" style="display:none;"></span>
+        </button>
       </div>
-
-      <div id="ar-monthly-table" style="max-height:460px;overflow:auto;border:1px solid #e2e8f0;border-radius:6px;"></div>
-
-      <!-- 업체별 상세(입금-충당 내역) -->
-      <div id="ar-vendor-detail" style="margin-top:12px;"></div>
     </div>
 
-   </div>
+    <div class="card">
+      <div class="card-header"><h2>업체별 월별 미수 현황</h2></div>
+      <div id="ar-monthly-table" style="max-height:640px;overflow:auto;"></div>
+    </div>
+
+    <!-- 업체별 상세(입금-충당 내역) -->
+    <div id="ar-vendor-detail" style="margin-top:12px;"></div>
+
   </section>
 
   <!-- 외상 미수금: 미매칭 입금 모달 -->
@@ -1204,6 +1297,48 @@
       </div>
       <div class="modal-body" style="overflow-x:auto;max-height:calc(85vh - 60px);overflow-y:auto;">
         <div id="ar-unmatched-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 외상 미수금: 월별 입금 내역 모달 (입금 칸 클릭) -->
+  <div id="ar-deposit-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-box" style="width:92vw;max-width:760px;max-height:85vh;">
+      <div class="modal-head" style="display:flex;align-items:center;justify-content:space-between;">
+        <span id="ar-deposit-title">입금 내역</span>
+        <button style="background:none;border:none;color:#fff;font-size:16px;cursor:pointer;"
+                onclick="document.getElementById('ar-deposit-modal').style.display='none'">✕</button>
+      </div>
+      <div class="modal-body" style="overflow-x:auto;max-height:calc(85vh - 60px);overflow-y:auto;">
+        <div id="ar-deposit-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 외상 미수금: 현장 카드결제 매칭 모달 -->
+  <div id="ar-card-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-box" style="width:95vw;max-width:1100px;max-height:88vh;">
+      <div class="modal-head" style="display:flex;align-items:center;justify-content:space-between;">
+        현장 카드결제 매칭 (BOS에 없고 이지샵·나이스에만 있는 큰 카드결제 → 외상대금 입금으로 지정)
+        <button style="background:none;border:none;color:#fff;font-size:16px;cursor:pointer;"
+                onclick="document.getElementById('ar-card-modal').style.display='none'">✕</button>
+      </div>
+      <div class="modal-body" style="overflow-x:auto;max-height:calc(88vh - 60px);overflow-y:auto;">
+        <div id="ar-card-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 외상 미수금: 미확정 배분 모달 -->
+  <div id="ar-unresolved-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-box" style="width:92vw;max-width:900px;max-height:85vh;">
+      <div class="modal-head" style="display:flex;align-items:center;justify-content:space-between;">
+        미확정 배분 (자동으로 대상 월을 못 정한 입금 — 직접 지정)
+        <button style="background:none;border:none;color:#fff;font-size:16px;cursor:pointer;"
+                onclick="document.getElementById('ar-unresolved-modal').style.display='none'">✕</button>
+      </div>
+      <div class="modal-body" style="overflow-x:auto;max-height:calc(85vh - 60px);overflow-y:auto;">
+        <div id="ar-unresolved-body"></div>
       </div>
     </div>
   </div>

@@ -55,6 +55,33 @@ const DAILY_DIR            = path.join(DATA_DIR, 'daily');
 const BANK_DEPOSITS_FILE   = path.join(DATA_DIR, 'bank_deposits.json');
 const COMPLETION_FILE      = path.join(DATA_DIR, 'completion.json');
 const AR_DEPOSITS_FILE     = path.join(DATA_DIR, 'ar_deposits.json');
+const AR_ALIASES_FILE      = path.join(DATA_DIR, 'ar_vendor_aliases.json');
+const AR_MANUAL_PAID_FILE  = path.join(DATA_DIR, 'ar_manual_paid.json');
+
+// 카드결제 등 은행입금 매칭 대상 자체가 없어 사람이 "완납 처리"로 직접 확정한 (업체,월) 집합
+function loadArManualPaidSet() {
+  return new Set(readJSON(AR_MANUAL_PAID_FILE, []).map(x => `${x.vendorName}|${x.month}`));
+}
+
+const AR_CARD_PAYMENTS_FILE = path.join(DATA_DIR, 'ar_card_payments.json');
+const AR_DISCOUNT_FILE      = path.join(DATA_DIR, 'ar_discount_vendors.json');
+
+// 미수 배분에 쓰는 입금 목록 = 통장 입금(ar_deposits) + 사람이 매칭한 현장 카드결제
+// 카드결제는 대상 월이 확정된 수동 입금으로 취급 (근거 "card")
+function loadArDepositsWithCards() {
+  const cards = readJSON(AR_CARD_PAYMENTS_FILE, []).map(c => ({
+    id: `card_${c.id}`, date: c.date, month: c.date.slice(0, 7), amount: c.amount,
+    payer: `카드 ${c.cardCompany || ''} ${c.cardNo || ''}`.trim(),
+    note: `현장 카드결제 (승인 ${c.approvalNo})`,
+    matchedVendor: c.vendorName, manual: true, isCard: true, splits: [],
+    monthAssign: [{ month: c.month, amount: c.amount }],
+  }));
+  return readJSON(AR_DEPOSITS_FILE, []).concat(cards);
+}
+
+function loadArDiscountVendors() { return readJSON(AR_DISCOUNT_FILE, {}); }
+const ASSET_BANK_FILE      = path.join(DATA_DIR, 'asset_bank_balances.json');
+const ASSET_LOANS_FILE     = path.join(DATA_DIR, 'asset_loans.json');
 
 if (!fs.existsSync(DAILY_DIR)) fs.mkdirSync(DAILY_DIR, { recursive: true });
 
@@ -134,6 +161,71 @@ function getVendors(year, month) {
   return readJSON(vendorFile(year, month), []);
 }
 
+// ── 거래명세서 업체 합산 (업체 통합) ─────────────────────────────
+// data/statement_merges.json = { "YYYY-MM": { "합쳐질 업체": "받는 업체" } }
+// 예) 명신이 현대스크랩으로 통합 — BOS는 10월부터 현대스크랩으로 기록하므로 9월만 지정.
+// 거래명세서 생성 시에만 합산한다. vendors_YYYY_MM.json 원본·미수확인·고객판매현황은 그대로.
+const STATEMENT_MERGES_FILE = path.join(DATA_DIR, 'statement_merges.json');
+
+function getStatementMerges(year, month) {
+  const ym = `${year}-${String(month).padStart(2, '0')}`;
+  return readJSON(STATEMENT_MERGES_FILE, {})[ym] || {};
+}
+
+// 업체 목록에 합산 정보 표시용 필드 추가 (금액 필드는 건드리지 않음 → 합계 중복 없음)
+//   합쳐지는 업체: statementMergedInto = 받는 업체명
+//   받는 업체:     statementMergedFrom = [{ name, credit }]
+function annotateStatementMerges(vendors, year, month) {
+  const merges = getStatementMerges(year, month);
+  return vendors.map(v => {
+    if (merges[v.name]) return { ...v, statementMergedInto: merges[v.name] };
+    const from = Object.entries(merges)
+      .filter(([src, dst]) => dst === v.name)
+      .map(([src]) => vendors.find(x => x.name === src))
+      .filter(Boolean)
+      .map(s => ({ name: s.name, credit: s.totalCredit || 0 }));
+    return from.length ? { ...v, statementMergedFrom: from } : v;
+  });
+}
+
+// 거래명세서용 업체 객체: 받는 업체에 합쳐질 업체의 외상 거래를 붙이고 날짜순 정렬
+function buildStatementVendor(target, vendors, merges) {
+  const sources = Object.entries(merges)
+    .filter(([src, dst]) => dst === target.name)
+    .map(([src]) => vendors.find(x => x.name === src))
+    .filter(v => v?.hasCredit);
+  if (!sources.length) return target;
+  const txs = target.txs.concat(...sources.map(s => s.txs))
+    .slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const add = sources.reduce((s, x) => s + (x.totalCredit || 0), 0);
+  return { ...target, txs, totalCredit: (target.totalCredit || 0) + add, total: (target.total || 0) + add };
+}
+
+// ── 거래명세서 유외상품만 발행 업체 ──────────────────────────────
+// data/statement_nonfuel_only.json = ["업체명", ...]  (월 구분 없이 계속 적용)
+// 유류(휘발유·경유·등유)를 유가보조금 카드(주유전용)로 결제하는 업체 — BOS엔 외상으로
+// 잡히지만 카드로 이미 결제됐으므로 거래명세서엔 요소수·유록스 등 유외상품만 넣는다.
+const STATEMENT_NONFUEL_FILE = path.join(DATA_DIR, 'statement_nonfuel_only.json');
+const STATEMENT_FUELS = new Set(['휘발유', '경유', '등유']);
+
+function isStatementNonFuelOnly(name) {
+  return readJSON(STATEMENT_NONFUEL_FILE, []).includes(name);
+}
+
+function toNonFuelOnly(v) {
+  const txs = (v.txs || []).filter(t => !STATEMENT_FUELS.has(t.product));
+  const amt = txs.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+  return { ...v, txs, totalCredit: amt, total: amt, hasCredit: txs.length > 0 };
+}
+
+// 업체 목록 표시용: 유외상품만 발행 업체에 명세서 금액 표시 (금액 필드는 그대로)
+function annotateNonFuelOnly(vendors) {
+  const list = readJSON(STATEMENT_NONFUEL_FILE, []);
+  return vendors.map(v => list.includes(v.name)
+    ? { ...v, statementNonFuelOnly: true, statementNonFuelAmount: toNonFuelOnly(v).totalCredit }
+    : v);
+}
+
 function readJSON(file, def) {
   try { if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch (e) { console.error('[readJSON]', file, e.message); }
@@ -157,11 +249,48 @@ app.post('/api/parse-excel', upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ ok: false, error: '파일이 없습니다.' });
     const year  = req.body.year  || new Date().getFullYear();
     const month = req.body.month || new Date().getMonth() + 1;
-    const { parseExcel } = require('./lib/excelParser');
-    const { vendors, fuelSummary } = parseExcel(req.file.path);
-    writeJSON(vendorFile(year, month), vendors);
-    writeJSON(fuelSummaryFile(year, month), fuelSummary);
-    res.json({ ok: true, vendors });
+    const { readExcelRows, buildVendorsFromRows } = require('./lib/excelParser');
+
+    // 업로드 파일이 여러 달치를 한꺼번에 담고 있을 수 있음(예: "1월~7월 통합 세부거래내역").
+    // 실제 판매일자(r[1]) 기준으로 달마다 나눠서 각자 올바른 월 파일에 저장한다.
+    // 화면에서 선택한 연/월을 무조건 믿고 통째로 덮어쓰면, 여러 달 데이터가 섞여 있을 때
+    // 다른 달 기존 자료까지 통째로 잘못 덮어써버리는 사고가 난다 (실제 발생했던 사고).
+    const rows = readExcelRows(req.file.path);
+    const byMonth = new Map();   // 'YYYY-MM' -> rows[]
+    const fallback = [];         // 판매일자를 못 읽은 행 → 화면에서 선택한 연/월로 처리
+    rows.forEach(r => {
+      const d = String(r[1] || '').replace(/\//g, '-');
+      const ym = /^\d{4}-\d{2}/.test(d) ? d.slice(0, 7) : null;
+      if (ym) { if (!byMonth.has(ym)) byMonth.set(ym, []); byMonth.get(ym).push(r); }
+      else fallback.push(r);
+    });
+    if (fallback.length) {
+      const ym = `${year}-${String(month).padStart(2, '0')}`;
+      if (!byMonth.has(ym)) byMonth.set(ym, []);
+      byMonth.get(ym).push(...fallback);
+    }
+
+    const savedMonths = [];
+    let primaryVendors = null;
+    const selectedYm = `${year}-${String(month).padStart(2, '0')}`;
+
+    for (const [ym, ymRows] of byMonth) {
+      const [y, mo] = ym.split('-');
+      const { vendors, fuelSummary } = buildVendorsFromRows(ymRows);
+      writeJSON(vendorFile(y, mo), vendors);
+      writeJSON(fuelSummaryFile(y, mo), fuelSummary);
+      savedMonths.push(ym);
+      if (ym === selectedYm) primaryVendors = vendors;
+    }
+
+    // 선택한 연/월에 해당하는 데이터가 파일에 없었으면(예: 다른 달 파일만 있는 경우)
+    // 화면에는 빈 배열 대신 방금 처리된 것 중 하나를 대표로 보여준다.
+    if (primaryVendors === null) {
+      const first = byMonth.values().next().value;
+      primaryVendors = first ? buildVendorsFromRows(first).vendors : [];
+    }
+
+    res.json({ ok: true, vendors: annotateStatementMerges(primaryVendors, year, month), savedMonths });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -171,7 +300,7 @@ app.post('/api/parse-excel', upload.single('file'), (req, res) => {
 app.get('/api/vendors', (req, res) => {
   const year  = req.query.year  || new Date().getFullYear();
   const month = req.query.month || new Date().getMonth() + 1;
-  res.json({ ok: true, vendors: getVendors(year, month) });
+  res.json({ ok: true, vendors: annotateNonFuelOnly(annotateStatementMerges(getVendors(year, month), year, month)) });
 });
 
 // ── 월별 업로드 현황 ──────────────────────────────────────────
@@ -495,12 +624,18 @@ app.post('/api/generate', async (req, res) => {
 
     const vendors   = getVendors(year, month);
     const customers = readJSON(CUSTOMERS_FILE, []);
+    // 업체 통합: 합쳐질 업체를 선택하면 받는 업체로 바꿔서 한 번만 생성 (중복 발행 방지)
+    const merges    = getStatementMerges(year, month);
+    const names     = [...new Set(vendorNames.map(n => merges[n] || n))];
     // 외상 거래가 있는 업체만 생성
-    const selected  = vendorNames
+    const selected  = names
       .map(n => vendors.find(v => v.name === n))
-      .filter(v => v?.hasCredit);
+      .filter(v => v?.hasCredit)
+      .map(v => buildStatementVendor(v, vendors, merges))
+      .map(v => isStatementNonFuelOnly(v.name) ? toNonFuelOnly(v) : v)
+      .filter(v => v.hasCredit);
 
-    if (!selected.length) return res.status(400).json({ ok: false, error: '선택한 업체 중 외상 거래가 없습니다.' });
+    if (!selected.length) return res.status(400).json({ ok: false, error: '선택한 업체 중 거래명세서에 넣을 외상 거래가 없습니다.' });
 
     const { generateStatements } = require('./lib/statementGenerator');
     const files = await generateStatements(selected, customers, OUTPUT_DIR, issueDate, year, month, printMethods || {}, splitDelivery || {});
@@ -833,10 +968,10 @@ function saveCustomerSales(monthMap) {
 }
 
 // BOS 업로드 (단일 날짜 또는 월별 파일 모두 처리)
-app.post('/api/daily/upload-bos', upload.single('file'), (req, res) => {
+app.post('/api/daily/upload-bos', upload.single('file'), async (req, res) => {
   if (!req.file) return res.json({ ok: false, error: '파일 없음' });
   try {
-    const days = parseBosDaily(req.file.path);
+    const days = await parseBosDaily(req.file.path);
     let lastDate = '';
     for (const parsed of days) {
       const existing = readJSON(dailyFile(parsed.date), { date: parsed.date });
@@ -847,7 +982,7 @@ app.post('/api/daily/upload-bos', upload.single('file'), (req, res) => {
     }
     // 고객별 판매 집계도 함께 저장
     try {
-      const monthMap = parseCustomerSales(req.file.path);
+      const monthMap = await parseCustomerSales(req.file.path);
       saveCustomerSales(monthMap);
     } catch(_) {}
     res.json({ ok: true, count: days.length, date: lastDate });
@@ -864,7 +999,7 @@ app.get('/api/daily/customer-sales', (req, res) => {
 });
 
 // uploads/ 폴더의 BOS 상세조회 파일을 전부 재파싱하여 고객 판매 데이터 재구축
-app.post('/api/daily/rebuild-customer-sales', (req, res) => {
+app.post('/api/daily/rebuild-customer-sales', async (req, res) => {
   const UPLOADS_DIR = path.join(__dirname, 'uploads');
   if (!fs.existsSync(UPLOADS_DIR)) return res.json({ ok: true, processed: 0 });
 
@@ -878,7 +1013,7 @@ app.post('/api/daily/rebuild-customer-sales', (req, res) => {
 
   for (const fname of files) {
     try {
-      const monthMap = parseCustomerSales(path.join(UPLOADS_DIR, fname));
+      const monthMap = await parseCustomerSales(path.join(UPLOADS_DIR, fname));
       if (Object.keys(monthMap).length > 0) {
         saveCustomerSales(monthMap);
         Object.keys(monthMap).forEach(ym => processedMonths.add(ym));
@@ -889,22 +1024,62 @@ app.post('/api/daily/rebuild-customer-sales', (req, res) => {
   res.json({ ok: true, months: [...processedMonths].sort(), errors });
 });
 
-// 이지샵 카드 업로드 (단일 날짜 또는 월별 파일 모두 처리)
-app.post('/api/daily/upload-card', upload.single('file'), (req, res) => {
+// 카드 VAN 출처 — 2026-09-04부터 유류는 나이스, 세차·유외상품은 기존 이지샵 단말기 유지
+const CARD_SOURCE_LABEL = { easyshop: '이지샵', nice: '나이스' };
+
+// 출처별로 따로 저장된 카드내역을 하나로 합쳐 day.card 생성
+// (카드수수료·입금예정·계좌대사·영업이익은 모두 day.card를 보므로 기존 로직 그대로 동작)
+function mergeCardSources(sources) {
+  const merged = {
+    date: '', totalAmount: 0, totalFee: 0, totalNet: 0, count: 0,
+    depositDate: '', cardTxs: [], depositExpected: {}, bySource: {},
+  };
+  const depDates = [];
+  for (const [key, src] of Object.entries(sources)) {
+    if (!src) continue;
+    const label = CARD_SOURCE_LABEL[key] || key;
+    merged.date         = src.date;
+    merged.totalAmount += src.totalAmount || 0;
+    merged.totalFee    += src.totalFee    || 0;
+    merged.totalNet    += src.totalNet    || 0;
+    merged.count       += src.count       || 0;
+    merged.bySource[label] = { amount: src.totalAmount || 0, count: src.count || 0 };
+    (src.cardTxs || []).forEach(t => merged.cardTxs.push({ ...t, source: label }));
+    for (const [dep, byCo] of Object.entries(src.depositExpected || {})) {
+      if (!merged.depositExpected[dep]) merged.depositExpected[dep] = {};
+      for (const [co, amt] of Object.entries(byCo)) {
+        merged.depositExpected[dep][co] = (merged.depositExpected[dep][co] || 0) + amt;
+      }
+    }
+    if (src.depositDate) depDates.push(src.depositDate);
+  }
+  merged.depositDate = depDates.sort()[0] || '';
+  return merged;
+}
+
+async function saveCardUpload(req, res, sourceKey) {
   if (!req.file) return res.json({ ok: false, error: '파일 없음' });
   try {
-    const days = parseEasyshop(req.file.path);
+    const days = await parseEasyshop(req.file.path);
     let lastDate = '';
     for (const parsed of days) {
       const existing = readJSON(dailyFile(parsed.date), { date: parsed.date });
-      existing.card  = parsed;
+      // 출처 구분 없이 저장된 예전 card는 어느 VAN 파일인지 알 수 없으므로 이번 업로드로 교체
+      if (!existing.cardSources) existing.cardSources = {};
+      existing.cardSources[sourceKey] = parsed;
+      existing.card = mergeCardSources(existing.cardSources);
       runMatching(existing);
       writeJSON(dailyFile(parsed.date), existing);
       lastDate = parsed.date;
     }
     res.json({ ok: true, count: days.length, date: lastDate });
   } catch (e) { res.json({ ok: false, error: e.message }); }
-});
+}
+
+// 이지샵 카드 업로드 (세차·유외상품) — 단일 날짜 또는 월별 파일 모두 처리
+app.post('/api/daily/upload-card', upload.single('file'), (req, res) => saveCardUpload(req, res, 'easyshop'));
+// 나이스정보통신 카드 업로드 (유류)
+app.post('/api/daily/upload-nice', upload.single('file'), (req, res) => saveCardUpload(req, res, 'nice'));
 
 // 매입단가 조회
 app.get('/api/daily/purchase-prices', (req, res) => {
@@ -1175,9 +1350,10 @@ app.post('/api/base-stock', express.json(), (req, res) => {
   } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
-// ── 탱크 현황 조회 (FIFO 기준 현재고 + 전달단가 잔여량) ────────
-app.get('/api/daily/tank-status', (req, res) => {
-  const targetDate = req.query.date || new Date().toISOString().slice(0, 10);
+// ── 탱크 현황 계산 (FIFO 기준 현재고 + 전달단가 잔여량) ────────
+// targetDate(YYYY-MM-DD) 기준 유종별 잔량/단가를 계산하는 순수 함수.
+// /api/daily/tank-status 라우트와 자산현황(재고금액)에서 공통으로 사용.
+function computeTankStatus(targetDate) {
   const lots = readJSON(PURCHASE_LOTS_FILE, []);
   const CAPACITY = { '휘발유': 100000, '경유': 300000, '등유': 50000 };
 
@@ -1312,7 +1488,153 @@ app.get('/api/daily/tank-status', (req, res) => {
     };
   }
 
+  return tanks;
+}
+
+app.get('/api/daily/tank-status', (req, res) => {
+  const targetDate = req.query.date || new Date().toISOString().slice(0, 10);
+  const tanks = computeTankStatus(targetDate);
   res.json({ ok: true, date: targetDate, tanks });
+});
+
+// ── 자산현황 (통장금액/재고금액/채권금액/대출 종합) ──────────────
+// data/daily/*.json 파일명에서 데이터가 존재하는 월(YYYY-MM) 목록을 오름차순으로 추출
+function assetMonthList() {
+  if (!fs.existsSync(DAILY_DIR)) return [];
+  const months = new Set();
+  fs.readdirSync(DAILY_DIR).filter(f => /^\d{4}-\d{2}-\d{2}\.json$/.test(f))
+    .forEach(f => months.add(f.slice(0, 7)));
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  months.add(thisMonth);
+  return [...months].sort();
+}
+
+// targetDate(그 달 1일) 기준 유종별 재고를 매입단가로 환산한 총액
+function computeInventoryValue(targetDate) {
+  const tanks = computeTankStatus(targetDate);
+  return Object.values(tanks).reduce((sum, t) => sum + (t.totalRemaining || 0) * (t.currentPrice || 0), 0);
+}
+
+function monthEndDate(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  return `${ym}-${String(lastDay).padStart(2, '0')}`;
+}
+
+// ym월 말일 시점 미수(채권) 잔액 합계 — 그 달까지 발생한 거래대금과 그 달까지 들어온
+// 입금만으로 계산(그 이후 월의 거래대금/입금은 제외)해서 월별로 실제 다른 값이 나오게 함.
+// 업체별 remaining은 0 미만(초과입금)을 0으로 클램프해서 합산 — 초과입금 업체가 전체
+// 채권총액을 깎아먹지 않도록(미수확인 탭의 "상계 금지" 원칙과 동일).
+function computeReceivableTotal(arMatrix, allDeposits, ym) {
+  const { allocateArDeposits } = require('./lib/arLedger');
+  const cutoff = monthEndDate(ym);
+  const matrixAsOf = {
+    months: arMatrix.months.filter(m => m <= ym),
+    byVendor: new Map([...arMatrix.byVendor].map(([name, arr]) => [name, arr.filter(x => x.month <= ym)])),
+  };
+  const depositsAsOf = allDeposits.filter(d => d.date <= cutoff);
+  const alloc = allocateArDeposits(matrixAsOf, depositsAsOf, loadArManualPaidSet(), loadArDiscountVendors());
+  return Object.values(alloc).reduce((sum, a) => sum + Math.max(0, a.remaining), 0);
+}
+
+// 해당 월(ym)에 입력된 통장 잔액 중 최신 항목, 없으면 그 이전 달 중 가장 최근 항목을 이월
+function findBankBalanceForMonth(balances, ym) {
+  const inMonth = balances.filter(b => b.date.slice(0, 7) === ym).sort((a, b) => b.date.localeCompare(a.date));
+  if (inMonth.length) return { amount: inMonth[0].amount, date: inMonth[0].date, carried: false };
+  const before = balances.filter(b => b.date.slice(0, 7) < ym).sort((a, b) => b.date.localeCompare(a.date));
+  if (before.length) return { amount: before[0].amount, date: before[0].date, carried: true };
+  return { amount: null, date: null, carried: false };
+}
+
+app.get('/api/asset-overview', (req, res) => {
+  try {
+    const { buildArMatrix } = require('./lib/arLedger');
+    const months   = assetMonthList();
+    const balances = readJSON(ASSET_BANK_FILE, []);
+    const loans    = readJSON(ASSET_LOANS_FILE, []);
+    const loanTotal = loans.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+    const arMatrix   = buildArMatrix(DATA_DIR);
+    const allDeposits = loadArDepositsWithCards();
+
+    const rows = months.map(month => {
+      const bank = findBankBalanceForMonth(balances, month);
+      const inventoryValue = computeInventoryValue(`${month}-01`);
+      const receivableValue = computeReceivableTotal(arMatrix, allDeposits, month);
+      const bankAmount = bank.amount || 0;
+      const netWorth = bankAmount + inventoryValue + receivableValue - loanTotal;
+      return {
+        month,
+        bankAmount, bankDate: bank.date, bankCarried: bank.carried,
+        inventoryValue, receivableValue, loanTotal, netWorth,
+      };
+    });
+
+    res.json({ ok: true, months, rows, loans, loanTotal, bankBalances: balances });
+  } catch (e) {
+    console.error('[asset-overview]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/asset/bank-balance', (req, res) => {
+  try {
+    const { date, amount, memo } = req.body;
+    if (!date) return res.status(400).json({ ok: false, error: '기준일을 입력하세요.' });
+    if (!amount && amount !== 0) return res.status(400).json({ ok: false, error: '금액을 입력하세요.' });
+    const list = readJSON(ASSET_BANK_FILE, []);
+    list.push({ id: `bank_${Date.now()}`, date, amount: Number(amount) || 0, memo: memo || '' });
+    list.sort((a, b) => a.date.localeCompare(b.date));
+    writeJSON(ASSET_BANK_FILE, list);
+    res.json({ ok: true, bankBalances: list });
+  } catch (e) {
+    console.error('[asset/bank-balance:post]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.delete('/api/asset/bank-balance/:id', (req, res) => {
+  try {
+    const list = readJSON(ASSET_BANK_FILE, []).filter(x => x.id !== req.params.id);
+    writeJSON(ASSET_BANK_FILE, list);
+    res.json({ ok: true, bankBalances: list });
+  } catch (e) {
+    console.error('[asset/bank-balance:delete]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// 대출 추가/수정 — id 있으면 수정, 없으면 추가
+app.post('/api/asset/loans', (req, res) => {
+  try {
+    const { id, name, amount, interestRate, memo } = req.body;
+    if (!name) return res.status(400).json({ ok: false, error: '대출명을 입력하세요.' });
+    if (!amount && amount !== 0) return res.status(400).json({ ok: false, error: '금액을 입력하세요.' });
+    const list = readJSON(ASSET_LOANS_FILE, []);
+    const rec = {
+      id: id || `loan_${Date.now()}`,
+      name, amount: Number(amount) || 0,
+      interestRate: Number(interestRate) || 0,
+      memo: memo || '',
+    };
+    const idx = list.findIndex(x => x.id === rec.id);
+    if (idx >= 0) list[idx] = rec; else list.push(rec);
+    writeJSON(ASSET_LOANS_FILE, list);
+    res.json({ ok: true, loans: list });
+  } catch (e) {
+    console.error('[asset/loans:post]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.delete('/api/asset/loans/:id', (req, res) => {
+  try {
+    const list = readJSON(ASSET_LOANS_FILE, []).filter(x => x.id !== req.params.id);
+    writeJSON(ASSET_LOANS_FILE, list);
+    res.json({ ok: true, loans: list });
+  } catch (e) {
+    console.error('[asset/loans:delete]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 // ── 입고 이력 (FIFO 재고 관리) ─────────────────────────────
@@ -1443,33 +1765,55 @@ app.post('/api/upload-expenses', upload.single('file'), (req, res) => {
 // 통장 적요1/날짜/금액이 같으면 같은 원본 거래로 간주 (재업로드 시 수동매칭 보존용 키)
 function arDepositKey(d) { return `${d.date}|${d.payer}|${d.amount}`; }
 
-// 통장 입금(비카드) → 외상 업체 자동매칭 후 병합 저장
-//   같은 달을 다시 업로드해도, 이전에 사람이 수동으로 지정해둔 매칭(manual:true)은 유지한다.
+// 통장 입금(비카드) → 외상 업체 자동매칭 + 비고 분할힌트 해석 후 병합 저장
+//   같은 달을 다시 업로드해도, 사람이 직접 확정해둔 것(거래처 수동매칭/수동분할/수동월배정)은
+//   자연키(date|payer|amount)로 보존한다. note/자동계산 splits는 매번 다시 계산해도 되는
+//   파생 데이터라 재계산(파싱 로직이 개선되면 자동으로 다시 반영됨).
 function mergeArDeposits(rawDeposits) {
-  const { buildArMatrix, buildVendorAliasIndex, matchPayerToVendor } = require('./lib/arLedger');
+  const { buildArMatrix, buildVendorAliasIndex, matchPayerToVendor, resolveSplitFragment } = require('./lib/arLedger');
+  const { extractSplitHint } = require('./lib/arNoteParser');
   const affectedMonths = [...new Set(rawDeposits.map(d => d.month))];
 
   const all = readJSON(AR_DEPOSITS_FILE, []);
-  const manualMap = new Map();
+  const preserveMap = new Map();
   all.forEach(d => {
-    if (d.manual && affectedMonths.includes(d.month)) manualMap.set(arDepositKey(d), d.matchedVendor);
+    const hasManualDecision = d.manual || (d.splits || []).some(s => s.manual) || d.monthAssign;
+    if (hasManualDecision && affectedMonths.includes(d.month)) {
+      preserveMap.set(arDepositKey(d), {
+        matchedVendor: d.matchedVendor, score: d.score, suggestion: d.suggestion, manual: d.manual,
+        splits: d.splits || [], monthAssign: d.monthAssign || null,
+      });
+    }
   });
   const kept = all.filter(d => !affectedMonths.includes(d.month));
 
   const arMatrix    = buildArMatrix(DATA_DIR);
   const vendorNames = [...arMatrix.byVendor.keys()];
   const customers   = readJSON(CUSTOMERS_FILE, []);
-  const aliasIndex  = buildVendorAliasIndex(vendorNames, customers);
+  const aliasMap    = readJSON(AR_ALIASES_FILE, {});
+  const aliasIndex  = buildVendorAliasIndex(vendorNames, customers, aliasMap);
 
   let seq = 0;
   const fresh = rawDeposits.map(d => {
     const id = `${d.date}_${seq++}`;
-    const manualVendor = manualMap.get(arDepositKey(d));
-    if (manualVendor !== undefined) {
-      return { id, ...d, matchedVendor: manualVendor, score: 1, suggestion: null, manual: true };
-    }
+    const preserved = preserveMap.get(arDepositKey(d));
+    if (preserved) return { id, ...d, ...preserved };
+
     const { name, score, suggestion } = matchPayerToVendor(d.payer, aliasIndex);
-    return { id, ...d, matchedVendor: name, score, suggestion, manual: false };
+
+    // 비고에 "금액+업체명조각+포함" 패턴이 있으면 다른 업체 몫으로 자동 분할
+    let splits = [];
+    if (name) {
+      const hint = extractSplitHint(d.note);
+      if (hint && hint.amount > 0 && hint.amount < d.amount) {
+        const resolvedVendor = resolveSplitFragment(hint.fragment, aliasIndex);
+        if (resolvedVendor && resolvedVendor !== name) {
+          splits = [{ vendorName: resolvedVendor, amount: hint.amount, manual: false, sourceFragment: hint.fragment, monthAssign: null }];
+        }
+      }
+    }
+
+    return { id, ...d, matchedVendor: name, score, suggestion, manual: false, splits, monthAssign: null };
   });
 
   writeJSON(AR_DEPOSITS_FILE, kept.concat(fresh));
@@ -1509,25 +1853,33 @@ app.post('/api/upload-bank-expenses', upload.single('file'), (req, res) => {
 // 외상 미수금 입금 확인 (월마감 → 설정 탭 우측)
 // ══════════════════════════════════════════════════════════════
 
-// GET /api/ar/summary — 업체별 월별 거래대금·입금·FIFO 충당 결과 + 미매칭 입금 목록
+// GET /api/ar/summary — 업체별 월별 거래대금·입금·배분 결과 + 미매칭/미확정 목록
 app.get('/api/ar/summary', (req, res) => {
   try {
-    const { buildArMatrix, allocateFifo } = require('./lib/arLedger');
-    const arMatrix = buildArMatrix(DATA_DIR);
-    const deposits = readJSON(AR_DEPOSITS_FILE, []);
-    const alloc = allocateFifo(arMatrix, deposits);
+    const { buildArMatrix, allocateArDeposits } = require('./lib/arLedger');
+    const arMatrix  = buildArMatrix(DATA_DIR);
+    const deposits  = readJSON(AR_DEPOSITS_FILE, []);
+    const aliasMap  = readJSON(AR_ALIASES_FILE, {});
+    const discounts = loadArDiscountVendors();
+    const alloc     = allocateArDeposits(arMatrix, loadArDepositsWithCards(), loadArManualPaidSet(), discounts);
 
     const vendors = [...arMatrix.byVendor.keys()].sort((a, b) => a.localeCompare(b, 'ko')).map(name => {
       const a = alloc[name];
       return {
         name,
-        months: a.months,               // [{month,charge,paid,remaining}]
-        allocations: a.allocations,      // [{depositId,date,amount,appliedTo}]
+        aliases: aliasMap[name] || [],   // 등록된 입금계좌명(통장 적요와 업체명이 다를 때)
+        months: a.months,               // [{month,charge,paid,remaining,lagMonths}]
+        allocations: a.allocations,      // [{depositId,date,amount,note,isSplit,appliedTo,source}]
+        unresolved: a.unresolved,        // 이 업체 몫 중 대상월 미확정인 것들
         totalCharge: a.totalCharge,
         totalPaid:   a.totalPaid,
+        totalDiscount: a.totalDiscount || 0,
+        discountSetting: discounts[name] || null,   // 할인 입금 업체 설정 { maxDiff }
         remaining:   a.remaining,
         surplus:     a.surplus,
         matched:     a.remaining <= 0,
+        beforeTrackCount: a.beforeTrackCount || 0,
+        beforeTrackAmount: a.beforeTrackAmount || 0,
       };
     });
 
@@ -1535,9 +1887,64 @@ app.get('/api/ar/summary', (req, res) => {
       .filter(d => !d.matchedVendor)
       .sort((a, b) => b.date.localeCompare(a.date));
 
-    res.json({ ok: true, months: arMatrix.months, vendors, unmatched });
+    // 전체 업체 취합 미확정 배분 목록 (모달용)
+    const unresolvedAllocations = [];
+    vendors.forEach(v => {
+      (v.unresolved || []).forEach(u => unresolvedAllocations.push({ ...u, vendorName: v.name }));
+    });
+    unresolvedAllocations.sort((a, b) => b.date.localeCompare(a.date));
+
+    res.json({ ok: true, months: arMatrix.months, vendors, unmatched, unresolvedAllocations });
   } catch (e) {
     console.error('[ar/summary]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── 거래처 마진 분석 보조 데이터 (고객판매현황 → 마진 분석) ──────────
+// 카드수수료율: 해당 월 일마감 카드내역의 수수료/매출.
+//   나이스 "통합거래조회"처럼 수수료 컬럼이 없는 파일(totalFee=0)은 제외하고 계산,
+//   해당 월에 수수료 데이터가 전혀 없으면 전체 기간 평균을 사용
+function cardFeeRateStats(ym) {
+  const month = { fee: 0, amount: 0 }, all = { fee: 0, amount: 0 };
+  const add = (acc, src) => {
+    if (!src || !(src.totalFee > 0) || !(src.totalAmount > 0)) return;
+    acc.fee += src.totalFee; acc.amount += src.totalAmount;
+  };
+  for (const f of fs.readdirSync(DAILY_DIR).filter(f => f.endsWith('.json'))) {
+    const d = readJSON(path.join(DAILY_DIR, f), {});
+    const srcs = d.cardSources ? Object.values(d.cardSources) : [d.card];
+    srcs.forEach(s => { add(all, s); if (f.startsWith(ym)) add(month, s); });
+  }
+  if (month.amount > 0) return { rate: month.fee / month.amount, source: 'month' };
+  if (all.amount > 0)   return { rate: all.fee / all.amount, source: 'all' };
+  return { rate: 0, source: 'none' };
+}
+
+app.get('/api/customer-margin-meta', (req, res) => {
+  try {
+    const ym = String(req.query.month || '');
+    if (!/^\d{4}-\d{2}$/.test(ym)) return res.json({ ok: false, error: 'month=YYYY-MM 필요' });
+    const fee = cardFeeRateStats(ym);
+
+    // 외상 결제지연: 업체별 평균/최대 지연개월 + 조회월 이전 청구분 중 미수 잔액
+    const { buildArMatrix, allocateArDeposits } = require('./lib/arLedger');
+    const arMatrix = buildArMatrix(DATA_DIR);
+    const alloc    = allocateArDeposits(arMatrix, loadArDepositsWithCards(), loadArManualPaidSet(), loadArDiscountVendors());
+    const ar = {};
+    for (const name of arMatrix.byVendor.keys()) {
+      const months = alloc[name]?.months || [];
+      const lags = months.map(m => m.lagMonths).filter(l => l != null);
+      ar[name] = {
+        avgLag:  lags.length ? Math.round(lags.reduce((a, b) => a + b, 0) / lags.length * 10) / 10 : null,
+        maxLag:  lags.length ? Math.max(...lags) : null,
+        overdue: Math.round(months.filter(m => m.month < ym && m.remaining > 0)
+                                  .reduce((s, m) => s + m.remaining, 0)),
+      };
+    }
+    res.json({ ok: true, month: ym, cardFeeRate: fee.rate, cardFeeRateSource: fee.source, ar });
+  } catch (e) {
+    console.error('[customer-margin-meta]', e);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
@@ -1556,9 +1963,292 @@ app.post('/api/ar/match', (req, res) => {
     dep.manual = !!vendorName;
     dep.score  = vendorName ? 1 : 0;
     writeJSON(AR_DEPOSITS_FILE, list);
+
+    // 사람이 직접 지정한 입금계좌명은 별칭으로 저장 → 다음 달부터 자동매칭됨
+    if (vendorName && dep.payer) {
+      const aliasMap = readJSON(AR_ALIASES_FILE, {});
+      const list2 = aliasMap[vendorName] || [];
+      if (!list2.includes(dep.payer)) {
+        aliasMap[vendorName] = [...list2, dep.payer];
+        writeJSON(AR_ALIASES_FILE, aliasMap);
+      }
+    }
+
     res.json({ ok: true });
   } catch (e) {
     console.error('[ar/match]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// 매칭 로직 개선(별칭 추가, stripCorpMarkers 규칙 추가 등) 후 파일을 다시 올리지 않아도
+// 기존에 미매칭이었던 건들을 즉시 재평가 — 사람이 직접 지정(manual)한 건은 건드리지 않음
+app.post('/api/ar/rematch', (req, res) => {
+  try {
+    const { buildArMatrix, buildVendorAliasIndex, matchPayerToVendor, resolveSplitFragment } = require('./lib/arLedger');
+    const { extractSplitHint } = require('./lib/arNoteParser');
+    const list = readJSON(AR_DEPOSITS_FILE, []);
+    const arMatrix = buildArMatrix(DATA_DIR);
+    const vendorNames = [...arMatrix.byVendor.keys()];
+    const customers = readJSON(CUSTOMERS_FILE, []);
+    const aliasMap = readJSON(AR_ALIASES_FILE, {});
+    const aliasIndex = buildVendorAliasIndex(vendorNames, customers, aliasMap);
+
+    let rematched = 0;
+    list.forEach(d => {
+      if (d.manual || d.matchedVendor) return;   // 수동확정 또는 이미 매칭된 건은 건드리지 않음
+      const { name, score, suggestion } = matchPayerToVendor(d.payer, aliasIndex);
+      if (!name) { d.score = score; d.suggestion = suggestion; return; }
+      d.matchedVendor = name; d.score = score; d.suggestion = null;
+      if (!d.splits || !d.splits.length) {
+        const hint = extractSplitHint(d.note);
+        if (hint && hint.amount > 0 && hint.amount < d.amount) {
+          const resolvedVendor = resolveSplitFragment(hint.fragment, aliasIndex);
+          if (resolvedVendor && resolvedVendor !== name) {
+            d.splits = [{ vendorName: resolvedVendor, amount: hint.amount, manual: false, sourceFragment: hint.fragment, monthAssign: null }];
+          }
+        }
+      }
+      rematched++;
+    });
+    writeJSON(AR_DEPOSITS_FILE, list);
+    res.json({ ok: true, rematched });
+  } catch (e) {
+    console.error('[ar/rematch]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// 카드결제 등 은행입금 매칭 대상 자체가 없는 업체의 특정 월을 "완납 처리"로 직접 확정
+app.post('/api/ar/mark-paid', (req, res) => {
+  try {
+    const { vendorName, month, note } = req.body;
+    if (!vendorName || !month) return res.status(400).json({ ok: false, error: 'vendorName/month 필요' });
+    const list = readJSON(AR_MANUAL_PAID_FILE, []);
+    const idx = list.findIndex(x => x.vendorName === vendorName && x.month === month);
+    const rec = { vendorName, month, note: note || '카드결제', markedAt: new Date().toISOString() };
+    if (idx >= 0) list[idx] = rec; else list.push(rec);
+    writeJSON(AR_MANUAL_PAID_FILE, list);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[ar/mark-paid:post]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.delete('/api/ar/mark-paid', (req, res) => {
+  try {
+    const { vendorName, month } = req.body;
+    const list = readJSON(AR_MANUAL_PAID_FILE, []).filter(x => !(x.vendorName === vendorName && x.month === month));
+    writeJSON(AR_MANUAL_PAID_FILE, list);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[ar/mark-paid:delete]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── 현장 카드결제 매칭 ────────────────────────────────────────
+// 일마감 카드 대사의 "카드에만 있는 거래"(BOS에 없음) 중 큰 금액은 대부분 외상대금을
+// 현장에서 카드로 결제한 것 → 후보로 모아 사람이 업체·월에 매칭하면 그 달 입금으로 반영
+const AR_CARD_MIN_AMOUNT = 300000;
+
+function prevMonth(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+}
+
+app.get('/api/ar/card-candidates', (req, res) => {
+  try {
+    const minAmount = Number(req.query.min) || AR_CARD_MIN_AMOUNT;
+    const { buildArMatrix } = require('./lib/arLedger');
+    const arMatrix   = buildArMatrix(DATA_DIR);
+    const matched    = readJSON(AR_CARD_PAYMENTS_FILE, []);
+    const matchedIds = new Set(matched.map(c => c.id));
+
+    // 추천 근거 1: 외상 업체 월 매출과 금액 정확히 일치 (결제일 이전 달만)
+    const charges = [];
+    for (const [name, arr] of arMatrix.byVendor) arr.forEach(m => charges.push({ name, month: m.month, charge: m.charge }));
+    // 추천 근거 2: 같은 카드번호로 예전에 매칭한 업체
+    const byCardNo = {};
+    matched.forEach(c => { if (c.cardNo) byCardNo[c.cardNo] = c.vendorName; });
+
+    const candidates = [];
+    for (const f of fs.readdirSync(DAILY_DIR).filter(f => f.endsWith('.json')).sort()) {
+      const d = readJSON(path.join(DAILY_DIR, f), {});
+      for (const e of d.matching?.errors || []) {
+        if (e.type !== 'easy_only' || !(e.easyAmount >= minAmount)) continue;
+        const date = f.slice(0, 10);
+        const id = `${date}|${e.approvalNo}`;
+        if (matchedIds.has(id)) continue;
+        const exact = charges.filter(c => c.charge === e.easyAmount && c.month < date.slice(0, 7));
+        let suggestion = null;
+        if (exact.length === 1) {
+          suggestion = { vendorName: exact[0].name, month: exact[0].month, reason: '금액 일치' };
+        } else if (e.cardNo && byCardNo[e.cardNo]) {
+          suggestion = { vendorName: byCardNo[e.cardNo], month: prevMonth(date.slice(0, 7)), reason: '같은 카드' };
+        }
+        candidates.push({
+          id, date, approvalNo: e.approvalNo, cardCompany: e.cardCompany, cardNo: e.cardNo,
+          amount: e.easyAmount, transTime: e.transTime || '', source: e.source || '', suggestion,
+        });
+      }
+    }
+    candidates.sort((a, b) => b.date.localeCompare(a.date));
+    matched.sort((a, b) => b.date.localeCompare(a.date));
+    res.json({ ok: true, minAmount, candidates, matched });
+  } catch (e) {
+    console.error('[ar/card-candidates]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/ar/card-payments', (req, res) => {
+  try {
+    const { id, date, approvalNo, cardCompany, cardNo, amount, vendorName, month } = req.body;
+    if (!id || !vendorName || !/^\d{4}-\d{2}$/.test(month || '') || !(Number(amount) > 0)) {
+      return res.status(400).json({ ok: false, error: '업체와 대상 월을 선택하세요.' });
+    }
+    const list = readJSON(AR_CARD_PAYMENTS_FILE, []).filter(c => c.id !== id);
+    list.push({ id, date, approvalNo, cardCompany, cardNo, amount: Number(amount), vendorName, month,
+                matchedAt: new Date().toISOString() });
+    writeJSON(AR_CARD_PAYMENTS_FILE, list);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[ar/card-payments:post]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.delete('/api/ar/card-payments', (req, res) => {
+  try {
+    writeJSON(AR_CARD_PAYMENTS_FILE, readJSON(AR_CARD_PAYMENTS_FILE, []).filter(c => c.id !== req.body.id));
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[ar/card-payments:delete]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── 할인 입금 업체 (거래명세서에서 직접 할인해 몇만원 적게 입금하는 업체) ──
+// maxDiff > 0 이면 지정, 0/빈값이면 해제
+app.post('/api/ar/discount-vendors', (req, res) => {
+  try {
+    const { vendorName, maxDiff } = req.body;
+    if (!vendorName) return res.status(400).json({ ok: false, error: 'vendorName 필요' });
+    const map = loadArDiscountVendors();
+    if (Number(maxDiff) > 0) map[vendorName] = { maxDiff: Number(maxDiff) };
+    else delete map[vendorName];
+    writeJSON(AR_DISCOUNT_FILE, map);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[ar/discount-vendors]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── 입금계좌명 별칭 관리 (업체명과 통장 적요가 다를 때 수동 등록) ─────
+app.get('/api/ar/aliases', (req, res) => {
+  res.json({ ok: true, aliases: readJSON(AR_ALIASES_FILE, {}) });
+});
+
+app.post('/api/ar/aliases', (req, res) => {
+  try {
+    const { vendorName, alias } = req.body;
+    if (!vendorName || !alias) return res.status(400).json({ ok: false, error: 'vendorName/alias 필요' });
+    const aliasMap = readJSON(AR_ALIASES_FILE, {});
+    const list = aliasMap[vendorName] || [];
+    if (!list.includes(alias)) aliasMap[vendorName] = [...list, alias];
+    writeJSON(AR_ALIASES_FILE, aliasMap);
+    res.json({ ok: true, aliases: aliasMap });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.delete('/api/ar/aliases', (req, res) => {
+  try {
+    const { vendorName, alias } = req.body;
+    const aliasMap = readJSON(AR_ALIASES_FILE, {});
+    if (aliasMap[vendorName]) {
+      aliasMap[vendorName] = aliasMap[vendorName].filter(a => a !== alias);
+      if (!aliasMap[vendorName].length) delete aliasMap[vendorName];
+    }
+    writeJSON(AR_ALIASES_FILE, aliasMap);
+    res.json({ ok: true, aliases: aliasMap });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── 입금 분할 (한 입금이 여러 업체에 걸치는 경우, 예: 현대스크랩 입금 중 일부가 명신 몫) ──
+// POST: 분할 추가 (수동) / DELETE: 분할 제거
+app.post('/api/ar/split', (req, res) => {
+  try {
+    const { depositId, vendorName, amount } = req.body;
+    if (!depositId || !vendorName || !amount) {
+      return res.status(400).json({ ok: false, error: 'depositId/vendorName/amount 필요' });
+    }
+    const list = readJSON(AR_DEPOSITS_FILE, []);
+    const dep = list.find(d => d.id === depositId);
+    if (!dep) return res.status(404).json({ ok: false, error: '해당 입금 건을 찾을 수 없습니다.' });
+
+    const splits     = dep.splits || [];
+    const splitTotal = splits.reduce((s, x) => s + x.amount, 0);
+    const remaining   = dep.amount - splitTotal;
+    const amt = Number(amount);
+    if (!(amt > 0) || amt > remaining) {
+      return res.status(400).json({ ok: false, error: `분할 금액은 1원 이상 ${remaining.toLocaleString()}원 이하여야 합니다.` });
+    }
+    dep.splits = [...splits, { vendorName, amount: amt, manual: true, sourceFragment: null, monthAssign: null }];
+    writeJSON(AR_DEPOSITS_FILE, list);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.delete('/api/ar/split', (req, res) => {
+  try {
+    const { depositId, splitIndex } = req.body;
+    const list = readJSON(AR_DEPOSITS_FILE, []);
+    const dep = list.find(d => d.id === depositId);
+    if (!dep) return res.status(404).json({ ok: false, error: '해당 입금 건을 찾을 수 없습니다.' });
+    dep.splits = (dep.splits || []).filter((_, i) => i !== Number(splitIndex));
+    writeJSON(AR_DEPOSITS_FILE, list);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// POST /api/ar/resolve-allocation — 자동으로 확정 못한(또는 재조정하고 싶은) 배분을
+//   사람이 직접 월별로 지정. target='primary'면 입금 자체 몫, {splitIndex:N}이면 N번째
+//   분할 몫. monthAssign을 빈 배열/null로 보내면 오버라이드 해제(자동판별로 되돌림).
+app.post('/api/ar/resolve-allocation', (req, res) => {
+  try {
+    const { depositId, target, monthAssign } = req.body;
+    if (!depositId) return res.status(400).json({ ok: false, error: 'depositId 필요' });
+    const list = readJSON(AR_DEPOSITS_FILE, []);
+    const dep = list.find(d => d.id === depositId);
+    if (!dep) return res.status(404).json({ ok: false, error: '해당 입금 건을 찾을 수 없습니다.' });
+
+    const assign = (Array.isArray(monthAssign) && monthAssign.length) ? monthAssign : null;
+
+    if (!target || target === 'primary') {
+      dep.monthAssign = assign;
+    } else if (typeof target === 'object' && target.splitIndex != null) {
+      const s = (dep.splits || [])[target.splitIndex];
+      if (!s) return res.status(404).json({ ok: false, error: '해당 분할 항목을 찾을 수 없습니다.' });
+      s.monthAssign = assign;
+      s.manual = true;   // 월을 수동 확정한 이상 이 분할도 재업로드 시 보존 대상
+    } else {
+      return res.status(400).json({ ok: false, error: 'target 형식 오류' });
+    }
+
+    writeJSON(AR_DEPOSITS_FILE, list);
+    res.json({ ok: true });
+  } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
@@ -1807,6 +2497,7 @@ app.get('/api/summary/:yearMonth', (req, res) => {
   }
 
   let totalProfit = 0;
+  let totalOtherCost = 0;   // 유외상품 수기 원가 합계 (세차·유외 이익 분해 표시용)
   let hasPrices = prices.length > 0;
   const profitByFuel = { 휘발유: 0, 경유: 0, 등유: 0 };
   const costByFuel   = { 휘발유: 0, 경유: 0, 등유: 0 };
@@ -1831,6 +2522,7 @@ app.get('/api/summary/:yearMonth', (req, res) => {
     totalSales.carwash += d.bos.carwash?.amount || 0;
     totalSales.others  += d.bos.others?.amount  || 0;
     const otC = d.otherCost || 0;
+    totalOtherCost += otC;
     totalProfit += (d.bos.carwash?.amount || 0);
     totalProfit += (d.bos.others?.amount  || 0) - otC;
     totalCardFee += d.card?.totalFee || 0;
@@ -1946,6 +2638,11 @@ app.get('/api/summary/:yearMonth', (req, res) => {
     revenue: totalRevenue,
     profit: hasPrices ? Math.round(totalProfit) : null,
     profitByFuel: hasPrices ? { 휘발유: Math.round(profitByFuel.휘발유), 경유: Math.round(profitByFuel.경유), 등유: Math.round(profitByFuel.등유) } : null,
+    // 영업이익 분해: 유종이익 + 세차·유외이익 − 카드수수료 = profit
+    // (화면에서 유종별 합계와 총 영업이익이 안 맞아 보이던 문제를 없애기 위해 항목별로 내려줌)
+    fuelProfit: hasPrices ? Math.round(profitByFuel.휘발유 + profitByFuel.경유 + profitByFuel.등유) : null,
+    etcProfit: Math.round((totalSales.carwash || 0) + (totalSales.others || 0) - totalOtherCost),
+    otherCost: Math.round(totalOtherCost),
     avgBuyPriceByFuel: hasPrices ? avgBuyPriceByFuel : null,
     cardFee: totalCardFee,
     expense: totalExpense,
@@ -2261,6 +2958,7 @@ app.get('/api/export-html/:yearMonth', (req, res) => {
     let profitByFuel = { 휘발유:0, 경유:0, 등유:0 };
     let costByFuel   = { 휘발유:0, 경유:0, 등유:0 };
     let totalProfit  = 0;
+    let totalOtherCost = 0, totalCardFee = 0;   // 영업이익 분해 표시용
 
     for (const f of dailyFiles) {
       const d = readJSON(path.join(DAILY_DIR, f), {});
@@ -2277,6 +2975,8 @@ app.get('/api/export-html/:yearMonth', (req, res) => {
       }
       totalSales.carwash += d.bos.carwash?.amount||0;
       totalSales.others  += d.bos.others?.amount||0;
+      totalOtherCost += d.otherCost||0;
+      totalCardFee   += d.card?.totalFee||0;
       totalProfit += (d.bos.carwash?.amount||0) + (d.bos.others?.amount||0) - (d.otherCost||0) - (d.card?.totalFee||0);
     }
 
@@ -2351,9 +3051,15 @@ app.get('/api/export-html/:yearMonth', (req, res) => {
     }
     const totDrums=Math.floor(totalFuelQty/200);
     const tfc=hasPrices?(totalProfit>=0?'pos':'neg'):'';
-    salesRows+=`<tr class="total-row"><td>합계</td><td>${Math.floor(totalFuelQty).toLocaleString()}L <small>(${totDrums}드럼)</small></td><td>-</td><td>-</td><td class="${tfc}">${hasPrices?Math.round(totalProfit).toLocaleString()+'원':'-'}</td></tr>`;
     const etcAmt=(totalSales.carwash||0)+(totalSales.others||0);
-    sumHtml+=`<div class="card"><div class="card-head">유종별 판매 현황</div><div style="overflow-x:auto;"><table class="fuel-table"><thead><tr><th>유종</th><th>판매량</th><th>판매가</th><th>매입가</th><th>영업이익</th></tr></thead><tbody>${salesRows}</tbody></table></div>${etcAmt>0?`<div style="padding:8px 12px;font-size:12px;color:#64748b;border-top:1px solid #334155;">세차+유외상품 ${etcAmt.toLocaleString()}원</div>`:''}</div>`;
+    // 유종 소계 → 세차·유외 이익 → 카드수수료 순으로 쌓아야 합계와 정확히 맞는다
+    const fuelProfitSum = hasPrices ? Math.round(profitByFuel.휘발유+profitByFuel.경유+profitByFuel.등유) : null;
+    const etcProfit = Math.round(etcAmt - totalOtherCost);
+    salesRows+=`<tr><td style="color:#94a3b8;">유종 소계</td><td>${Math.floor(totalFuelQty).toLocaleString()}L <small>(${totDrums}드럼)</small></td><td>-</td><td>-</td><td class="${fuelProfitSum!=null?(fuelProfitSum>=0?'pos':'neg'):''}">${fuelProfitSum!=null?fuelProfitSum.toLocaleString()+'원':'-'}</td></tr>`;
+    salesRows+=`<tr><td>세차+유외${totalOtherCost?` <small>(원가 ${totalOtherCost.toLocaleString()}원 차감)</small>`:''}</td><td>-</td><td>-</td><td>-</td><td class="${etcProfit>=0?'pos':'neg'}">${etcProfit.toLocaleString()}원</td></tr>`;
+    salesRows+=`<tr><td style="color:#94a3b8;">카드 수수료</td><td>-</td><td>-</td><td>-</td><td class="neg">${totalCardFee?'-'+totalCardFee.toLocaleString()+'원':'-'}</td></tr>`;
+    salesRows+=`<tr class="total-row"><td>영업이익 합계</td><td>-</td><td>-</td><td>-</td><td class="${tfc}">${hasPrices?Math.round(totalProfit).toLocaleString()+'원':'-'}</td></tr>`;
+    sumHtml+=`<div class="card"><div class="card-head">유종별 판매 현황</div><div style="overflow-x:auto;"><table class="fuel-table"><thead><tr><th>유종</th><th>판매량</th><th>판매가</th><th>매입가</th><th>영업이익</th></tr></thead><tbody>${salesRows}</tbody></table></div>${etcAmt>0?`<div style="padding:8px 12px;font-size:12px;color:#64748b;border-top:1px solid #334155;">세차+유외상품 매출 ${etcAmt.toLocaleString()}원</div>`:''}</div>`;
 
     // 지출 Top5
     let expTop='<div class="card"><div class="card-head">지출 Top 5 <span class="lnk" onclick="sw(\'expense\')">전체보기 →</span></div>';
