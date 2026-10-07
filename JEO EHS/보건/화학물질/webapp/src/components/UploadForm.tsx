@@ -1,38 +1,36 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
+import type { MaterialType } from "@/lib/db/schema";
+import { COMMON_DEPARTMENT } from "@/lib/constants";
 
-async function uploadOne(file: File, materialType: string): Promise<{ ok: boolean; error?: string }> {
-  const formData = new FormData();
-  formData.set("file", file);
-  formData.set("materialType", materialType);
-  try {
-    const res = await fetch("/api/upload", { method: "POST", body: formData });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      return { ok: false, error: body.error ?? "업로드 실패" };
-    }
-    return { ok: true };
-  } catch {
-    return { ok: false, error: "네트워크 오류" };
-  }
-}
-
-export function UploadForm() {
+export function UploadForm({
+  departments,
+  positionsByDepartment,
+}: {
+  departments: string[];
+  positionsByDepartment: Record<string, string[]>;
+}) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [failedFiles, setFailedFiles] = useState<string[]>([]);
+  const [materialType, setMaterialType] = useState<MaterialType>("raw");
+  const [department, setDepartment] = useState("");
+  const [workProcess, setWorkProcess] = useState("");
+
+  const processOptions = useMemo(
+    () => positionsByDepartment[department] ?? [],
+    [department, positionsByDepartment]
+  );
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     setFailedFiles([]);
     const form = e.currentTarget;
-    const formData = new FormData(form);
-    const materialType = String(formData.get("materialType") ?? "raw");
     const fileInput = form.elements.namedItem("file") as HTMLInputElement;
     const files = fileInput.files ? Array.from(fileInput.files) : [];
 
@@ -52,6 +50,8 @@ export function UploadForm() {
       const fd = new FormData();
       fd.set("file", file);
       fd.set("materialType", materialType);
+      fd.set("department", materialType === "raw" ? "" : department);
+      fd.set("workProcess", materialType === "raw" ? "" : workProcess);
       const res = await fetch("/api/upload", { method: "POST", body: fd });
       if (res.ok) {
         const body = await res.json();
@@ -75,7 +75,7 @@ export function UploadForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-4 sm:flex-row sm:items-end"
+      className="flex flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-4 sm:flex-row sm:flex-wrap sm:items-end"
     >
       <div className="flex flex-col gap-1">
         <label className="text-sm font-medium text-zinc-700" htmlFor="materialType">
@@ -83,14 +83,58 @@ export function UploadForm() {
         </label>
         <select
           id="materialType"
-          name="materialType"
-          defaultValue="raw"
+          value={materialType}
+          onChange={(e) => setMaterialType(e.target.value as MaterialType)}
           className="rounded-md border border-zinc-300 px-3 py-2 text-sm"
         >
-          <option value="raw">원재료</option>
+          <option value="raw">원재료 (부서: {COMMON_DEPARTMENT})</option>
           <option value="auxiliary">부자재</option>
         </select>
       </div>
+      {materialType === "auxiliary" && (
+        <>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-zinc-700" htmlFor="department">
+              부서
+            </label>
+            <select
+              id="department"
+              value={department}
+              onChange={(e) => {
+                setDepartment(e.target.value);
+                setWorkProcess("");
+              }}
+              className="w-40 rounded-md border border-zinc-300 px-3 py-2 text-sm"
+            >
+              <option value="">선택</option>
+              {departments.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-zinc-700" htmlFor="workProcess">
+              공정(포지션)
+            </label>
+            <select
+              id="workProcess"
+              value={workProcess}
+              onChange={(e) => setWorkProcess(e.target.value)}
+              disabled={!department}
+              className="w-40 rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:bg-zinc-50 disabled:text-zinc-400"
+            >
+              <option value="">선택</option>
+              {processOptions.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </div>
+        </>
+      )}
       <div className="flex flex-1 flex-col gap-1">
         <label className="text-sm font-medium text-zinc-700" htmlFor="file">
           MSDS PDF 파일 (여러 개 선택 가능)

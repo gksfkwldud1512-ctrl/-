@@ -1,6 +1,8 @@
 import { extractPdfTextItems, groupIntoLines, type PdfLine } from "./pdfText";
 import { parsePercent, PERCENT_LIKE_RE } from "./percent";
 import { extractManufacturerFromLines } from "./manufacturer";
+import { extractRevisionInfoFromLines } from "./msdsRevision";
+import { extractPpeTextFromLines } from "./ppe";
 
 export type DraftIngredient = {
   ingredientName: string;
@@ -171,15 +173,23 @@ export async function parseMsdsSection3(fileBuffer: Buffer): Promise<DraftIngred
   return extractSection3FromLines(lines);
 }
 
-/** PDF 파일 버퍼로부터 구성성분표 초안 + 제조사(1장)를 한 번에 추출한다. */
-export async function parseMsdsDocument(
-  fileBuffer: Buffer
-): Promise<{ ingredients: DraftIngredient[]; manufacturer: string | null }> {
+/** PDF 파일 버퍼로부터 구성성분표 초안 + 제조사(1장) + 개정일/재검토주기 + 보호구(8장)를 한 번에 추출한다. */
+export async function parseMsdsDocument(fileBuffer: Buffer): Promise<{
+  ingredients: DraftIngredient[];
+  manufacturer: string | null;
+  revisionDate: string | null;
+  reviewCycleYears: number | null;
+  ppeText: string | null;
+}> {
   const items = await extractPdfTextItems(fileBuffer);
   const lines = groupIntoLines(items);
+  const revisionInfo = extractRevisionInfoFromLines(lines);
   return {
     ingredients: extractSection3FromLines(lines),
     manufacturer: extractManufacturerFromLines(lines),
+    revisionDate: revisionInfo.revisionDate,
+    reviewCycleYears: revisionInfo.reviewCycleYears,
+    ppeText: extractPpeTextFromLines(lines),
   };
 }
 

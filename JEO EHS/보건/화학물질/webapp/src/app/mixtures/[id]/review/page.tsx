@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getMixtureWithIngredients } from "@/lib/db/repo";
+import { getMixtureWithIngredients, getDepartmentPositionOptions } from "@/lib/db/repo";
 import { ReviewTable } from "@/components/ReviewTable";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +10,7 @@ export default async function ReviewPage(props: PageProps<"/mixtures/[id]/review
   const result = await getMixtureWithIngredients(id);
   if (!result) notFound();
   const { mixture, ingredients } = result;
+  const { departments, positionsByDepartment } = await getDepartmentPositionOptions();
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-6 py-10">
@@ -26,6 +27,13 @@ export default async function ReviewPage(props: PageProps<"/mixtures/[id]/review
         initialProductName={mixture.productName}
         initialManufacturer={mixture.manufacturer}
         initialMaterialType={mixture.materialType}
+        initialDepartment={mixture.department}
+        initialWorkProcess={mixture.workProcess}
+        initialRevisionDate={mixture.revisionDate}
+        initialReviewCycleYears={mixture.reviewCycleYears}
+        initialPpeText={mixture.ppeText}
+        departments={departments}
+        positionsByDepartment={positionsByDepartment}
         initialRows={ingredients.map((i) => ({
           ingredientName: i.ingredientName,
           casNo: i.casNo,

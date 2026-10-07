@@ -1,8 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { MaterialType } from "@/lib/db/schema";
+import { computeReviewStatus } from "@/lib/msds/reviewStatus";
+import { REVIEW_STATUS_COLOR, REVIEW_STATUS_LABEL } from "@/lib/format";
+import { COMMON_DEPARTMENT } from "@/lib/constants";
 
 type Row = {
   key: string;
@@ -20,18 +23,49 @@ export function ReviewTable({
   initialProductName,
   initialManufacturer,
   initialMaterialType,
+  initialDepartment,
+  initialWorkProcess,
+  initialRevisionDate,
+  initialReviewCycleYears,
+  initialPpeText,
+  departments,
+  positionsByDepartment,
   initialRows,
 }: {
   mixtureId: string;
   initialProductName: string;
   initialManufacturer: string | null;
   initialMaterialType: MaterialType;
+  initialDepartment: string | null;
+  initialWorkProcess: string | null;
+  initialRevisionDate: string | null;
+  initialReviewCycleYears: number | null;
+  initialPpeText: string | null;
+  departments: string[];
+  positionsByDepartment: Record<string, string[]>;
   initialRows: { ingredientName: string; casNo: string | null; contentPercentRaw: string | null }[];
 }) {
   const router = useRouter();
   const [productName, setProductName] = useState(initialProductName);
   const [manufacturer, setManufacturer] = useState(initialManufacturer ?? "");
   const [materialType, setMaterialType] = useState<MaterialType>(initialMaterialType);
+  const [department, setDepartment] = useState(
+    initialMaterialType === "raw" ? "" : (initialDepartment ?? "")
+  );
+  const [workProcess, setWorkProcess] = useState(initialWorkProcess ?? "");
+  const [revisionDate, setRevisionDate] = useState(initialRevisionDate ?? "");
+  const [reviewCycleYears, setReviewCycleYears] = useState(
+    initialReviewCycleYears !== null ? String(initialReviewCycleYears) : ""
+  );
+  const [ppeText, setPpeText] = useState(initialPpeText ?? "");
+  const reviewStatus = computeReviewStatus(
+    revisionDate || null,
+    reviewCycleYears ? Number(reviewCycleYears) : null
+  );
+  const processOptions = useMemo(
+    () => positionsByDepartment[department] ?? [],
+    [department, positionsByDepartment]
+  );
   const [rows, setRows] = useState<Row[]>(
     initialRows.length > 0
       ? initialRows.map((r) => ({
@@ -67,6 +101,11 @@ export function ReviewTable({
         productName,
         manufacturer: manufacturer.trim() || null,
         materialType,
+        department: materialType === "raw" ? COMMON_DEPARTMENT : department.trim() || null,
+        workProcess: materialType === "raw" ? null : workProcess.trim() || null,
+        revisionDate: revisionDate.trim() || null,
+        reviewCycleYears: reviewCycleYears.trim() ? Number(reviewCycleYears) : null,
+        ppeText: ppeText.trim() || null,
         ingredients: rows
           .filter((r) => r.ingredientName.trim() !== "" || r.casNo.trim() !== "")
           .map((r) => ({
@@ -151,9 +190,100 @@ export function ReviewTable({
             onChange={(e) => setMaterialType(e.target.value as MaterialType)}
             className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
           >
-            <option value="raw">원재료</option>
+            <option value="raw">원재료 (부서: {COMMON_DEPARTMENT})</option>
             <option value="auxiliary">부자재</option>
           </select>
+        </div>
+        {materialType === "auxiliary" ? (
+          <>
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-zinc-700" htmlFor="department">
+                부서
+              </label>
+              <select
+                id="department"
+                value={department}
+                onChange={(e) => {
+                  setDepartment(e.target.value);
+                  setWorkProcess("");
+                }}
+                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+              >
+                <option value="">선택</option>
+                {departments.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-zinc-700" htmlFor="workProcess">
+                공정(포지션)
+              </label>
+              <select
+                id="workProcess"
+                value={workProcess}
+                onChange={(e) => setWorkProcess(e.target.value)}
+                disabled={!department}
+                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:bg-zinc-50 disabled:text-zinc-400"
+              >
+                <option value="">선택</option>
+                {processOptions.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col gap-1 sm:col-span-2">
+            <span className="text-sm font-medium text-zinc-700">부서</span>
+            <input
+              value={COMMON_DEPARTMENT}
+              disabled
+              className="w-full rounded-md border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-500"
+            />
+          </div>
+        )}
+        <div className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-zinc-700">개정주기</span>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={revisionDate}
+              onChange={(e) => setRevisionDate(e.target.value)}
+              className="flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm"
+              aria-label="최근 개정일"
+            />
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={reviewCycleYears}
+              onChange={(e) => setReviewCycleYears(e.target.value)}
+              placeholder="주기(년)"
+              className="w-24 rounded-md border border-zinc-300 px-3 py-2 text-sm"
+              aria-label="재검토 주기(년)"
+            />
+          </div>
+          <span className={`w-fit rounded-full px-2 py-1 text-xs font-medium ${REVIEW_STATUS_COLOR[reviewStatus]}`}>
+            {REVIEW_STATUS_LABEL[reviewStatus]}
+          </span>
+        </div>
+        <div className="flex flex-col gap-1 sm:col-span-3">
+          <label className="text-sm font-medium text-zinc-700" htmlFor="ppeText">
+            보호구(MSDS 8장 발췌, 필요시 수정)
+          </label>
+          <textarea
+            id="ppeText"
+            value={ppeText}
+            onChange={(e) => setPpeText(e.target.value)}
+            rows={4}
+            placeholder="PDF 8장(노출방지 및 개인보호구)에서 자동 추출을 시도합니다"
+            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+          />
         </div>
       </div>
 

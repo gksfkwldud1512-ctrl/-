@@ -57,6 +57,11 @@ export const mixtures = pgTable("mixtures", {
   productName: text("product_name").notNull(),
   manufacturer: text("manufacturer"), // 제조사(공급자), MSDS 1장에서 자동추출 시도 + 검토화면에서 수정
   materialType: text("material_type").$type<MaterialType>().notNull().default("raw"),
+  department: text("department"), // 사용 부서 — 사원명부 기반 드롭다운(employees.department). 원재료는 항상 "공통".
+  workProcess: text("work_process"), // 사용 공정(=사원명부 포지션 라벨) — 부서 선택에 종속된 드롭다운
+  revisionDate: text("revision_date"), // MSDS 최근 개정일자(YYYY-MM-DD), 자동추출 시도 + 검토화면에서 보정
+  reviewCycleYears: integer("review_cycle_years"), // MSDS 재검토 주기(년), 자동추출 시도 + 검토화면에서 보정
+  ppeText: text("ppe_text"), // MSDS 8장(노출방지 및 개인보호구) 원문 발췌, 자동추출 시도
   pdfBlobUrl: text("pdf_blob_url").notNull(),
   pdfFilename: text("pdf_filename").notNull(),
   status: text("status").$type<MixtureStatus>().notNull().default("pending_review"),
@@ -70,6 +75,14 @@ export type MatchStatus =
   | "no_match"
   | "matched_below_threshold"
   | "matched_hazardous";
+
+// 산업안전보건법 계열 4개 카테고리(관리대상유해물질/특별관리물질/작업환경측정/특수건강진단)에 대한
+// 성분 1건의 개별 판정. 화관법 5종은 기존처럼 matchStatus/appliedThresholds 하나로 요약한다.
+export type CategoryVerdict = {
+  category: string; // "관리대상유해물질" | "특별관리물질" | "작업환경측정" | "특수건강진단"
+  matched: boolean;
+  threshold: ParsedThreshold | null; // 적용된 기준(라벨/연산자/퍼센트) — presence 판정이면 null
+};
 
 export const mixtureIngredients = pgTable("mixture_ingredients", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -90,8 +103,28 @@ export const mixtureIngredients = pgTable("mixture_ingredients", {
     .$type<ParsedThreshold[]>()
     .notNull()
     .default([]),
+  categoryVerdicts: jsonb("category_verdicts")
+    .$type<CategoryVerdict[]>()
+    .notNull()
+    .default([]),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// 사원명부(부서/포지션 드롭다운 + 부서·공정별 교육명단 서명지 생성용). 사내 xlsx를 시딩한 스냅샷.
+export const employees = pgTable(
+  "employees",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    employeeNo: text("employee_no"), // 사번
+    department: text("department").notNull(), // 부서명 (예: 생산1)
+    positionCode: text("position_code"), // 포지션 코드 (예: D0511)
+    positionLabel: text("position_label"), // 포지션 라벨(=공정명, 예: 성형)
+    hireDate: text("hire_date"), // YYYY-MM-DD
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("employees_employee_no_key").on(t.employeeNo)]
+);
 
 export type PlacementExamStatus = "pending_review" | "confirmed";
 
