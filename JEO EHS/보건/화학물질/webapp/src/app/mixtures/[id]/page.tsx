@@ -127,6 +127,11 @@ export default async function MixtureDetailPage(props: PageProps<"/mixtures/[id]
                     >
                       {MATCH_STATUS_LABEL[ing.matchStatus]}
                     </span>
+                    {ing.matchedReferenceId && !ing.contentPercentRaw && (
+                      <div className="mt-1 text-xs font-medium text-amber-700">
+                        함유량 미확인 — 기준 초과 여부 판단 불가
+                      </div>
+                    )}
                   </td>
                   {INDUSTRIAL_SAFETY_ACT_CATEGORIES.map((c) => {
                     const v = ing.categoryVerdicts.find((cv) => cv.category === c.key);
