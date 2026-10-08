@@ -25,7 +25,7 @@ export async function GET() {
       key: c.key,
       width: 16,
     })),
-    { header: "개정주기 상태", key: "reviewStatus", width: 20 },
+    { header: "개정확인여부", key: "reviewStatus", width: 20 },
   ];
 
   for (const r of rows) {

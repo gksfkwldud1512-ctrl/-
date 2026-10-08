@@ -1,16 +1,18 @@
 /**
- * MSDS 개정주기(재검토주기) 기반 신호등 판정 — 순수 함수(서버/클라이언트 양쪽에서 사용 가능).
+ * MSDS 개정확인여부 판정 — 순수 함수(서버/클라이언트 양쪽에서 사용 가능).
  *
- * 다음 개정예정일 = 최근개정일(revisionDate) + 재검토주기(reviewCycleYears).
- * 색상은 "다음 개정예정일까지 남은 기간"을 기준으로 동적으로 산정한다:
- * - red(기한초과): 오늘 > 다음 개정예정일 — 공급업체에 신규 MSDS를 요청해야 함
- * - yellow(임박): 다음 개정예정일까지 1년 이내로 남음
- * - green(여유): 다음 개정예정일까지 1년 이상 남음
- * - unknown: 개정일 또는 재검토주기 정보가 없어 계산 불가
+ * 목적: MSDS 개정일이 오래된 건은 공급업체에 재개정 여부를 확인해야 한다.
+ * - no_date: 개정일 정보가 없음(검토화면에서 개정일 입력 필요)
+ * - ok(확인): 개정일이 최근(REVISION_RECHECK_YEARS년 이내)이거나, 같은 개정일에 대해 수동으로 "변경사항 없음" 확인함
+ * - needs_check(재개정확인필요): 개정일이 REVISION_RECHECK_YEARS년을 넘었고 아직 수동 확인 전
+ *
+ * 수동 확인은 "확인한 개정일"(revisionCheckedFor)을 함께 저장해 두므로, 새 MSDS 업로드/수정으로
+ * 개정일이 바뀌면 자동으로 해제되어 새 개정일 기준으로 다시 판정된다.
  */
-export type ReviewStatus = "green" | "yellow" | "red" | "unknown";
+export type ReviewStatus = "ok" | "needs_check" | "no_date";
 
-const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+/** 개정일로부터 이 연수가 지나면 재개정확인필요로 본다. */
+export const REVISION_RECHECK_YEARS = 3;
 
 function parseDateOnly(value: string | null | undefined): Date | null {
   if (!value) return null;
@@ -20,35 +22,23 @@ function parseDateOnly(value: string | null | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-export function computeNextReviewDueDate(
-  revisionDate: string | null | undefined,
-  reviewCycleYears: number | null | undefined
-): Date | null {
-  const base = parseDateOnly(revisionDate);
-  if (!base || !reviewCycleYears || reviewCycleYears <= 0) return null;
-  const due = new Date(base);
-  due.setUTCFullYear(due.getUTCFullYear() + reviewCycleYears);
-  return due;
-}
-
 export function computeReviewStatus(
   revisionDate: string | null | undefined,
-  reviewCycleYears: number | null | undefined,
+  revisionCheckedFor: string | null | undefined,
   today: Date = new Date()
 ): ReviewStatus {
-  const due = computeNextReviewDueDate(revisionDate, reviewCycleYears);
-  if (!due) return "unknown";
-  const remainingMs = due.getTime() - today.getTime();
-  if (remainingMs < 0) return "red";
-  if (remainingMs <= ONE_YEAR_MS) return "yellow";
-  return "green";
+  const base = parseDateOnly(revisionDate);
+  if (!base) return "no_date";
+  if (revisionCheckedFor && revisionCheckedFor === revisionDate) return "ok";
+  const threshold = new Date(base);
+  threshold.setUTCFullYear(threshold.getUTCFullYear() + REVISION_RECHECK_YEARS);
+  return today.getTime() > threshold.getTime() ? "needs_check" : "ok";
 }
 
-/** red 상태(기한초과)일 때 "신규 MSDS를 공급업체에서 요청해야 함" 플래그. */
-export function needsSupplierRenewal(
+/** 수동 확인 처리되어 있는지(현재 개정일 기준). */
+export function isManuallyChecked(
   revisionDate: string | null | undefined,
-  reviewCycleYears: number | null | undefined,
-  today: Date = new Date()
+  revisionCheckedFor: string | null | undefined
 ): boolean {
-  return computeReviewStatus(revisionDate, reviewCycleYears, today) === "red";
+  return !!revisionDate && revisionCheckedFor === revisionDate;
 }

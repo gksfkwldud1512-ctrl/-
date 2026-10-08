@@ -43,26 +43,19 @@ export function formatThreshold(t: ParsedThreshold): string {
 }
 
 export const REVIEW_STATUS_LABEL: Record<ReviewStatus, string> = {
-  green: "정상",
-  yellow: "재검토 임박",
-  red: "기한 초과 · 신규 MSDS 요청 필요",
-  unknown: "미확인",
+  ok: "확인",
+  needs_check: "재개정확인필요",
+  no_date: "개정일없음",
 };
 
 export const REVIEW_STATUS_COLOR: Record<ReviewStatus, string> = {
-  green: "bg-emerald-100 text-emerald-800",
-  yellow: "bg-amber-100 text-amber-800",
-  red: "bg-red-100 text-red-800",
-  unknown: "bg-zinc-100 text-zinc-500",
+  ok: "bg-emerald-100 text-emerald-800",
+  needs_check: "bg-red-100 text-red-800",
+  no_date: "bg-zinc-100 text-zinc-500",
 };
 
-// 목록/대시보드용 축약 라벨 — 좁은 셀에서 줄바꿈되지 않도록 짧게.
-export const REVIEW_STATUS_SHORT_LABEL: Record<ReviewStatus, string> = {
-  green: "정상",
-  yellow: "임박",
-  red: "기한초과",
-  unknown: "미확인",
-};
+// 목록/대시보드용 라벨 — 상세와 동일(이미 짧음).
+export const REVIEW_STATUS_SHORT_LABEL: Record<ReviewStatus, string> = REVIEW_STATUS_LABEL;
 
 export function formatDate(d: Date | string): string {
   const date = typeof d === "string" ? new Date(d) : d;

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { REVIEW_STATUS_COLOR, REVIEW_STATUS_SHORT_LABEL } from "@/lib/format";
+import { RevisionStatusBadge } from "@/components/RevisionStatusBadge";
 import type { ReviewStatus } from "@/lib/msds/reviewStatus";
 
 export type CardProductSummary = {
@@ -11,6 +12,7 @@ export type CardProductSummary = {
   chemicalsActFlag: boolean;
   categoryFlags: Record<string, boolean>;
   reviewStatus: ReviewStatus;
+  manuallyChecked: boolean;
   ppeText: string | null;
 };
 
@@ -23,13 +25,13 @@ export type CardSummary = {
   products: CardProductSummary[];
 };
 
-const REVIEW_ORDER: Record<ReviewStatus, number> = { red: 0, yellow: 1, unknown: 2, green: 3 };
+const REVIEW_ORDER: Record<ReviewStatus, number> = { needs_check: 0, no_date: 1, ok: 2 };
 
 function worstReviewStatus(products: CardProductSummary[]): ReviewStatus {
-  if (products.length === 0) return "unknown";
+  if (products.length === 0) return "no_date";
   return products.reduce<ReviewStatus>(
     (worst, p) => (REVIEW_ORDER[p.reviewStatus] < REVIEW_ORDER[worst] ? p.reviewStatus : worst),
-    "green"
+    "ok"
   );
 }
 
@@ -121,7 +123,7 @@ export function DashboardCardGrid({
                             {c.label.replace(" 대상 유해인자", "")}
                           </th>
                         ))}
-                        <th className="whitespace-nowrap px-3 py-2 font-medium">개정주기</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-medium">개정확인여부</th>
                         <th className="px-3 py-2 font-medium">상세</th>
                       </tr>
                     </thead>
@@ -138,9 +140,11 @@ export function DashboardCardGrid({
                             </td>
                           ))}
                           <td className="whitespace-nowrap px-3 py-2">
-                            <span className={`rounded-full px-2 py-1 text-xs font-medium ${REVIEW_STATUS_COLOR[p.reviewStatus]}`}>
-                              {REVIEW_STATUS_SHORT_LABEL[p.reviewStatus]}
-                            </span>
+                            <RevisionStatusBadge
+                              mixtureId={p.mixtureId}
+                              status={p.reviewStatus}
+                              manuallyChecked={p.manuallyChecked}
+                            />
                           </td>
                           <td className="px-3 py-2">
                             <Link href={`/mixtures/${p.mixtureId}`} className="text-xs text-zinc-500 underline hover:text-zinc-800">

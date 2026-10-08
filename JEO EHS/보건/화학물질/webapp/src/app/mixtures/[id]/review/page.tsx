@@ -31,6 +31,7 @@ export default async function ReviewPage(props: PageProps<"/mixtures/[id]/review
         initialWorkProcess={mixture.workProcess}
         initialRevisionDate={mixture.revisionDate}
         initialReviewCycleYears={mixture.reviewCycleYears}
+        initialRevisionCheckedFor={mixture.revisionCheckedFor}
         initialPpeText={mixture.ppeText}
         departments={departments}
         positionsByDepartment={positionsByDepartment}

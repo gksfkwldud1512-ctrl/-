@@ -20,6 +20,7 @@ export default async function DashboardPage() {
         chemicalsActFlag: r.chemicalsActFlag,
         categoryFlags: { ...r.categoryFlags },
         reviewStatus: r.reviewStatus,
+        manuallyChecked: r.manuallyChecked,
         ppeText: r.ppeText,
       });
     } else {

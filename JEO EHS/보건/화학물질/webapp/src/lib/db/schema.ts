@@ -61,6 +61,8 @@ export const mixtures = pgTable("mixtures", {
   workProcess: text("work_process"), // 사용 공정(=사원명부 포지션 라벨) — 부서 선택에 종속된 드롭다운
   revisionDate: text("revision_date"), // MSDS 최근 개정일자(YYYY-MM-DD), 자동추출 시도 + 검토화면에서 보정
   reviewCycleYears: integer("review_cycle_years"), // MSDS 재검토 주기(년), 자동추출 시도 + 검토화면에서 보정
+  revisionCheckedFor: text("revision_checked_for"), // 수동 "변경사항 없음" 확인한 개정일(revisionDate와 같을 때만 유효)
+  revisionCheckedAt: timestamp("revision_checked_at"), // 수동 확인한 시각
   ppeText: text("ppe_text"), // MSDS 8장(노출방지 및 개인보호구) 원문 발췌, 자동추출 시도
   pdfBlobUrl: text("pdf_blob_url").notNull(),
   pdfFilename: text("pdf_filename").notNull(),

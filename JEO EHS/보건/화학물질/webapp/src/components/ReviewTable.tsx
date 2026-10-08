@@ -27,6 +27,7 @@ export function ReviewTable({
   initialWorkProcess,
   initialRevisionDate,
   initialReviewCycleYears,
+  initialRevisionCheckedFor,
   initialPpeText,
   departments,
   positionsByDepartment,
@@ -40,6 +41,7 @@ export function ReviewTable({
   initialWorkProcess: string | null;
   initialRevisionDate: string | null;
   initialReviewCycleYears: number | null;
+  initialRevisionCheckedFor: string | null;
   initialPpeText: string | null;
   departments: string[];
   positionsByDepartment: Record<string, string[]>;
@@ -58,10 +60,7 @@ export function ReviewTable({
     initialReviewCycleYears !== null ? String(initialReviewCycleYears) : ""
   );
   const [ppeText, setPpeText] = useState(initialPpeText ?? "");
-  const reviewStatus = computeReviewStatus(
-    revisionDate || null,
-    reviewCycleYears ? Number(reviewCycleYears) : null
-  );
+  const reviewStatus = computeReviewStatus(revisionDate || null, initialRevisionCheckedFor);
   const processOptions = useMemo(
     () => positionsByDepartment[department] ?? [],
     [department, positionsByDepartment]
@@ -248,7 +247,7 @@ export function ReviewTable({
           </div>
         )}
         <div className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-zinc-700">개정주기</span>
+          <span className="text-sm font-medium text-zinc-700">개정일 / 재검토주기</span>
           <div className="flex items-center gap-2">
             <input
               type="date"

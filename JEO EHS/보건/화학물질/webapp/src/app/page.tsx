@@ -12,10 +12,9 @@ import {
   OVERALL_VERDICT_COLOR,
   OVERALL_VERDICT_SHORT_LABEL,
   MATERIAL_TYPE_LABEL,
-  REVIEW_STATUS_COLOR,
-  REVIEW_STATUS_SHORT_LABEL,
 } from "@/lib/format";
-import { computeReviewStatus } from "@/lib/msds/reviewStatus";
+import { RevisionStatusBadge } from "@/components/RevisionStatusBadge";
+import { computeReviewStatus, isManuallyChecked } from "@/lib/msds/reviewStatus";
 import { INDUSTRIAL_SAFETY_ACT_CATEGORIES } from "@/lib/law/categories";
 import type { MaterialType } from "@/lib/db/schema";
 
@@ -45,7 +44,7 @@ function MixtureTable({
             <th className="whitespace-nowrap px-3 py-3 font-medium">부서/공정</th>
             <th className="whitespace-nowrap px-3 py-3 font-medium">화관법 유해물질</th>
             <th className="whitespace-nowrap px-3 py-3 font-medium">산안법 해당</th>
-            <th className="whitespace-nowrap px-3 py-3 font-medium">개정주기</th>
+            <th className="whitespace-nowrap px-3 py-3 font-medium">개정확인여부</th>
             <th className="whitespace-nowrap px-3 py-3 font-medium">세부물질</th>
             <th className="whitespace-nowrap px-3 py-3 font-medium"></th>
           </tr>
@@ -55,7 +54,7 @@ function MixtureTable({
             const detailHref = m.status === "confirmed" ? `/mixtures/${m.id}` : `/mixtures/${m.id}/review`;
             const names = hazardousNames.get(m.id) ?? [];
             const flags = categoryFlags.get(m.id) ?? new Set<string>();
-            const reviewStatus = computeReviewStatus(m.revisionDate, m.reviewCycleYears);
+            const reviewStatus = computeReviewStatus(m.revisionDate, m.revisionCheckedFor);
             return (
               <tr key={m.id} className="hover:bg-zinc-50">
                 <td className="px-3 py-3 text-zinc-400">{idx + 1}</td>
@@ -110,9 +109,11 @@ function MixtureTable({
                   )}
                 </td>
                 <td className="px-3 py-3">
-                  <span className={`w-fit whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${REVIEW_STATUS_COLOR[reviewStatus]}`}>
-                    {REVIEW_STATUS_SHORT_LABEL[reviewStatus]}
-                  </span>
+                  <RevisionStatusBadge
+                    mixtureId={m.id}
+                    status={reviewStatus}
+                    manuallyChecked={isManuallyChecked(m.revisionDate, m.revisionCheckedFor)}
+                  />
                 </td>
                 <td className="px-3 py-3">
                   <Link

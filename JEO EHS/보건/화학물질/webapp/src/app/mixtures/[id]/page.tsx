@@ -7,12 +7,11 @@ import {
   OVERALL_VERDICT_COLOR,
   OVERALL_VERDICT_LABEL,
   MATERIAL_TYPE_LABEL,
-  REVIEW_STATUS_COLOR,
-  REVIEW_STATUS_LABEL,
   formatDate,
   formatThreshold,
 } from "@/lib/format";
-import { computeReviewStatus } from "@/lib/msds/reviewStatus";
+import { RevisionStatusBadge } from "@/components/RevisionStatusBadge";
+import { computeReviewStatus, isManuallyChecked, REVISION_RECHECK_YEARS } from "@/lib/msds/reviewStatus";
 import { INDUSTRIAL_SAFETY_ACT_CATEGORIES } from "@/lib/law/categories";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +27,7 @@ export default async function MixtureDetailPage(props: PageProps<"/mixtures/[id]
   );
   const refs = await getReferencesByIds(refIds);
   const refMap = new Map(refs.map((r) => [r.id, r]));
-  const reviewStatus = computeReviewStatus(mixture.revisionDate, mixture.reviewCycleYears);
+  const reviewStatus = computeReviewStatus(mixture.revisionDate, mixture.revisionCheckedFor);
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-6 py-10">
@@ -48,8 +47,14 @@ export default async function MixtureDetailPage(props: PageProps<"/mixtures/[id]
               {OVERALL_VERDICT_LABEL[mixture.overallVerdict]}
             </span>
           )}
-          <span className={`rounded-full px-3 py-1 text-sm font-medium ${REVIEW_STATUS_COLOR[reviewStatus]}`}>
-            개정주기: {REVIEW_STATUS_LABEL[reviewStatus]}
+          <span className="flex items-center gap-1.5 text-sm text-zinc-500">
+            개정확인여부:
+            <RevisionStatusBadge
+              mixtureId={mixture.id}
+              status={reviewStatus}
+              manuallyChecked={isManuallyChecked(mixture.revisionDate, mixture.revisionCheckedFor)}
+              size="md"
+            />
           </span>
         </div>
         <p className="mt-1 text-sm text-zinc-500">
@@ -62,9 +67,10 @@ export default async function MixtureDetailPage(props: PageProps<"/mixtures/[id]
           {mixture.revisionDate && ` · MSDS 개정일: ${mixture.revisionDate}`}
           {mixture.reviewCycleYears && ` (재검토주기 ${mixture.reviewCycleYears}년)`}
         </p>
-        {reviewStatus === "red" && (
+        {reviewStatus === "needs_check" && (
           <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800">
-            재검토 기한이 지났습니다 — 공급업체에 신규 MSDS를 요청해야 합니다.
+            MSDS 개정일이 {REVISION_RECHECK_YEARS}년을 넘었습니다 — 공급업체에 재개정 여부를 확인하세요. 변경사항이
+            없으면 &apos;재개정확인필요&apos; 배지를 눌러 확인 처리할 수 있습니다.
           </p>
         )}
         <a

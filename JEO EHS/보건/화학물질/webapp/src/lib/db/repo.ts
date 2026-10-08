@@ -12,7 +12,7 @@ import {
 import { parsePercent } from "@/lib/parsing/percent";
 import { determineIngredientVerdict, determineOverallVerdict, normalizeCas } from "@/lib/match/verdict";
 import { INDUSTRIAL_SAFETY_ACT_CATEGORY_KEYS } from "@/lib/law/categories";
-import { computeReviewStatus } from "@/lib/msds/reviewStatus";
+import { computeReviewStatus, isManuallyChecked } from "@/lib/msds/reviewStatus";
 import { COMMON_DEPARTMENT, PROCESS_COMMON_DEPARTMENT, PROCESS_COMMON_POSITION } from "@/lib/constants";
 
 export type DraftIngredientInput = {
@@ -161,6 +161,22 @@ export async function replaceIngredients(
   }
 }
 
+/** 개정확인 수동 처리 — checked=true면 현재 개정일에 대해 "변경사항 없음"으로 저장, false면 해제. */
+export async function setRevisionChecked(mixtureId: string, checked: boolean): Promise<boolean> {
+  const [m] = await db.select({ revisionDate: mixtures.revisionDate }).from(mixtures).where(eq(mixtures.id, mixtureId));
+  if (!m) return false;
+  if (checked && !m.revisionDate) return false; // 개정일이 없으면 확인 대상이 아님
+  await db
+    .update(mixtures)
+    .set(
+      checked
+        ? { revisionCheckedFor: m.revisionDate, revisionCheckedAt: new Date() }
+        : { revisionCheckedFor: null, revisionCheckedAt: null }
+    )
+    .where(eq(mixtures.id, mixtureId));
+  return true;
+}
+
 /** 사원명부(employees) 기반 부서/포지션 드롭다운 옵션 — 부서별로 소속 포지션 라벨을 묶어서 반환. */
 export async function getDepartmentPositionOptions(): Promise<{
   departments: string[];
@@ -284,6 +300,7 @@ export type DashboardRow = {
   chemicalsActFlag: boolean;
   categoryFlags: Record<string, boolean>; // INDUSTRIAL_SAFETY_ACT_CATEGORY_KEYS 각각의 O/X
   reviewStatus: ReturnType<typeof computeReviewStatus>;
+  manuallyChecked: boolean;
   ppeText: string | null;
 };
 
@@ -311,7 +328,7 @@ export async function getDashboardData(): Promise<DashboardRow[]> {
 
   const rows: DashboardRow[] = [];
   for (const m of confirmedMixtures) {
-    const reviewStatus = computeReviewStatus(m.revisionDate, m.reviewCycleYears);
+    const reviewStatus = computeReviewStatus(m.revisionDate, m.revisionCheckedFor);
     const mixtureIngredientsList = ingredientsByMixture.get(m.id) ?? [];
     for (const ing of mixtureIngredientsList) {
       const categoryFlags: Record<string, boolean> = {};
@@ -330,6 +347,7 @@ export async function getDashboardData(): Promise<DashboardRow[]> {
         chemicalsActFlag: ing.matchStatus === "matched_hazardous",
         categoryFlags,
         reviewStatus,
+        manuallyChecked: isManuallyChecked(m.revisionDate, m.revisionCheckedFor),
         ppeText: m.ppeText,
       });
     }
