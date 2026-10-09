@@ -74,7 +74,7 @@ function loadArDepositsWithCards() {
     payer: `카드 ${c.cardCompany || ''} ${c.cardNo || ''}`.trim(),
     note: `현장 카드결제 (승인 ${c.approvalNo})`,
     matchedVendor: c.vendorName, manual: true, isCard: true, splits: [],
-    monthAssign: [{ month: c.month, amount: c.amount }],
+    monthAssign: c.assign || [{ month: c.month, amount: c.amount }],
   }));
   return readJSON(AR_DEPOSITS_FILE, []).concat(cards);
 }
@@ -2093,7 +2093,7 @@ app.get('/api/ar/card-candidates', (req, res) => {
     const { buildArMatrix } = require('./lib/arLedger');
     const arMatrix   = buildArMatrix(DATA_DIR);
     const matched    = readJSON(AR_CARD_PAYMENTS_FILE, []);
-    const matchedIds = new Set(matched.map(c => c.id));
+    const matchedIds = new Set(matched.map(c => c.cardId || c.id));
 
     // 추천 근거 1: 외상 업체 월 매출과 금액 정확히 일치 (결제일 이전 달만)
     const charges = [];
@@ -2133,6 +2133,255 @@ app.get('/api/ar/card-candidates', (req, res) => {
   }
 });
 
+// ── 미입금 월 ↔ 카드결제 금액 일치 자동 판단 ──────────────────
+// 미수 금액과 같은 카드결제(BOS에 없고 이지샵·나이스에만 있는 건)가 있으면 현장 카드결제로 판단.
+// 같은 날 같은 카드로 나눠 긁은 결제(최대 3건)는 합쳐서 비교. 카드 금액은 원단위 절사되는 경우가
+// 있어 AR_CARD_ROUND_TOL 이내 차이는 일치로 본다.
+const AR_CARD_ROUND_TOL      = 100;
+// "후보"(사람이 보고 판단) 허용 차이 — 일반 업체는 1%·5천원 이내, 마감일 업체는 기간 경계 거래가
+// 앞뒤로 넘어가는 경우가 있어 15% 이내
+const AR_CARD_NEAR_TOL        = { rate: 0.01, max: 5000 };
+const AR_CARD_NEAR_TOL_CUTOFF = { rate: 0.15, max: 300000 };
+const AR_CARD_WINDOW_DAYS        = 70;  // 일반 업체: 그 달 1일부터 탐색 일수
+const AR_CARD_WINDOW_DAYS_CUTOFF = 15;  // 마감일 업체: 기간 마감일(25일)부터 탐색 일수
+// 26일~다음달 25일 기준으로 결제하는 업체 (기간 M = 전월 26일 ~ M월 25일). 같은 그룹은 한 번에 합쳐 결제하기도 함
+const AR_CUTOFF_VENDORS = { '다올이앤씨': 25, '다올이앤씨(주)보수보강': 25 };
+const AR_PAY_GROUPS     = [['다올이앤씨', '다올이앤씨(주)보수보강']];
+
+function addMonths(ym, n) {
+  const [y, m] = ym.split('-').map(Number);
+  const t = y * 12 + (m - 1) + n;
+  return `${Math.floor(t / 12)}-${String(t % 12 + 1).padStart(2, '0')}`;
+}
+
+// 마감일 업체의 기간별 외상 매출 { 'YYYY-MM': { amount, from, to, assign:[{month,amount}] } }
+function buildCutoffPeriods(name, cutDay) {
+  const periods = {};
+  for (const f of fs.readdirSync(DATA_DIR).filter(f => /^vendors_\d{4}_\d{2}\.json$/.test(f))) {
+    const v = readJSON(path.join(DATA_DIR, f), []).find(x => x.name === name && x.hasCredit);
+    for (const t of v?.txs || []) {
+      const [y, m, d] = t.date.split('/').map(Number);
+      const cal = `${y}-${String(m).padStart(2, '0')}`;
+      const key = d > cutDay ? addMonths(cal, 1) : cal;
+      const p = periods[key] || (periods[key] = {
+        amount: 0, from: `${addMonths(key, -1)}-${cutDay + 1}`, to: `${key}-${String(cutDay).padStart(2, '0')}`, parts: {},
+      });
+      p.amount += t.amount;
+      p.parts[cal] = (p.parts[cal] || 0) + t.amount;
+    }
+  }
+  for (const p of Object.values(periods)) {
+    p.assign = Object.entries(p.parts).sort().map(([month, amount]) => ({ month, amount }));
+    delete p.parts;
+  }
+  return periods;
+}
+
+// 카드에만 있는 결제(이미 업체에 매칭한 건 제외)
+function listUnmatchedCardPayments() {
+  const used = new Set(readJSON(AR_CARD_PAYMENTS_FILE, []).map(c => c.cardId || c.id));
+  const cards = [];
+  for (const f of fs.readdirSync(DAILY_DIR).filter(f => f.endsWith('.json')).sort()) {
+    const d = readJSON(path.join(DAILY_DIR, f), {});
+    runMatching(d);
+    const date = f.slice(0, 10);
+    for (const e of d.matching?.errors || []) {
+      if (e.type !== 'easy_only' || !(e.easyAmount > 0)) continue;
+      const id = `${date}|${e.approvalNo}`;
+      if (used.has(id)) continue;
+      cards.push({ id, date, approvalNo: e.approvalNo, cardCompany: e.cardCompany, cardNo: e.cardNo,
+                   amount: e.easyAmount, transTime: e.transTime || '', source: e.source || '' });
+    }
+  }
+  return cards;
+}
+
+// 같은 날·같은 카드 결제 묶음에서 1~3건 조합 (묶음 전체도 포함)
+function cardCombos(cards) {
+  const batches = {};
+  cards.forEach(c => (batches[`${c.date}|${c.cardNo}`] = batches[`${c.date}|${c.cardNo}`] || []).push(c));
+  const combos = [];
+  for (const b of Object.values(batches)) {
+    const n = b.length;
+    b.forEach((c, i) => {
+      combos.push([c]);
+      if (n > 8) return;
+      for (let j = i + 1; j < n; j++) {
+        combos.push([c, b[j]]);
+        for (let k = j + 1; k < n; k++) combos.push([c, b[j], b[k]]);
+      }
+    });
+    if (n > 3 && n <= 8) combos.push(b);
+  }
+  return combos.map(cs => ({ cards: cs, date: cs[0].date, amount: cs.reduce((s, c) => s + c.amount, 0) }));
+}
+
+function daysBetween(a, b) { return Math.round((new Date(b) - new Date(a)) / 86400000); }
+
+// 미수 대상 목록: 일반 업체 = 달력 월 남은 금액, 마감일 업체 = 26~25 기간 합계(+그룹 합산)
+function buildArCardTargets(alloc) {
+  const targets = [];
+  const remainOf = (name, month) => (alloc[name]?.months || []).find(m => m.month === month)?.remaining || 0;
+  for (const [name, a] of Object.entries(alloc)) {
+    if (AR_CUTOFF_VENDORS[name]) continue;
+    for (const m of a.months || []) {
+      if (!(m.remaining > 0)) continue;
+      targets.push({ key: `${name}|${m.month}`, label: `${Number(m.month.slice(5, 7))}월 미수`, from: `${m.month}-01`,
+                     amount: m.remaining, parts: [{ vendorName: name, assign: [{ month: m.month, amount: m.remaining }] }] });
+    }
+  }
+  // 이미 카드결제로 확인한 마감일 업체 기간 (업체|기간월)
+  const covered = new Set(readJSON(AR_CARD_PAYMENTS_FILE, []).flatMap(c => c.coverKeys || []));
+  const cutoffPeriods = {};
+  for (const [name, cut] of Object.entries(AR_CUTOFF_VENDORS)) {
+    if (!alloc[name]) continue;
+    cutoffPeriods[name] = buildCutoffPeriods(name, cut);
+    for (const [pm, p] of Object.entries(cutoffPeriods[name])) {
+      // 기간에 걸친 달력 월이 아직 미수이고, 그 기간을 카드로 확인한 적 없을 때만 대상
+      if (covered.has(`${name}|${pm}`)) continue;
+      if (!p.assign.some(x => remainOf(name, x.month) > 0)) continue;
+      targets.push({ key: `${name}|${pm}`, period: pm, label: `${p.from.slice(5).replace('-', '/')}~${p.to.slice(5).replace('-', '/')} 기간`,
+                     from: p.to, amount: p.amount, parts: [{ vendorName: name, assign: p.assign }] });
+    }
+  }
+  for (const group of AR_PAY_GROUPS) {
+    const months = new Set(group.flatMap(n => Object.keys(cutoffPeriods[n] || {})));
+    for (const pm of months) {
+      const members = group.filter(n => cutoffPeriods[n]?.[pm]);
+      if (members.length < 2 || members.some(n => covered.has(`${n}|${pm}`))) continue;
+      const parts = members.map(n => ({ vendorName: n, assign: cutoffPeriods[n][pm].assign }));
+      if (!parts.some(pt => pt.assign.some(x => remainOf(pt.vendorName, x.month) > 0))) continue;
+      const p0 = cutoffPeriods[members[0]][pm];
+      targets.push({ key: `${group.join('+')}|${pm}`, period: pm, group: members,
+                     label: `${p0.from.slice(5).replace('-', '/')}~${p0.to.slice(5).replace('-', '/')} 기간 (${members.length}개 업체 합산)`,
+                     from: p0.to, amount: members.reduce((s, n) => s + cutoffPeriods[n][pm].amount, 0), parts });
+    }
+  }
+  return targets;
+}
+
+function computeArCardMatches() {
+  const { buildArMatrix, allocateArDeposits } = require('./lib/arLedger');
+  const arMatrix = buildArMatrix(DATA_DIR);
+  const alloc    = allocateArDeposits(arMatrix, loadArDepositsWithCards(), loadArManualPaidSet(), loadArDiscountVendors());
+  const combos   = cardCombos(listUnmatchedCardPayments());
+  const targets  = buildArCardTargets(alloc);
+
+  for (const t of targets) {
+    const days = t.period ? AR_CARD_WINDOW_DAYS_CUTOFF : AR_CARD_WINDOW_DAYS;
+    const tol  = t.period ? AR_CARD_NEAR_TOL_CUTOFF : AR_CARD_NEAR_TOL;
+    const inWindow = combos.filter(c => c.date >= t.from && daysBetween(t.from, c.date) <= days);
+    const exact = inWindow.filter(c => Math.abs(c.amount - t.amount) <= AR_CARD_ROUND_TOL);
+    if (exact.length) {
+      t.options = exact.map(c => ({ ...c, diff: c.amount - t.amount }));
+      t.status  = 'match';
+    } else {
+      // 가까운 금액의 묶음(차이 큰 순 제외) — 사람이 보고 판단
+      t.options = inWindow
+        .filter(c => Math.abs(c.amount - t.amount) <= Math.min(tol.max, t.amount * tol.rate))
+        .map(c => ({ ...c, diff: c.amount - t.amount }))
+        .sort((a, b) => Math.abs(a.diff) - Math.abs(b.diff)).slice(0, 3);
+      t.status  = t.options.length ? 'candidate' : 'none';
+    }
+  }
+  // 그룹 합산 대상은 업체별 단독 일치가 하나도 없을 때만 사용 (단독 일치가 우선)
+  for (const t of targets.filter(x => x.group)) {
+    const singleExact = t.group.some(n => targets.some(x => x.key === `${n}|${t.period}` && x.status === 'match'));
+    if (singleExact) t.status = 'none';
+  }
+  // 같은 카드가 여러 대상에 일치하면 "후보"로 낮춤 (사람이 고르도록)
+  const useCount = {};
+  targets.filter(t => t.status === 'match').forEach(t =>
+    new Set(t.options.flatMap(o => o.cards.map(c => c.id))).forEach(id => { useCount[id] = (useCount[id] || 0) + 1; }));
+  for (const t of targets) {
+    if (t.status !== 'match') continue;
+    const uniq = t.options.filter(o => o.cards.every(c => useCount[c.id] === 1));
+    if (t.options.length > 1 || !uniq.length) t.status = 'candidate';
+  }
+  return targets.filter(t => t.status !== 'none');
+}
+
+app.get('/api/ar/card-auto-match', (req, res) => {
+  try {
+    const targets = computeArCardMatches();
+    // 화면 셀(업체|달력월)에서 바로 찾을 수 있게 색인
+    const byCell = {};
+    for (const t of targets) {
+      for (const pt of t.parts) {
+        for (const a of pt.assign) {
+          const k = `${pt.vendorName}|${a.month}`;
+          (byCell[k] = byCell[k] || []).push(t.key);
+        }
+      }
+    }
+    res.json({ ok: true, targets, byCell });
+  } catch (e) {
+    console.error('[ar/card-auto-match]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// 카드결제로 확인 처리 — 서버에서 다시 계산해 선택한 조합을 업체·월별로 나눠 저장
+app.post('/api/ar/card-auto-match/confirm', (req, res) => {
+  try {
+    const { key, optionIndex = 0 } = req.body;
+    const t = computeArCardMatches().find(x => x.key === key);
+    const opt = t?.options?.[optionIndex];
+    if (!opt) return res.status(400).json({ ok: false, error: '일치하는 카드결제를 다시 찾지 못했습니다. 새로고침 후 다시 시도하세요.' });
+
+    // 배분할 칸 목록 (업체·월·금액) — 카드 금액을 앞 칸부터 채움
+    const slots = t.parts.flatMap(pt => pt.assign.map(a => ({ vendorName: pt.vendorName, month: a.month, left: a.amount })));
+    const list = readJSON(AR_CARD_PAYMENTS_FILE, []);
+    const matchKey = `${key}|${Date.now()}`;
+    let si = 0;
+    for (const c of opt.cards) {
+      let left = c.amount;
+      const byVendor = {};
+      while (left > 0 && si < slots.length) {
+        const s = slots[si];
+        const amt = Math.min(left, s.left);
+        (byVendor[s.vendorName] = byVendor[s.vendorName] || []).push({ month: s.month, amount: amt });
+        s.left -= amt; left -= amt;
+        if (s.left <= 0) si++;
+      }
+      // 절사 차액 등 남은 금액은 마지막 칸에 붙임
+      if (left > 0 && slots.length) {
+        const s = slots[slots.length - 1];
+        const arr = byVendor[s.vendorName] = byVendor[s.vendorName] || [];
+        const last = arr.find(x => x.month === s.month);
+        if (last) last.amount += left; else arr.push({ month: s.month, amount: left });
+      }
+      for (const [vendorName, assign] of Object.entries(byVendor)) {
+        const amount = assign.reduce((s, x) => s + x.amount, 0);
+        list.push({
+          id: `${c.id}#${vendorName}`, cardId: c.id, matchKey, date: c.date, approvalNo: c.approvalNo,
+          cardCompany: c.cardCompany, cardNo: c.cardNo, amount, vendorName,
+          month: assign[assign.length - 1].month, assign, auto: true,
+          coverKeys: t.period ? t.parts.map(pt => `${pt.vendorName}|${t.period}`) : [], matchedAt: new Date().toISOString(),
+        });
+      }
+    }
+    // 카드 금액이 원단위 절사로 몇십원 적으면 그 차액도 같이 채워 미수가 남지 않게 함 (취소 시 함께 삭제)
+    const short = slots.reduce((s, x) => s + Math.max(0, x.left), 0);
+    if (short > 0 && short <= AR_CARD_ROUND_TOL) {
+      const lastCard = opt.cards[opt.cards.length - 1];
+      for (const s of slots.filter(x => x.left > 0)) {
+        list.push({
+          id: `${matchKey}#round#${s.vendorName}#${s.month}`, cardId: null, matchKey, date: lastCard.date,
+          approvalNo: '', cardCompany: '원단위 절사', cardNo: '', amount: s.left, vendorName: s.vendorName,
+          month: s.month, assign: [{ month: s.month, amount: s.left }], auto: true, rounding: true,
+          coverKeys: [], matchedAt: new Date().toISOString(),
+        });
+      }
+    }
+    writeJSON(AR_CARD_PAYMENTS_FILE, list);
+    res.json({ ok: true, matchKey });
+  } catch (e) {
+    console.error('[ar/card-auto-match/confirm]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 app.post('/api/ar/card-payments', (req, res) => {
   try {
     const { id, date, approvalNo, cardCompany, cardNo, amount, vendorName, month } = req.body;
@@ -2152,7 +2401,9 @@ app.post('/api/ar/card-payments', (req, res) => {
 
 app.delete('/api/ar/card-payments', (req, res) => {
   try {
-    writeJSON(AR_CARD_PAYMENTS_FILE, readJSON(AR_CARD_PAYMENTS_FILE, []).filter(c => c.id !== req.body.id));
+    // matchKey가 오면 자동 판단으로 함께 저장된 묶음(여러 카드·여러 업체) 전체 취소
+    const { id, matchKey } = req.body;
+    writeJSON(AR_CARD_PAYMENTS_FILE, readJSON(AR_CARD_PAYMENTS_FILE, []).filter(c => matchKey ? c.matchKey !== matchKey : c.id !== id));
     res.json({ ok: true });
   } catch (e) {
     console.error('[ar/card-payments:delete]', e);

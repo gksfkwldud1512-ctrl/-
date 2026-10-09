@@ -1283,7 +1283,6 @@
     </div>
 
     <!-- 업체별 상세(입금-충당 내역) -->
-    <div id="ar-vendor-detail" style="margin-top:12px;"></div>
 
   </section>
 
@@ -1311,6 +1310,19 @@
       </div>
       <div class="modal-body" style="overflow-x:auto;max-height:calc(85vh - 60px);overflow-y:auto;">
         <div id="ar-deposit-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 외상 미수금: 업체 정보 모달 (거래처명 클릭) -->
+  <div id="ar-vendor-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeArVendorModal()">
+    <div class="modal-box" style="width:92vw;max-width:860px;max-height:88vh;">
+      <div class="modal-head" style="display:flex;align-items:center;justify-content:space-between;">
+        <span id="ar-vendor-modal-title">업체 정보</span>
+        <button style="background:none;border:none;color:#fff;font-size:16px;cursor:pointer;" onclick="closeArVendorModal()">✕</button>
+      </div>
+      <div class="modal-body" style="overflow-x:auto;max-height:calc(88vh - 60px);overflow-y:auto;">
+        <div id="ar-vendor-detail"></div>
       </div>
     </div>
   </div>
