@@ -1894,6 +1894,10 @@ app.get('/api/ar/summary', (req, res) => {
 
     const vendors = [...arMatrix.byVendor.keys()].sort((a, b) => a.localeCompare(b, 'ko')).map(name => {
       const a = alloc[name];
+      if (AR_FUEL_ONLY_CARD_VENDORS[name]) {
+        const split = vendorMonthSplit(name);
+        a.months.forEach(m => { m.fuel = split[m.month]?.fuel || 0; m.nonFuel = split[m.month]?.nonFuel || 0; });
+      }
       return {
         name,
         aliases: aliasMap[name] || [],   // 등록된 입금계좌명(통장 적요와 업체명이 다를 때)
@@ -1904,6 +1908,7 @@ app.get('/api/ar/summary', (req, res) => {
         totalPaid:   a.totalPaid,
         totalDiscount: a.totalDiscount || 0,
         discountSetting: discounts[name] || null,   // 할인 입금 업체 설정 { maxDiff }
+        fuelOnlyCard: !!AR_FUEL_ONLY_CARD_VENDORS[name],   // 유류만 매달 카드결제, 유외상품은 모아서 결제
         remaining:   a.remaining,
         surplus:     a.surplus,
         matched:     a.remaining <= 0,
@@ -2147,6 +2152,31 @@ const AR_CARD_WINDOW_DAYS_CUTOFF = 15;  // 마감일 업체: 기간 마감일(25
 // 26일~다음달 25일 기준으로 결제하는 업체 (기간 M = 전월 26일 ~ M월 25일). 같은 그룹은 한 번에 합쳐 결제하기도 함
 const AR_CUTOFF_VENDORS = { '다올이앤씨': 25, '다올이앤씨(주)보수보강': 25 };
 const AR_PAY_GROUPS     = [['다올이앤씨', '다올이앤씨(주)보수보강']];
+// 유류는 매달 카드로, 유외상품은 몇 달(약 6개월)치를 모아 따로 결제하는 업체 →
+// 카드 비교 시 유류분과 유외 누적분을 나눠서 비교
+const AR_FUEL_ONLY_CARD_VENDORS = { '풀무원외상6576': { maxNonFuelMonths: 7 } };
+const AR_FUEL_PRODUCTS = ['휘발유', '경유', '등유'];
+
+// 업체 월별 외상 매출을 유류/유외로 분리 { 'YYYY-MM': { fuel, nonFuel } }
+function vendorMonthSplit(name) {
+  const out = {};
+  for (const f of fs.readdirSync(DATA_DIR).filter(f => /^vendors_\d{4}_\d{2}\.json$/.test(f))) {
+    const v = readJSON(path.join(DATA_DIR, f), []).find(x => x.name === name && x.hasCredit);
+    if (!v) continue;
+    const ym = f.slice(8, 15).replace('_', '-');
+    const o = out[ym] = { fuel: 0, nonFuel: 0 };
+    for (const t of v.txs || []) {
+      if (AR_FUEL_PRODUCTS.includes(t.product)) o.fuel += t.amount; else o.nonFuel += t.amount;
+    }
+  }
+  return out;
+}
+
+// 카드번호 비교용 (이지샵 9445-2078-****-151*, 나이스 9445-20**-****-1516 처럼 가리는 자리가 달라 앞4+12~14번째 숫자로 비교)
+function cardKey(no) {
+  const d = String(no || '').replace(/-/g, '');
+  return d.length >= 15 ? d.slice(0, 4) + d.slice(12, 15) : d;
+}
 
 function addMonths(ym, n) {
   const [y, m] = ym.split('-').map(Number);
@@ -2219,11 +2249,44 @@ function cardCombos(cards) {
 function daysBetween(a, b) { return Math.round((new Date(b) - new Date(a)) / 86400000); }
 
 // 미수 대상 목록: 일반 업체 = 달력 월 남은 금액, 마감일 업체 = 26~25 기간 합계(+그룹 합산)
+// 유류분: 그 달 유류 금액 - 이미 들어온 금액. 유외분: 연속된 미수 달(2~N개월)의 유외 합계
+function buildFuelOnlyTargets(name, a, cfg) {
+  const split = vendorMonthSplit(name);
+  const out = [];
+  const due = (a.months || []).filter(m => m.remaining > 0);
+  for (const m of due) {
+    const sp = split[m.month] || { fuel: 0, nonFuel: 0 };
+    const fuelDue = sp.fuel - Math.max(0, m.paid || 0);
+    if (fuelDue > 0) {
+      out.push({ key: `${name}|${m.month}|fuel`, kind: 'fuel', label: `${Number(m.month.slice(5, 7))}월 유류분`,
+                 from: `${m.month}-01`, amount: fuelDue, parts: [{ vendorName: name, assign: [{ month: m.month, amount: fuelDue }] }] });
+    }
+  }
+  // 유외 누적: 미수 달 중 연속 구간 (그 달 미수 중 유외 몫 = min(남은 금액, 유외 금액))
+  const nf = due.map(m => ({ month: m.month, amount: Math.min(m.remaining, (split[m.month] || {}).nonFuel || 0) }))
+                .filter(x => x.amount > 0);
+  for (let i = 0; i < nf.length; i++) {
+    for (let j = i + 1; j < nf.length && j - i < cfg.maxNonFuelMonths; j++) {
+      const win = nf.slice(i, j + 1);
+      const ml = `${Number(win[0].month.slice(5, 7))}~${Number(win[win.length - 1].month.slice(5, 7))}월`;
+      out.push({ key: `${name}|${win[0].month}~${win[win.length - 1].month}|nonfuel`, kind: 'nonfuel',
+                 label: `${ml} 유외상품 누적`, from: `${win[win.length - 1].month}-01`,
+                 amount: win.reduce((s, x) => s + x.amount, 0),
+                 parts: [{ vendorName: name, assign: win.map(x => ({ month: x.month, amount: x.amount })) }] });
+    }
+  }
+  return out;
+}
+
 function buildArCardTargets(alloc) {
   const targets = [];
   const remainOf = (name, month) => (alloc[name]?.months || []).find(m => m.month === month)?.remaining || 0;
   for (const [name, a] of Object.entries(alloc)) {
     if (AR_CUTOFF_VENDORS[name]) continue;
+    if (AR_FUEL_ONLY_CARD_VENDORS[name]) {
+      targets.push(...buildFuelOnlyTargets(name, a, AR_FUEL_ONLY_CARD_VENDORS[name]));
+      continue;
+    }
     for (const m of a.months || []) {
       if (!(m.remaining > 0)) continue;
       targets.push({ key: `${name}|${m.month}`, label: `${Number(m.month.slice(5, 7))}월 미수`, from: `${m.month}-01`,
@@ -2284,6 +2347,19 @@ function computeArCardMatches() {
       t.status  = t.options.length ? 'candidate' : 'none';
     }
   }
+  // 유외 누적 대상: 그 업체가 쓰던 카드일 때만 "일치", 아니면 "후보"
+  const knownCards = {};
+  readJSON(AR_CARD_PAYMENTS_FILE, []).forEach(c => { if (c.cardNo) (knownCards[c.vendorName] = knownCards[c.vendorName] || new Set()).add(cardKey(c.cardNo)); });
+  targets.filter(t => t.kind === 'fuel' && t.status === 'match').forEach(t =>
+    t.options.forEach(o => o.cards.forEach(c => (knownCards[t.parts[0].vendorName] = knownCards[t.parts[0].vendorName] || new Set()).add(cardKey(c.cardNo)))));
+  for (const t of targets.filter(x => x.kind === 'nonfuel' && x.status !== 'none')) {
+    const known = knownCards[t.parts[0].vendorName] || new Set();
+    const exact = t.options.filter(o => Math.abs(o.diff) <= AR_CARD_ROUND_TOL);
+    const sameCard = exact.filter(o => o.cards.every(c => known.has(cardKey(c.cardNo))));
+    if (sameCard.length) { t.options = sameCard; t.status = 'match'; }
+    else if (exact.length) { t.options = exact; t.status = 'candidate'; }
+    else t.status = 'none';   // 유외 누적은 금액이 정확히 같을 때만 보여줌
+  }
   // 그룹 합산 대상은 업체별 단독 일치가 하나도 없을 때만 사용 (단독 일치가 우선)
   for (const t of targets.filter(x => x.group)) {
     const singleExact = t.group.some(n => targets.some(x => x.key === `${n}|${t.period}` && x.status === 'match'));
@@ -2297,6 +2373,13 @@ function computeArCardMatches() {
     if (t.status !== 'match') continue;
     const uniq = t.options.filter(o => o.cards.every(c => useCount[c.id] === 1));
     if (t.options.length > 1 || !uniq.length) t.status = 'candidate';
+  }
+  // 다른 대상에 확실히 일치한 카드는 후보에서 제외 (예: 이형찬 결제가 다른 업체 유외 누적 후보로 뜨는 것 방지)
+  const sureIds = new Set(targets.filter(t => t.status === 'match')
+    .flatMap(t => t.options.length === 1 ? t.options[0].cards.map(c => c.id) : []));
+  for (const t of targets.filter(x => x.status === 'candidate')) {
+    t.options = t.options.filter(o => !o.cards.some(c => sureIds.has(c.id)));
+    if (!t.options.length) t.status = 'none';
   }
   return targets.filter(t => t.status !== 'none');
 }

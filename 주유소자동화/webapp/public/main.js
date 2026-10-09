@@ -4220,6 +4220,8 @@ function arCellState(vendorName, m) {
   const keys = arState.cardAuto?.byCell?.[`${vendorName}|${m.month}`] || [];
   const ts = keys.map(k => arState.cardAuto.targets.find(t => t.key === k)).filter(Boolean);
   if (ts.some(t => t.status === 'match')) return { key: 'card', text: '카드일치', color: '#be185d', bg: '#fdf2f8' };
+  // 유류만 매달 카드결제하는 업체: 유류는 들어왔고 유외상품(몇 달치 모아 결제)만 남은 달
+  if (m.nonFuel > 0 && m.paid > 0 && m.remaining <= m.nonFuel) return { key: 'nonfuel', text: '유외 미수', color: '#b45309', bg: '#fffbeb' };
   if (ts.length) return { key: 'cand', text: '미수·카드후보', color: '#c2410c', bg: '#fff7ed' };
   return { key: 'due', text: '미수', color: '#dc2626', bg: '#fef2f2' };
 }
@@ -4259,6 +4261,7 @@ function renderArVendorTable() {
       <span><b style="color:#dc2626;">미수</b> 입금 안 됨·부족</span>
       <span><b style="color:#be185d;">카드일치</b> 이지샵·나이스에 같은 금액 카드결제 있음</span>
       <span><b style="color:#c2410c;">카드후보</b> 비슷한 금액 카드결제 있음</span>
+      <span><b style="color:#b45309;">유외 미수</b> 유류는 입금, 유외상품만 남음</span>
       <span>· 칸을 누르면 입금 상세·확인 처리, 거래처명을 누르면 업체 정보</span>
       ${arState.cardAutoLoading ? '<span style="color:#94a3b8;">카드결제 대조 중…</span>' : ''}
     </div>
@@ -4505,6 +4508,7 @@ function showArDepositModal(vendorName, month) {
       <div>매출 <strong>${arNum(m.charge)}</strong></div>
       <div>입금 <strong style="color:#0f766e;">${arNum(m.paid)}</strong></div>
       <div>${diffTxt}</div>
+      ${m.nonFuel != null ? `<div style="color:#64748b;">유류 ${arNum(m.fuel)} · 유외상품 ${arNum(m.nonFuel)} <span style="font-size:11px;">(유외는 몇 달치 모아 결제)</span></div>` : ''}
       <div>${m.remaining > 0 ? '<span class="badge badge-fail">미수</span>' : '<span class="badge badge-done">완료</span>'}</div>
       ${m.manualPaidCard ? '<div><span class="badge badge-done">확인 처리됨</span></div>' : ''}
     </div>
