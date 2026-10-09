@@ -2116,6 +2116,25 @@ function buildMatchingModal(date) {
     const sourceTag = src => src
       ? `<span style="border-radius:4px;padding:1px 6px;font-size:11px;${src === '나이스' ? 'background:#e0e7ff;color:#4338ca;' : 'background:#ccfbf1;color:#0f766e;'}">${esc(src)}</span>`
       : '-';
+    // 재확인 결과 — 세차·유외상품도 나이스로 결제될 수 있어 상품과 무관하게 이지샵·나이스 둘 다 + 앞뒤 날짜까지 확인
+    const md = d => d ? d.slice(5).replace('-', '/') : '';
+    const recheckCell = e => {
+      const r = e.recheck;
+      if (!r) return '-';
+      const c = r.crossDay;
+      if (e.type === 'bos_only') {
+        if (c && c.inBos) return `<span style="color:#b45309;">BOS 중복입력 의심 — ${md(c.date)} ${esc(c.source)}에 결제, BOS ${md(c.date)}에도 입력됨</span>`;
+        if (c) return `<span style="color:#0369a1;">날짜 차이 — 카드는 ${md(c.date)} ${esc(c.source)}</span>`;
+        const checked = (r.checkedSources || []).join('·') || '카드';
+        const miss = (r.notUploaded || []).length ? ` <span style="color:#b45309;">(${r.notUploaded.join('·')} 자료 미업로드)</span>` : '';
+        return `<span style="color:#dc2626;font-weight:600;">${esc(checked)} 모두 없음</span>${miss}`;
+      }
+      if (e.type === 'easy_only') {
+        if (c) return `<span style="color:#0369a1;">날짜 차이 — BOS ${md(c.date)}에 입력됨${c.inCard ? ' (그날 카드에도 있음)' : ''}</span>`;
+        return '<span style="color:#dc2626;font-weight:600;">BOS 앞뒤 3일에도 없음</span>';
+      }
+      return '-';
+    };
     const typeOrder = ['bos_only', 'easy_only', 'amount_mismatch'];
     let errSections = '';
     typeOrder.forEach(type => {
@@ -2132,6 +2151,7 @@ function buildMatchingModal(date) {
           ${type === 'amount_mismatch'
             ? '<th>BOS 금액</th><th>카드 금액</th><th>차액</th>'
             : `<th>${type === 'bos_only' ? 'BOS' : '카드'} 금액</th>`}
+          ${type !== 'amount_mismatch' ? '<th>재확인 결과</th>' : ''}
         </tr></thead>
         <tbody>${list.map(e => `<tr>
           <td><code>${esc(e.approvalNo)}</code></td>
@@ -2145,9 +2165,27 @@ function buildMatchingModal(date) {
                <td>${e.easyAmount.toLocaleString()}원</td>
                <td class="price-diff">${e.diff > 0 ? '+' : ''}${e.diff.toLocaleString()}원</td>`
             : `<td>${(e.bosAmount ?? e.easyAmount).toLocaleString()}원</td>`}
+          ${type !== 'amount_mismatch' ? `<td style="font-size:12px;">${recheckCell(e)}</td>` : ''}
         </tr>`).join('')}</tbody>
       </table>`;
     });
+
+    // 승인번호가 한 자리만 다르고 금액이 같은 쌍 → 같은 거래로 보고 정상 처리 (BOS 승인번호 입력 오타)
+    const notes = m.notes || [];
+    if (notes.length) {
+      errSections += `<p class="error-section-title" style="margin-top:16px;color:#64748b;">ℹ 승인번호 상이 — 금액 일치로 정상 처리 (BOS 승인번호 확인 권장)</p>
+      <table class="error-table">
+        <thead><tr><th>BOS 승인번호</th><th>카드 승인번호</th><th>출처</th><th>카드사</th><th>상품</th><th>금액</th></tr></thead>
+        <tbody>${notes.map(n => `<tr>
+          <td><code>${esc(n.approvalNo)}</code></td>
+          <td><code>${esc(n.cardApprovalNo)}</code></td>
+          <td>${sourceTag(n.source)}</td>
+          <td>${esc(n.cardCompany)}</td>
+          <td>${esc(n.product || '')}</td>
+          <td>${n.amount.toLocaleString()}원</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    }
 
     // ── 카드사별 차이 요약 테이블 ──────────────────────────────
     const byCo = {};
@@ -2179,8 +2217,8 @@ function buildMatchingModal(date) {
         <tbody>${coRows}</tbody>
       </table>` : '';
 
-    if (!errSections) {
-      errSections = '<p style="color:#15803d; font-weight:600; margin-top:12px;">✅ 모든 카드 거래가 정상 매칭됩니다.</p>';
+    if (!m.errors.length) {
+      errSections = errSections + '<p style="color:#15803d; font-weight:600; margin-top:12px;">✅ 모든 카드 거래가 정상 매칭됩니다.</p>';
     }
 
     // ── 차이 조정 섹션 ──────────────────────────────────────

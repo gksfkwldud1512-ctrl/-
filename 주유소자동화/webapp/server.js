@@ -947,9 +947,38 @@ app.post('/api/settings', (req, res) => {
 
 function dailyFile(date) { return path.join(DAILY_DIR, `${date}.json`); }
 
-function runMatching(daily) {
+// 카드 대사 재확인용 앞뒤 날짜 범위 — BOS·카드 날짜가 하루이틀 어긋나 들어간 건 탐색
+const MATCH_NEIGHBOR_DAYS = 3;
+const NICE_START_DATE     = '2026-09-04';
+
+function shiftDate(date, n) {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+// loadDay(date) → 그 날짜 daily JSON (없으면 null). 가까운 날짜부터 순서대로 반환
+function matchNeighbors(date, loadDay) {
+  const list = [];
+  for (let k = 1; k <= MATCH_NEIGHBOR_DAYS; k++) {
+    for (const n of [-k, k]) {
+      const d = loadDay(shiftDate(date, n));
+      if (d?.bos?.cardTxs || d?.card?.cardTxs) {
+        list.push({ date: d.date, bosCards: d.bos?.cardTxs || [], cardTxs: d.card?.cardTxs || [] });
+      }
+    }
+  }
+  return list;
+}
+
+function runMatching(daily, loadDay = date => readJSON(dailyFile(date), null)) {
   if (daily.bos?.cardTxs && daily.card?.cardTxs) {
-    daily.matching = matchCards(daily.bos.cardTxs, daily.card.cardTxs);
+    daily.matching = matchCards(daily.bos.cardTxs, daily.card.cardTxs, {
+      uploadedSources: Object.keys(daily.cardSources || {}).map(k => CARD_SOURCE_LABEL[k] || k),
+      // 나이스는 2026-09-04부터 사용 — 그 전 날짜는 이지샵만 있으면 정상
+      expectedSources: daily.date >= NICE_START_DATE ? ['이지샵', '나이스'] : ['이지샵'],
+      neighbors:       daily.date ? matchNeighbors(daily.date, loadDay) : [],
+    });
   } else {
     delete daily.matching;
   }
@@ -2076,6 +2105,7 @@ app.get('/api/ar/card-candidates', (req, res) => {
     const candidates = [];
     for (const f of fs.readdirSync(DAILY_DIR).filter(f => f.endsWith('.json')).sort()) {
       const d = readJSON(path.join(DAILY_DIR, f), {});
+      runMatching(d);  // 승인번호 오타 재확인 등 최신 대사 기준으로 후보 산출
       for (const e of d.matching?.errors || []) {
         if (e.type !== 'easy_only' || !(e.easyAmount >= minAmount)) continue;
         const date = f.slice(0, 10);
@@ -2778,6 +2808,13 @@ app.get('/api/daily/month/:yearMonth', (req, res) => {
     .filter(f => f.startsWith(ym) && f.endsWith('.json'))
     .map(f => readJSON(path.join(DAILY_DIR, f), {}))
     .sort((a, b) => a.date.localeCompare(b.date));
+  // 카드 대사는 조회 시점에 다시 계산 — 앞뒤 날짜 파일이 나중에 올라와도 재확인 결과가 최신으로 반영됨
+  const cache = new Map(days.map(d => [d.date, d]));
+  const loadDay = date => {
+    if (!cache.has(date)) cache.set(date, readJSON(dailyFile(date), null));
+    return cache.get(date);
+  };
+  days.forEach(d => runMatching(d, loadDay));
   res.json({ ok: true, days });
 });
 
