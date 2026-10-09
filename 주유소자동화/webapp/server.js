@@ -2156,6 +2156,9 @@ const AR_PAY_GROUPS     = [['다올이앤씨', '다올이앤씨(주)보수보강
 // 카드 비교 시 유류분과 유외 누적분을 나눠서 비교
 const AR_FUEL_ONLY_CARD_VENDORS = { '풀무원외상6576': { maxNonFuelMonths: 7 } };
 const AR_FUEL_PRODUCTS = ['휘발유', '경유', '등유'];
+// 매달 고정 금액을 다음 달 초에 카드로 결제하는 업체 — 매출과 결제액의 차액은 주유소가 자체 입금처리
+// (카드 결제액 = amount 이면 전월 매출 완료로 보고, 차액은 초과입금으로 잡지 않음)
+const AR_FIXED_CARD_VENDORS = { '대소방범대': { amount: 330000 } };
 
 // 업체 월별 외상 매출을 유류/유외로 분리 { 'YYYY-MM': { fuel, nonFuel } }
 function vendorMonthSplit(name) {
@@ -2283,6 +2286,17 @@ function buildArCardTargets(alloc) {
   const remainOf = (name, month) => (alloc[name]?.months || []).find(m => m.month === month)?.remaining || 0;
   for (const [name, a] of Object.entries(alloc)) {
     if (AR_CUTOFF_VENDORS[name]) continue;
+    if (AR_FIXED_CARD_VENDORS[name]) {
+      const fixed = AR_FIXED_CARD_VENDORS[name].amount;
+      for (const m of a.months || []) {
+        if (!(m.remaining > 0) || m.remaining > fixed) continue;
+        targets.push({ key: `${name}|${m.month}|fixed`, kind: 'fixed', fixedAmount: fixed,
+                       label: `${Number(m.month.slice(5, 7))}월분 — 매달 ${fixed.toLocaleString()}원 고정 결제 (차액 ${(fixed - m.remaining).toLocaleString()}원 자체 입금처리)`,
+                       from: `${addMonths(m.month, 1)}-01`, amount: fixed,
+                       parts: [{ vendorName: name, assign: [{ month: m.month, amount: m.remaining }] }] });
+      }
+      continue;
+    }
     if (AR_FUEL_ONLY_CARD_VENDORS[name]) {
       targets.push(...buildFuelOnlyTargets(name, a, AR_FUEL_ONLY_CARD_VENDORS[name]));
       continue;
@@ -2331,7 +2345,7 @@ function computeArCardMatches() {
   const targets  = buildArCardTargets(alloc);
 
   for (const t of targets) {
-    const days = t.period ? AR_CARD_WINDOW_DAYS_CUTOFF : AR_CARD_WINDOW_DAYS;
+    const days = t.period ? AR_CARD_WINDOW_DAYS_CUTOFF : t.kind === 'fixed' ? 30 : AR_CARD_WINDOW_DAYS;
     const tol  = t.period ? AR_CARD_NEAR_TOL_CUTOFF : AR_CARD_NEAR_TOL;
     const inWindow = combos.filter(c => c.date >= t.from && daysBetween(t.from, c.date) <= days);
     const exact = inWindow.filter(c => Math.abs(c.amount - t.amount) <= AR_CARD_ROUND_TOL);
@@ -2427,8 +2441,9 @@ app.post('/api/ar/card-auto-match/confirm', (req, res) => {
         s.left -= amt; left -= amt;
         if (s.left <= 0) si++;
       }
-      // 절사 차액 등 남은 금액은 마지막 칸에 붙임
-      if (left > 0 && slots.length) {
+      // 절사 차액 등 남은 금액은 마지막 칸에 붙임 (고정 결제 업체는 차액을 자체 입금처리하므로 붙이지 않음)
+      if (t.kind === 'fixed') c.selfHandled = left;
+      else if (left > 0 && slots.length) {
         const s = slots[slots.length - 1];
         const arr = byVendor[s.vendorName] = byVendor[s.vendorName] || [];
         const last = arr.find(x => x.month === s.month);
@@ -2441,6 +2456,7 @@ app.post('/api/ar/card-auto-match/confirm', (req, res) => {
           cardCompany: c.cardCompany, cardNo: c.cardNo, amount, vendorName,
           month: assign[assign.length - 1].month, assign, auto: true,
           coverKeys: t.period ? t.parts.map(pt => `${pt.vendorName}|${t.period}`) : [], matchedAt: new Date().toISOString(),
+          ...(t.kind === 'fixed' ? { cardAmount: c.amount, selfHandled: c.selfHandled || 0, note: '고정 결제 — 차액 자체 입금처리' } : {}),
         });
       }
     }

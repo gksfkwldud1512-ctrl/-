@@ -4567,7 +4567,7 @@ function arMonthActionHtml(v, m, month) {
     (c.assign || [{ month: c.month }]).some(x => x.month === month));
   const confirmedHtml = confirmed.length ? `
     <div style="font-size:12px;margin-bottom:8px;">${confirmed.map(c => `
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:2px;">💳 ${c.date} ${esc(c.cardCompany || '')} ${arNum(c.amount)} — 카드결제로 확인됨
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:2px;">💳 ${c.date} ${esc(c.cardCompany || '')} ${c.cardAmount ? `카드 ${arNum(c.cardAmount)} 중 ${arNum(c.amount)} 반영 (차액 ${arNum(c.selfHandled)} 자체 입금처리)` : arNum(c.amount)} — 카드결제로 확인됨
         <button style="font-size:10px;padding:1px 6px;color:#dc2626;" onclick="cancelArCardAuto('${jsArg(c.matchKey || '')}','${jsArg(c.id)}')">취소</button></div>`).join('')}
     </div>` : '';
 
