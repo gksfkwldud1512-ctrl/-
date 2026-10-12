@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
 import { WASTEWATER_TEMPLATE_BASE64 } from "./wastewaterTemplate";
 import type { LogDay, LogPlan } from "./wastewaterPlan";
 
@@ -60,5 +61,55 @@ export async function buildWastewaterWorkbook(plan: LogPlan): Promise<Buffer> {
 
   wb.removeWorksheet(template.id);
   const out = await wb.xlsx.writeBuffer();
-  return Buffer.from(out as ArrayBuffer);
+  return sanitizeXlsx(Buffer.from(out as ArrayBuffer), plan.days.length > 0 ? pages.length : 0);
+}
+
+// CT_Font / CT_SheetPr 자식 요소의 스키마 순서 — 엑셀은 이 순서가 어긋나면 "복구하시겠습니까?" 후 열지 못한다.
+const FONT_ORDER = ["b", "i", "strike", "condense", "extend", "outline", "shadow", "u", "vertAlign", "sz", "color", "name", "family", "charset", "scheme"];
+const SHEETPR_ORDER = ["tabColor", "outlinePr", "pageSetUpPr"];
+
+function reorderChildren(xml: string, order: string[]): string {
+  const parts = xml.match(/<[A-Za-z][^>]*\/>/g) ?? [];
+  const rank = (el: string) => {
+    const i = order.indexOf(/^<([A-Za-z0-9]+)/.exec(el)?.[1] ?? "");
+    return i === -1 ? order.length : i;
+  };
+  return [...parts].sort((a, b) => rank(a) - rank(b)).join("");
+}
+
+/**
+ * 양식(xlsx)을 불러와 복제한 결과에는 엑셀이 받아들이지 않는 부분이 남는다:
+ *  - styles.xml 글꼴 요소 순서(color/family/scheme/sz/name …)
+ *  - 시트 속성(sheetPr) 요소 순서
+ *  - 통합문서 보기 firstSheet(양식의 시트 수 기준 값)가 새 시트 수보다 큰 경우
+ *  - 인쇄 설정의 비정상 dpi(4294967295)
+ * 실제 엑셀에서 열어 확인한 항목만 고친다.
+ */
+async function sanitizeXlsx(buffer: Buffer, sheetCount: number): Promise<Buffer> {
+  const zip = await JSZip.loadAsync(buffer);
+
+  const stylesFile = zip.file("xl/styles.xml");
+  if (stylesFile) {
+    let styles = await stylesFile.async("string");
+    styles = styles.replace(/<font>([\s\S]*?)<\/font>/g, (_m, inner: string) => `<font>${reorderChildren(inner, FONT_ORDER)}</font>`);
+    zip.file("xl/styles.xml", styles);
+  }
+
+  const wbFile = zip.file("xl/workbook.xml");
+  if (wbFile) {
+    let wbXml = await wbFile.async("string");
+    wbXml = wbXml.replace(/<workbookView[^>]*\/>/, '<workbookView xWindow="0" yWindow="0" windowWidth="28800" windowHeight="15000" firstSheet="0" activeTab="0"/>');
+    zip.file("xl/workbook.xml", wbXml);
+  }
+
+  for (let i = 1; i <= sheetCount + 1; i++) {
+    const f = zip.file(`xl/worksheets/sheet${i}.xml`);
+    if (!f) continue;
+    let xml = await f.async("string");
+    xml = xml.replace(/<sheetPr>([\s\S]*?)<\/sheetPr>/, (_m, inner: string) => `<sheetPr>${reorderChildren(inner, SHEETPR_ORDER)}</sheetPr>`);
+    xml = xml.replace(/ (?:horizontalDpi|verticalDpi)="\d+"/g, "");
+    zip.file(`xl/worksheets/sheet${i}.xml`, xml);
+  }
+
+  return Buffer.from(await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }));
 }
