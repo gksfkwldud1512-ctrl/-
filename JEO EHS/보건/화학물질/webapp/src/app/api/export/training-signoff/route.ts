@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { getDashboardData, getEmployeesForScope } from "@/lib/db/repo";
 import { COMMON_DEPARTMENT } from "@/lib/constants";
+import { filterRowsForTraining } from "@/lib/trainingScope";
 import { INDUSTRIAL_SAFETY_ACT_CATEGORIES } from "@/lib/law/categories";
 
 export const maxDuration = 60;
@@ -38,9 +39,8 @@ export async function GET(request: Request) {
     getEmployeesForScope(department, workProcess || null),
   ]);
 
-  const scopedRows = allRows.filter(
-    (r) => r.department === department && (department === COMMON_DEPARTMENT || !workProcess || r.workProcess === workProcess)
-  );
+  // 공정공통 제품은 모든 공정에서 쓰므로 어느 공정의 교육자료에도 포함한다.
+  const scopedRows = filterRowsForTraining(allRows, department, workProcess || null);
 
   // 제품별로 해당 법령과 해당 성분을 모은다.
   type Product = { name: string; laws: Set<string>; substances: Set<string> };

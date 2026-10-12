@@ -13,6 +13,7 @@ export type CardProductSummary = {
   categoryFlags: Record<string, boolean>;
   reviewStatus: ReviewStatus;
   manuallyChecked: boolean;
+  fromCommon?: boolean; // 공정공통 제품(모든 공정 교육 대상)
   ppeText: string | null;
 };
 
@@ -130,7 +131,14 @@ export function DashboardCardGrid({
                     <tbody className="divide-y divide-zinc-100">
                       {card.products.map((p) => (
                         <tr key={p.mixtureId}>
-                          <td className="px-3 py-2 text-zinc-800">{p.productName}</td>
+                          <td className="px-3 py-2 text-zinc-800">
+                            {p.productName}
+                            {p.fromCommon && (
+                              <span className="ml-1.5 rounded bg-sky-100 px-1.5 py-0.5 text-[11px] font-medium text-sky-800">
+                                공정공통
+                              </span>
+                            )}
+                          </td>
                           <td className="px-3 py-2 text-center">
                             <Flag on={p.chemicalsActFlag} />
                           </td>

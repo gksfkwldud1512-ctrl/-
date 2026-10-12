@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getDashboardData } from "@/lib/db/repo";
-import { COMMON_DEPARTMENT } from "@/lib/constants";
+import { COMMON_DEPARTMENT, PROCESS_COMMON_DEPARTMENT, PROCESS_COMMON_POSITION } from "@/lib/constants";
 import { INDUSTRIAL_SAFETY_ACT_CATEGORIES } from "@/lib/law/categories";
 import { DashboardCardGrid, type CardProductSummary, type CardSummary } from "@/components/DashboardCardGrid";
 
@@ -51,6 +51,15 @@ export default async function DashboardPage() {
       });
     }
     cardMap.get(key)!.products.push(product);
+  }
+
+  // 공정공통 제품은 모든 공정에서 쓰므로, 각 공정 박스에도 함께 보여 교육 대상에 포함시킨다.
+  const commonCard = cardMap.get(`${PROCESS_COMMON_DEPARTMENT}__${PROCESS_COMMON_POSITION}`);
+  if (commonCard) {
+    for (const card of cardMap.values()) {
+      if (card === commonCard || card.isRaw) continue;
+      card.products.push(...commonCard.products.map((p) => ({ ...p, fromCommon: true })));
+    }
   }
 
   const cards = Array.from(cardMap.values()).sort((a, b) => {

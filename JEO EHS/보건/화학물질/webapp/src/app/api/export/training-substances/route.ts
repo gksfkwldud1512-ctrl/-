@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { getDashboardData } from "@/lib/db/repo";
 import { COMMON_DEPARTMENT } from "@/lib/constants";
+import { filterRowsForTraining } from "@/lib/trainingScope";
 import { INDUSTRIAL_SAFETY_ACT_CATEGORIES } from "@/lib/law/categories";
 
 export const maxDuration = 60;
@@ -16,9 +17,8 @@ export async function GET(request: Request) {
   }
 
   const allRows = await getDashboardData();
-  const rows = allRows.filter(
-    (r) => r.department === department && (department === COMMON_DEPARTMENT || !workProcess || r.workProcess === workProcess)
-  );
+  // 공정공통 제품은 모든 공정에서 쓰므로 어느 공정의 교육자료에도 포함한다.
+  const rows = filterRowsForTraining(allRows, department, workProcess || null);
 
   // 제품(mixtureId) 단위로 성분을 묶어 보호구는 제품당 한 번만 표시한다.
   const byMixture = new Map<string, { productName: string; ppeText: string | null; rows: typeof rows }>();
