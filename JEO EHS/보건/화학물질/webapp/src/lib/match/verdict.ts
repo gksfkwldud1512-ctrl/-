@@ -10,6 +10,8 @@ export type ReferenceLookupResult = {
 export type IngredientVerdictInput = {
   casNo: string | null;
   comparePercent: number | null;
+  /** true면 실제 함유량 < comparePercent (예: "< 5", "3 - < 5") */
+  compareExclusive?: boolean;
 };
 
 export type IngredientVerdict = {
@@ -23,14 +25,17 @@ export function normalizeCas(cas: string): string {
   return cas.trim().replace(/\s+/g, "");
 }
 
-function exceedsThreshold(compare: number, t: ParsedThreshold): boolean {
+function exceedsThreshold(compare: number, t: ParsedThreshold, exclusive = false): boolean {
+  // 상한 미만("< 5")이면 기준이 5% 이상이어도 실제 값은 5에 못 미치므로 해당되지 않는다.
+  if (exclusive) return compare > t.percent;
   return t.operator === ">" ? compare > t.percent : compare >= t.percent;
 }
 
 /** 산안법 4개 카테고리(관리대상유해물질/특별관리물질/작업환경측정/특수건강진단) 각각을 독립 판정한다. */
 function determineCategoryVerdicts(
   ref: ReferenceLookupResult,
-  comparePercent: number | null
+  comparePercent: number | null,
+  compareExclusive = false
 ): CategoryVerdict[] {
   const verdicts: CategoryVerdict[] = [];
   for (const key of INDUSTRIAL_SAFETY_ACT_CATEGORY_KEYS) {
@@ -47,7 +52,7 @@ function determineCategoryVerdicts(
       verdicts.push({ category: key, matched: false, threshold: thresholdsForCategory[0] });
       continue;
     }
-    const exceeded = thresholdsForCategory.filter((t) => exceedsThreshold(comparePercent, t));
+    const exceeded = thresholdsForCategory.filter((t) => exceedsThreshold(comparePercent, t, compareExclusive));
     verdicts.push({
       category: key,
       matched: exceeded.length > 0,
@@ -81,7 +86,7 @@ export function determineIngredientVerdict(
     return { status: "no_match", matchedReferenceId: null, appliedThresholds: [], categoryVerdicts: [] };
   }
 
-  const categoryVerdicts = determineCategoryVerdicts(ref, ingredient.comparePercent);
+  const categoryVerdicts = determineCategoryVerdicts(ref, ingredient.comparePercent, ingredient.compareExclusive ?? false);
 
   const isChemicalsActMember = ref.sourceCategories.some((c) => CHEMICALS_ACT_CATEGORY_KEYS.includes(c));
   if (!isChemicalsActMember) {
@@ -117,7 +122,7 @@ export function determineIngredientVerdict(
     };
   }
 
-  const exceeded = chemThresholds.filter((t) => exceedsThreshold(compare, t));
+  const exceeded = chemThresholds.filter((t) => exceedsThreshold(compare, t, ingredient.compareExclusive ?? false));
 
   if (exceeded.length > 0) {
     return {

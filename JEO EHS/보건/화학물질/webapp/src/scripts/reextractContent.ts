@@ -1,7 +1,7 @@
 /**
  * 모든 MSDS PDF의 구성성분표를 다시 파싱해 함유량을 점검/반영한다.
  * 실행: npx tsx --env-file=.env.local src/scripts/reextractContent.ts [--apply]
- * (--apply 없이 실행하면 DB와 달라지는 항목만 출력)
+ * (--apply 없이 실행하면 DB와 달라지는 항목만 출력. --apply는 확정된 건의 화관법/산안법 판정도 전부 다시 계산)
  */
 /**
  * 모든 mixtures의 원본 PDF를 다시 받아 개정일자를 재파싱한다.
@@ -136,7 +136,7 @@ async function main() {
       out.push(`   ${f.casNo}: DB=${d.contentPercentRaw ?? "-"}  ->  신규=${f.contentPercentRaw ?? "-"}  (${d.ingredientName.slice(0, 14)})`);
     }
     for (const d of dbIng) if (!fresh.some((f) => f.casNo === d.casNo)) { missing++; out.push(`   -DB에만: ${d.casNo} ${d.contentPercentRaw ?? "-"}`); }
-    if (apply && out.length) {
+    if (apply) {
       for (const f of fresh) {
         const d = dbIng.find((i) => i.casNo === f.casNo);
         if (!d || !f.contentPercentRaw || (d.contentPercentRaw ?? "") === f.contentPercentRaw) continue;

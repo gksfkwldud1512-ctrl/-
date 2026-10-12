@@ -5,7 +5,6 @@ import {
   MATCH_STATUS_COLOR,
   MATCH_STATUS_LABEL,
   OVERALL_VERDICT_COLOR,
-  OVERALL_VERDICT_LABEL,
   MATERIAL_TYPE_LABEL,
   formatDate,
   formatThreshold,
@@ -40,12 +39,27 @@ export default async function MixtureDetailPage(props: PageProps<"/mixtures/[id]
           <span className="rounded-full bg-zinc-100 px-3 py-1 text-sm font-medium text-zinc-600">
             {MATERIAL_TYPE_LABEL[mixture.materialType]}
           </span>
-          {mixture.status === "confirmed" && mixture.overallVerdict && (
-            <span
-              className={`rounded-full px-3 py-1 text-sm font-medium ${OVERALL_VERDICT_COLOR[mixture.overallVerdict]}`}
-            >
-              {OVERALL_VERDICT_LABEL[mixture.overallVerdict]}
-            </span>
+          {mixture.status === "confirmed" && (
+            <>
+              <span
+                className={`rounded-full px-3 py-1 text-sm font-medium ${
+                  ingredients.some((i) => i.matchStatus === "matched_hazardous")
+                    ? OVERALL_VERDICT_COLOR.hazardous
+                    : OVERALL_VERDICT_COLOR.not_hazardous
+                }`}
+              >
+                화관법 {ingredients.some((i) => i.matchStatus === "matched_hazardous") ? "해당" : "해당없음"}
+              </span>
+              <span
+                className={`rounded-full px-3 py-1 text-sm font-medium ${
+                  ingredients.some((i) => i.categoryVerdicts.some((v) => v.matched))
+                    ? OVERALL_VERDICT_COLOR.hazardous
+                    : OVERALL_VERDICT_COLOR.not_hazardous
+                }`}
+              >
+                산안법 {ingredients.some((i) => i.categoryVerdicts.some((v) => v.matched)) ? "해당" : "해당없음"}
+              </span>
+            </>
           )}
           <span className="flex items-center gap-1.5 text-sm text-zinc-500">
             개정확인여부:

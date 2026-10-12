@@ -77,10 +77,13 @@ function MixtureTable({
                     </span>
                   ) : (
                     <div className="flex flex-col gap-1">
+                      {/* 화관법 유해화학물질 기준(성분별 함유량 기준 초과)만 반영한다. 산안법 해당 여부는 옆 칸 */}
                       <span
-                        className={`w-fit whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${OVERALL_VERDICT_COLOR[m.overallVerdict ?? "not_hazardous"]}`}
+                        className={`w-fit whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${
+                          names.length > 0 ? OVERALL_VERDICT_COLOR.hazardous : OVERALL_VERDICT_COLOR.not_hazardous
+                        }`}
                       >
-                        {OVERALL_VERDICT_SHORT_LABEL[m.overallVerdict ?? "not_hazardous"]}
+                        {names.length > 0 ? OVERALL_VERDICT_SHORT_LABEL.hazardous : OVERALL_VERDICT_SHORT_LABEL.not_hazardous}
                       </span>
                       {names.length > 0 && (
                         <span className="max-w-[220px] truncate text-xs text-red-700" title={names.join(", ")}>
@@ -138,9 +141,7 @@ function MixtureTable({
 export default async function Home() {
   const mixtures = await listMixtures();
   const confirmedMixtureIds = mixtures.filter((m) => m.status === "confirmed").map((m) => m.id);
-  const hazardousMixtureIds = mixtures
-    .filter((m) => m.status === "confirmed" && m.overallVerdict === "hazardous")
-    .map((m) => m.id);
+  const hazardousMixtureIds = confirmedMixtureIds;
   const [hazardousNames, categoryFlags, { departments, positionsByDepartment }] = await Promise.all([
     getHazardousIngredientNamesByMixture(hazardousMixtureIds),
     getCategoryFlagsByMixture(confirmedMixtureIds),

@@ -379,7 +379,7 @@ export async function confirmMixture(mixtureId: string) {
   for (const ing of ingredients) {
     const percent = parsePercent(ing.contentPercentRaw);
     const verdict = determineIngredientVerdict(
-      { casNo: ing.casNo, comparePercent: percent.compare },
+      { casNo: ing.casNo, comparePercent: percent.compare, compareExclusive: percent.compareExclusive },
       (cas) => {
         const ref = refMap.get(cas);
         if (!ref) return undefined;
