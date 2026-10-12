@@ -43,6 +43,12 @@ export async function saveManifests(list: Manifest[]): Promise<void> {
   });
 }
 
+/** 수탁처리확인서번호에서 숫자만 남겨 뒤 6자리만 쓴다 (예: "1 2026 0000016-004487" → "004487"). */
+export function lastSixDigits(serialNo: string): string {
+  const digits = serialNo.replace(/\D/g, "");
+  return digits.length > 6 ? digits.slice(-6) : digits;
+}
+
 function toDateString(v: unknown): string | null {
   if (v instanceof Date && !Number.isNaN(v.getTime())) {
     return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, "0")}-${String(v.getDate()).padStart(2, "0")}`;
@@ -103,7 +109,7 @@ export function parseManifestWorkbook(buffer: Buffer): { manifests: Manifest[]; 
       skipped.push(`${date} ${serialNo}: 지원하지 않는 단위(${unit})`);
       continue;
     }
-    const shortSerial = serialNo.includes("-") ? serialNo.slice(serialNo.lastIndexOf("-") + 1).trim() : serialNo;
+    const shortSerial = lastSixDigits(serialNo);
     manifests.push({
       serialNo,
       shortSerial,

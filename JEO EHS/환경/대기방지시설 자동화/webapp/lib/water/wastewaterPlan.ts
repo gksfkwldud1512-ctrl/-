@@ -1,4 +1,4 @@
-import type { Manifest } from "./manifests";
+import { lastSixDigits, type Manifest } from "./manifests";
 
 export const MAX_STORAGE_M3 = 36; // 폐수 보관 한도
 export const START_STORAGE_M3 = 1; // 1/1 시작 보관량
@@ -70,7 +70,7 @@ export function buildWastewaterPlan(manifests: Manifest[], year: number): LogPla
     if (m.date < yearStart || m.date > yearEnd) continue;
     const g = byDate.get(m.date) ?? { amount: 0, serials: [], companies: new Set<string>() };
     g.amount += m.amountM3;
-    g.serials.push(m.shortSerial);
+    g.serials.push(lastSixDigits(m.serialNo)); // 저장된 값과 무관하게 항상 뒤 6자리
     if (m.company) g.companies.add(m.company);
     byDate.set(m.date, g);
   }
