@@ -1,11 +1,30 @@
 import ExcelJS from "exceljs";
 import { getDashboardData, getEmployeesForScope } from "@/lib/db/repo";
 import { COMMON_DEPARTMENT } from "@/lib/constants";
+import { INDUSTRIAL_SAFETY_ACT_CATEGORIES } from "@/lib/law/categories";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
-/** 부서(+공정) 소속 직원 전원 × 취급물질 목록으로, 서명만 받으면 되는 교육 서명지를 생성한다. */
+const BORDER: Partial<ExcelJS.Borders> = {
+  top: { style: "thin" },
+  left: { style: "thin" },
+  bottom: { style: "thin" },
+  right: { style: "thin" },
+};
+const HEADER_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE4E4E7" } };
+const SECTION_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF27272A" } };
+
+/** 글자수로 대략의 줄 수를 추정해 행 높이를 정한다(ExcelJS는 자동 높이를 계산하지 않는다). */
+function rowHeightFor(texts: { text: string; chars: number }[], minHeight = 20): number {
+  const lines = Math.max(...texts.map((t) => Math.max(1, Math.ceil(t.text.length / t.chars))));
+  return Math.max(minHeight, lines * 15 + 6);
+}
+
+/**
+ * 부서(+공정) 교육 서명지: 맨 위에 교육대상 물질(제품별 해당 법령/성분)을 표로 정리하고,
+ * 그 아래에 소속 인원 명단과 서명란을 둔다. A4 가로 1쪽 너비로 인쇄되도록 설정한다.
+ */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const department = searchParams.get("department");
@@ -22,45 +41,148 @@ export async function GET(request: Request) {
   const scopedRows = allRows.filter(
     (r) => r.department === department && (department === COMMON_DEPARTMENT || !workProcess || r.workProcess === workProcess)
   );
-  const productNames = Array.from(new Set(scopedRows.map((r) => r.productName))).sort((a, b) =>
-    a.localeCompare(b, "ko")
-  );
-  const substancesText = productNames.join(", ") || "(해당 물질 없음)";
+
+  // 제품별로 해당 법령과 해당 성분을 모은다.
+  type Product = { name: string; laws: Set<string>; substances: Set<string> };
+  const products = new Map<string, Product>();
+  for (const r of scopedRows) {
+    const p = products.get(r.mixtureId) ?? { name: r.productName, laws: new Set<string>(), substances: new Set<string>() };
+    if (r.chemicalsActFlag) {
+      p.laws.add("화관법");
+      p.substances.add(r.ingredientName);
+    }
+    for (const c of INDUSTRIAL_SAFETY_ACT_CATEGORIES) {
+      if (r.categoryFlags[c.key]) {
+        p.laws.add(`산안법·${c.label.replace(" 대상 유해인자", "")}`);
+        p.substances.add(r.ingredientName);
+      }
+    }
+    products.set(r.mixtureId, p);
+  }
+  const productList = Array.from(products.values()).sort((a, b) => a.name.localeCompare(b.name, "ko"));
+
+  const scopeTitle = department === COMMON_DEPARTMENT ? "원재료(공통)" : `${department}${workProcess ? ` · ${workProcess}` : ""}`;
 
   const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet("교육서명지");
-  sheet.columns = [
-    { header: "No", key: "no", width: 5 },
-    { header: "부서", key: "department", width: 14 },
-    { header: "공정(포지션)", key: "position", width: 16 },
-    { header: "사번", key: "employeeNo", width: 12 },
-    { header: "성명", key: "name", width: 12 },
-    { header: "교육대상물질", key: "substances", width: 50 },
-    { header: "교육일자", key: "trainedAt", width: 14 },
-    { header: "서명", key: "signature", width: 14 },
-  ];
+  const sheet = workbook.addWorksheet("교육서명지", {
+    pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } },
+  });
+  // A..G : 7열. 물질표와 명단표가 같은 열을 공유한다.
+  sheet.columns = [{ width: 6 }, { width: 16 }, { width: 18 }, { width: 14 }, { width: 14 }, { width: 16 }, { width: 22 }];
 
-  if (employeeList.length === 0) {
-    sheet.addRow({ no: "", department, position: workProcess ?? "", name: "(해당 부서·공정 소속 직원 없음 — 임직원 명부를 확인해 주세요)" });
+  // 제목
+  sheet.mergeCells("A1:G1");
+  const title = sheet.getCell("A1");
+  title.value = "화학물질 취급 안전보건 교육 서명지";
+  title.font = { bold: true, size: 18 };
+  title.alignment = { horizontal: "center", vertical: "middle" };
+  sheet.getRow(1).height = 34;
+
+  sheet.mergeCells("A2:D2");
+  sheet.getCell("A2").value = `대상: ${scopeTitle}`;
+  sheet.getCell("A2").font = { bold: true, size: 12 };
+  sheet.mergeCells("E2:G2");
+  sheet.getCell("E2").value = "교육일자:        년      월      일";
+  sheet.getCell("E2").font = { size: 12 };
+  sheet.getRow(2).height = 24;
+
+  // 1. 교육대상 물질
+  let row = 4;
+  sheet.mergeCells(`A${row}:G${row}`);
+  const sec1 = sheet.getCell(`A${row}`);
+  sec1.value = `1. 교육대상 물질 (총 ${productList.length}종)`;
+  sec1.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 12 };
+  sec1.fill = SECTION_FILL;
+  sheet.getRow(row).height = 22;
+  row++;
+
+  const head1 = ["No", "제품명", "", "해당 법령", "", "해당 성분", ""];
+  head1.forEach((v, i) => (sheet.getCell(row, i + 1).value = v || undefined));
+  sheet.mergeCells(`B${row}:C${row}`);
+  sheet.mergeCells(`D${row}:E${row}`);
+  sheet.mergeCells(`F${row}:G${row}`);
+  for (let c = 1; c <= 7; c++) {
+    const cell = sheet.getCell(row, c);
+    cell.font = { bold: true };
+    cell.fill = HEADER_FILL;
+    cell.border = BORDER;
+    cell.alignment = { horizontal: "center", vertical: "middle" };
   }
+  sheet.getRow(row).height = 22;
+  row++;
 
-  employeeList.forEach((emp, idx) => {
-    sheet.addRow({
-      no: idx + 1,
-      department: emp.department,
-      position: emp.positionLabel ?? "",
-      employeeNo: emp.employeeNo ?? "",
-      name: emp.name,
-      substances: substancesText,
-      trainedAt: "",
-      signature: "",
-    });
+  if (productList.length === 0) {
+    sheet.mergeCells(`A${row}:G${row}`);
+    sheet.getCell(`A${row}`).value = "(해당 물질 없음)";
+    sheet.getCell(`A${row}`).alignment = { horizontal: "center" };
+    row++;
+  }
+  productList.forEach((p, idx) => {
+    const laws = Array.from(p.laws).join(", ") || "해당없음";
+    const subs = Array.from(p.substances).join(", ") || "-";
+    sheet.getCell(row, 1).value = idx + 1;
+    sheet.getCell(row, 2).value = p.name;
+    sheet.getCell(row, 4).value = laws;
+    sheet.getCell(row, 6).value = subs;
+    sheet.mergeCells(`B${row}:C${row}`);
+    sheet.mergeCells(`D${row}:E${row}`);
+    sheet.mergeCells(`F${row}:G${row}`);
+    for (let c = 1; c <= 7; c++) {
+      const cell = sheet.getCell(row, c);
+      cell.border = BORDER;
+      cell.alignment = { vertical: "middle", horizontal: c === 1 ? "center" : "left", wrapText: true };
+      if (c === 4 && p.laws.size > 0) cell.font = { color: { argb: "FFB91C1C" }, bold: true };
+    }
+    sheet.getRow(row).height = rowHeightFor([
+      { text: p.name, chars: 32 },
+      { text: laws, chars: 28 },
+      { text: subs, chars: 36 },
+    ]);
+    row++;
   });
 
-  sheet.getRow(1).font = { bold: true };
-  sheet.views = [{ state: "frozen", ySplit: 1 }];
-  // 서명란은 직접 펜/터치로 기재하는 칸이라 행 높이를 넉넉히 준다.
-  for (let r = 2; r <= employeeList.length + 1; r++) sheet.getRow(r).height = 28;
+  // 2. 교육 대상자 명단 + 서명
+  row++;
+  sheet.mergeCells(`A${row}:G${row}`);
+  const sec2 = sheet.getCell(`A${row}`);
+  sec2.value = `2. 교육 대상자 및 서명 (총 ${employeeList.length}명)`;
+  sec2.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 12 };
+  sec2.fill = SECTION_FILL;
+  sheet.getRow(row).height = 22;
+  row++;
+
+  const head2 = ["No", "부서", "공정(포지션)", "사번", "성명", "교육일자", "서명"];
+  head2.forEach((v, i) => {
+    const cell = sheet.getCell(row, i + 1);
+    cell.value = v;
+    cell.font = { bold: true };
+    cell.fill = HEADER_FILL;
+    cell.border = BORDER;
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+  });
+  sheet.getRow(row).height = 22;
+  const rosterHeaderRow = row;
+  row++;
+
+  if (employeeList.length === 0) {
+    sheet.mergeCells(`A${row}:G${row}`);
+    sheet.getCell(`A${row}`).value = "(해당 부서·공정 소속 직원 없음 — 임직원 명부를 확인해 주세요)";
+    sheet.getCell(`A${row}`).alignment = { horizontal: "center" };
+  }
+  employeeList.forEach((emp, idx) => {
+    const values = [idx + 1, emp.department, emp.positionLabel ?? "", emp.employeeNo ?? "", emp.name, "", ""];
+    values.forEach((v, i) => {
+      const cell = sheet.getCell(row, i + 1);
+      cell.value = v === "" ? undefined : v;
+      cell.border = BORDER;
+      cell.alignment = { horizontal: i === 0 ? "center" : "left", vertical: "middle", wrapText: true };
+    });
+    sheet.getRow(row).height = 30; // 서명 칸
+    row++;
+  });
+
+  // 인쇄: 명단이 여러 쪽이면 명단 헤더를 반복한다.
+  sheet.pageSetup.printTitlesRow = `${rosterHeaderRow}:${rosterHeaderRow}`;
 
   const buffer = await workbook.xlsx.writeBuffer();
   const scopeLabel = department === COMMON_DEPARTMENT ? "원재료" : `${department}-${workProcess ?? "전체"}`;
