@@ -42,6 +42,8 @@ export function StatusBoard({ year, today, tasks, settings, records, autoByTask 
   const [onlyProblems, setOnlyProblems] = useState(false);
   const [open, setOpen] = useState<{ taskId: string; month: number } | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [view, setView] = useState<"board" | "removed">("board");
+  const [restoring, setRestoring] = useState<string | null>(null);
 
   // 모든 칸의 상태를 한 번에 계산
   const matrix = useMemo(() => {
@@ -65,14 +67,28 @@ export function StatusBoard({ year, today, tasks, settings, records, autoByTask 
   const eduProblems = eduTasks.filter((t) => matrix.get(t.id)!.some((s) => s === "overdue" || s === "due"));
   const syncErrors = Object.entries(autoByTask).filter(([, a]) => a.error);
 
+  // 삭제(=해당없음으로 끈) 업무는 현황판에서 완전히 숨기고 "삭제된 업무" 탭에서만 보여 준다.
+  const removedTasks = tasks.filter((t) => !isEnabled(t, settings));
   const visibleTasks = tasks.filter((t) => {
+    if (!isEnabled(t, settings)) return false;
     if (category !== "all" && t.category !== category) return false;
-    if (onlyProblems) {
-      if (!isEnabled(t, settings)) return false;
-      return matrix.get(t.id)!.some((s) => s === "overdue" || s === "due");
-    }
+    if (onlyProblems) return matrix.get(t.id)!.some((s) => s === "overdue" || s === "due");
     return true;
   });
+
+  async function restore(taskId: string) {
+    setRestoring(taskId);
+    try {
+      await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId, patch: { enabled: true } }),
+      });
+      router.refresh();
+    } finally {
+      setRestoring(null);
+    }
+  }
 
   const openTask = open ? tasks.find((t) => t.id === open.taskId) : null;
 
@@ -105,6 +121,29 @@ export function StatusBoard({ year, today, tasks, settings, records, autoByTask 
         </div>
       </div>
 
+      {/* 탭 */}
+      <div className="flex gap-1 border-b border-slate-300">
+        {([
+          ["board", "📊 현황판"],
+          ["removed", `🗑 삭제된 업무 (${removedTasks.length})`],
+        ] as const).map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setView(k)}
+            className={`-mb-px rounded-t-md border px-4 py-2 text-sm font-medium ${
+              view === k ? "border-slate-300 border-b-white bg-white text-slate-900" : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === "removed" ? (
+        <RemovedList tasks={removedTasks} restoring={restoring} onRestore={restore} />
+      ) : (
+      <>
       {/* 요약 배너(알림 역할) */}
       <section className="grid gap-3 md:grid-cols-3">
         <div className={`rounded-lg border p-3 ${overdueCells > 0 ? "border-red-300 bg-red-50" : "border-emerald-200 bg-emerald-50"}`}>
@@ -216,6 +255,9 @@ export function StatusBoard({ year, today, tasks, settings, records, autoByTask 
         &apos;해당없음&apos;으로 끄세요. 해당월·대상월은 업무별로 보정할 수 있습니다.
       </p>
 
+      </>
+      )}
+
       {openTask && open && (
         <TaskModal
           key={`${open.taskId}-${open.month}`}
@@ -262,13 +304,12 @@ function GroupRows(props: {
       </tr>
       {!isCollapsed &&
         rows.map((t) => {
-          const enabled = isEnabled(t, settings);
           const cells = matrix.get(t.id)!;
           const auto = autoByTask[t.id];
           const anchorMissing = needsAnchor(t, settings[t.id], records.filter((r) => r.taskId === t.id));
           const due = dueMonths(t, settings[t.id], records, year);
           return (
-            <tr key={t.id} className={`border-b border-slate-200 ${enabled ? "" : "opacity-50"}`}>
+            <tr key={t.id} className="border-b border-slate-200">
               <td className="sticky left-0 z-[5] bg-white px-3 py-1.5 align-middle">
                 <button type="button" onClick={() => onOpen(t.id, due[0] ?? today.month)} className="block w-full text-left">
                   <span className="font-medium hover:underline">{t.title}</span>
@@ -276,8 +317,7 @@ function GroupRows(props: {
                     <span className="rounded bg-slate-100 px-1.5 py-0.5">{t.role}</span>
                     <span>{t.cadence.label}</span>
                     {t.auto && <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-indigo-700">자동판정</span>}
-                    {!enabled && <span className="rounded bg-slate-200 px-1.5 py-0.5">해당없음</span>}
-                    {anchorMissing && enabled && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">대상월 입력 필요</span>}
+                    {anchorMissing && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">대상월 입력 필요</span>}
                     {auto?.error && <span className="rounded bg-slate-200 px-1.5 py-0.5">연동 오류</span>}
                     {!settings[t.id]?.verified && <span className="rounded bg-orange-100 px-1.5 py-0.5 text-orange-700">법령 확인필요</span>}
                   </span>
@@ -285,16 +325,14 @@ function GroupRows(props: {
               </td>
               {cells.map((s, i) => {
                 const isNow = year === today.year && i + 1 === today.month;
-                const label = enabled ? STATUS_LABEL[s] : "";
-                const clickable = enabled || true;
+                const label = STATUS_LABEL[s];
                 return (
                   <td key={i} className={`px-0.5 py-1 text-center ${isNow ? "bg-indigo-50" : ""}`}>
                     <button
                       type="button"
-                      disabled={!clickable}
                       onClick={() => onOpen(t.id, i + 1)}
                       title={`${t.title} · ${i + 1}월 ${STATUS_LABEL[s] || "해당월 아님"}`}
-                      className={`h-8 w-full rounded text-xs font-semibold ${enabled ? STATUS_CLASS[s] : "bg-slate-100 text-transparent"} ${
+                      className={`h-8 w-full rounded text-xs font-semibold ${STATUS_CLASS[s]} ${
                         s === "none" ? "border border-dashed border-slate-200 hover:bg-slate-50" : "hover:brightness-95"
                       }`}
                     >
@@ -307,5 +345,52 @@ function GroupRows(props: {
           );
         })}
     </>
+  );
+}
+
+function RemovedList(props: { tasks: TaskDef[]; restoring: string | null; onRestore: (id: string) => void }) {
+  const { tasks, restoring, onRestore } = props;
+  if (tasks.length === 0) {
+    return <p className="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-10 text-center text-sm text-slate-500">삭제된 업무가 없습니다.</p>;
+  }
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-slate-500">
+        현황판에서 삭제한 업무입니다. 알림·미실시 집계에서 빠져 있으며, &apos;복원&apos;을 누르면 현황판에 다시 나타납니다.
+      </p>
+      {CATEGORY_ORDER.map((c) => {
+        const rows = tasks.filter((t) => t.category === c);
+        if (rows.length === 0) return null;
+        return (
+          <section key={c} className="overflow-hidden rounded-lg border border-slate-300 bg-white">
+            <h2 className="bg-slate-100 px-3 py-1.5 text-sm font-semibold">
+              {CATEGORY_ICON[c]} {CATEGORY_LABEL[c]} <span className="text-xs font-normal text-slate-500">{rows.length}개</span>
+            </h2>
+            <ul className="divide-y divide-slate-100">
+              {rows.map((t) => (
+                <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="font-medium">{t.title}</div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5">{t.role}</span>
+                      <span>{t.cadence.label}</span>
+                      <span className="truncate">{t.basis}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={restoring === t.id}
+                    onClick={() => onRestore(t.id)}
+                    className="shrink-0 rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-50"
+                  >
+                    {restoring === t.id ? "복원 중…" : "↩ 복원"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+    </div>
   );
 }

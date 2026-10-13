@@ -160,9 +160,8 @@ export function TaskModal(props: {
             <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[status]}`}>{STATUS_TEXT[status]}</span>
           </div>
 
-          {!enabled ? (
-            <p className="mt-2 text-sm text-slate-500">이 업무는 &apos;해당없음&apos;으로 꺼져 있습니다. 아래 설정에서 다시 켤 수 있습니다.</p>
-          ) : (
+          {(
+
             <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-slate-500">완료일</span>
@@ -234,10 +233,17 @@ export function TaskModal(props: {
         {/* 설정 */}
         <section className="mt-4 rounded-lg border border-slate-200 p-3 text-sm">
           <h3 className="font-semibold">업무 설정</h3>
-          <label className="mt-2 flex cursor-pointer items-center gap-2">
-            <input type="checkbox" checked={enabled} disabled={busy} onChange={(e) => saveSettings({ enabled: e.target.checked })} />
-            우리 사업장에 해당하는 업무 (끄면 &apos;해당없음&apos;으로 회색 처리되어 알림에서 빠집니다)
-          </label>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={async () => (await saveSettings({ enabled: false })) && onClose()}
+              className="rounded-md border border-red-300 px-3 py-1.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              🗑 이 업무를 목록에서 삭제
+            </button>
+            <span className="text-xs text-slate-500">우리 사업장에 해당 없는 업무는 삭제하세요. &apos;삭제된 업무&apos; 탭에서 언제든 복원할 수 있습니다.</span>
+          </div>
 
           {task.cadence.kind === "months" && (
             <div className="mt-3">

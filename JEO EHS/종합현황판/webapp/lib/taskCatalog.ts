@@ -7,6 +7,9 @@ import type { Cadence, TaskDef } from "./types";
  * 과태료가 달라지므로 화면에서 업무별로 "법령 확인함"을 눌러 검토하고, 해당 없는 업무는 '해당없음'으로 끈다.
  * 해당월/기준월은 화면에서 업무별로 보정할 수 있다(설정은 Blob에 저장).
  *
+ * 담당자 자격·직무교육(안전/보건관리자, 환경기술인, 가스·위험물안전관리자 등)은 중처법 이행관리 앱의
+ * '법정교육' 항목이 자동으로 행이 되므로 여기에는 중복해서 넣지 않는다.
+ *
  * 항목 추가: 아래 배열에 TaskDef 한 개를 추가하면 표에 바로 반영된다(id는 고유·불변).
  */
 const MONTHLY: Cadence = { kind: "monthly", label: "매월" };
@@ -92,17 +95,6 @@ export const TASK_CATALOG: TaskDef[] = [
     cadence: QUARTERLY,
     basis: "산업안전보건법 제24조, 시행령 제37조 (분기 1회 이상)",
     penalty: "500만원 이하 과태료",
-    defaultEnabled: true,
-  },
-  {
-    id: "safety-manager-edu",
-    category: "safety",
-    role: "안전관리자",
-    title: "안전관리자 직무교육 (신규 34시간 / 보수 24시간)",
-    cadence: everyYears(2),
-    basis: "산업안전보건법 제32조, 시행규칙 제29조 (선임 후 3개월 내 신규, 이후 2년마다 보수)",
-    penalty: "500만원 이하 과태료",
-    note: "대상월(보수교육 예정월)을 입력하세요.",
     defaultEnabled: true,
   },
   {
@@ -225,16 +217,6 @@ export const TASK_CATALOG: TaskDef[] = [
     penalty: "과태료 (확인필요)",
     defaultEnabled: true,
   },
-  {
-    id: "health-manager-edu",
-    category: "health",
-    role: "보건관리자",
-    title: "보건관리자 직무교육 (신규 34시간 / 보수 24시간)",
-    cadence: everyYears(2),
-    basis: "산업안전보건법 제32조, 시행규칙 제29조",
-    penalty: "500만원 이하 과태료",
-    defaultEnabled: true,
-  },
 
   // ───────────── 환경 ─────────────
   {
@@ -316,17 +298,6 @@ export const TASK_CATALOG: TaskDef[] = [
     defaultEnabled: true,
   },
   {
-    id: "env-tech-edu",
-    category: "environment",
-    role: "환경기술인",
-    title: "환경기술인 교육 (신규·보수)",
-    cadence: everyYears(3),
-    basis: "환경분야 시험·검사 등에 관한 법률 / 대기환경보전법·물환경보전법 (신규 1년 내, 보수 3년마다 — 확인필요)",
-    penalty: "100만원 이하 과태료 (확인필요)",
-    note: "대상월(다음 교육 예정월)을 입력하세요.",
-    defaultEnabled: true,
-  },
-  {
     id: "env-chem-handler-edu",
     category: "environment",
     role: "환경기술인",
@@ -390,16 +361,6 @@ export const TASK_CATALOG: TaskDef[] = [
     note: "대상월(재개방검사 예정월)을 입력하세요.",
     defaultEnabled: true,
   },
-  {
-    id: "gas-manager-edu",
-    category: "gas",
-    role: "가스안전관리자",
-    title: "가스안전관리자 정기교육",
-    cadence: everyYears(3),
-    basis: "고압가스 안전관리법 관련 조문 (신규 선임 후 정기 — 확인필요)",
-    penalty: "과태료 (확인필요)",
-    defaultEnabled: true,
-  },
 
   // ───────────── 위험물 ─────────────
   {
@@ -431,15 +392,5 @@ export const TASK_CATALOG: TaskDef[] = [
     basis: "위험물안전관리법 제18조 (특정·準특정옥외탱크저장소 — 확인필요)",
     penalty: "벌칙 (확인필요)",
     defaultEnabled: false,
-  },
-  {
-    id: "hazmat-manager-edu",
-    category: "hazmat",
-    role: "위험물안전관리자",
-    title: "위험물안전관리자 교육 (실무교육 2년마다)",
-    cadence: everyYears(2),
-    basis: "위험물안전관리법 제28조·시행규칙 (신규 6개월 내, 이후 2년마다 — 확인필요)",
-    penalty: "과태료 (확인필요)",
-    defaultEnabled: true,
   },
 ];
