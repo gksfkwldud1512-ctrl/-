@@ -1,12 +1,14 @@
 // EH&S 포털 메뉴 구성 데이터
+
+// 사이드바 맨 위 "종합업무현황판" 버튼과 첫 화면에 표시되는 안전환경보건 종합업무현황판 주소.
+const EHS_DASHBOARD_URL = "https://ehs-status-board.vercel.app";
 //
 // [배포된 항목 추가] 아래 categories 안의 해당 대분류 items 배열에
 // { name, url, flow } 형태로 한 줄 추가하면 사이드바/홈카드/종합화면에 동시 반영됩니다.
 // flow는 종합화면(입력→처리→출력 카드)에 쓰이며 생략 가능합니다.
 //
 // [아직 배포 전인 항목 추가] items 대신 같은 카테고리의 plannedItems 배열에
-// { name, flow }(url 없이) 형태로 추가하면 종합화면에는 "설계 단계" 카드로 보이되
-// 사이드바/홈카드에는 나타나지 않습니다. 나중에 배포되면 items로 옮기고 url만 채우면 됩니다.
+// { name, flow }(url 없이) 형태로 추가하면 사이드바에 "계획됨" 항목으로 표시되고, 누르면 종합업무현황판으로 이동합니다. 나중에 배포되면 items로 옮기고 url만 채우면 됩니다.
 const EHS_MENU = [
   {
     key: "safety",
