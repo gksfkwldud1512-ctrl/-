@@ -1,4 +1,4 @@
-import type { AutoResult, TaskDef } from "./types";
+import type { AutoResult, Category, Role, TaskDef } from "./types";
 import type { Today } from "./taskStatus";
 
 // 하위 시스템 주소 — 서버(Next)에서 직접 불러오므로 CORS가 필요 없다.
@@ -100,10 +100,11 @@ export async function loadAutoBundle(year: number, today: Today): Promise<AutoBu
   if (edu.status === "fulfilled") {
     for (const it of edu.value.items) {
       const id = `edu:${it.id}`;
+      const { category, role } = educationPlacement(it.name);
       dynamicTasks.push({
         id,
-        category: "safety",
-        role: "안전관리자",
+        category,
+        role,
         title: `법정교육: ${it.name}`,
         cadence: { kind: "auto", label: cycleLabel(it.cycleMonths) },
         basis: `법정교육관리(중처법 이행관리 앱) — 대상: ${it.target || "미입력"}`,
@@ -119,6 +120,16 @@ export async function loadAutoBundle(year: number, today: Today): Promise<AutoBu
   }
 
   return { autoByTask, dynamicTasks };
+}
+
+/** 법정교육 항목을 이름으로 분야(안전/보건/환경/가스/위험물)와 담당에 배치한다. */
+function educationPlacement(name: string): { category: Category; role: Role } {
+  if (/환경기술인|폐기물|대기|수질/.test(name)) return { category: "environment", role: "환경기술인" };
+  if (/위험물/.test(name)) return { category: "hazmat", role: "위험물안전관리자" };
+  if (/가스|보일러/.test(name)) return { category: "gas", role: "가스안전관리자" };
+  if (/보건/.test(name)) return { category: "health", role: "보건관리자" };
+  if (/관리책임자|대표/.test(name)) return { category: "safety", role: "사업주·관리책임자" };
+  return { category: "safety", role: "안전관리자" }; // 안전관리자·소방안전관리자 등
 }
 
 function cycleLabel(months: number): string {
