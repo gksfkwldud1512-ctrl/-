@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+/* 참고 이미지(PIL 실측)에서 뽑은 색 */
+@theme {
+  /* 흰 배경(라이트) 테마 — 컴포넌트가 쓰는 이름은 그대로 두고 값만 바꿨다 */
+  --color-cc-bg: #f4f8fc;
+  --color-cc-panel: #ffffff;
+  --color-cc-panel2: #f6f9fd;
+  --color-cc-card: #f3f8fd;
+  --color-cc-line: #cddbe9;
+  --color-cc-cyan: #0b8fc4;
+  --color-cc-blue: #1f6fd0;
+  --color-cc-orange: #d97706;
+  --color-cc-red: #c62828;
+  --color-cc-green: #15803d;
+  --color-cc-text: #0f2a44;
+
+  /* 어두운 배경용으로 쓰던 밝은 글자색 → 흰 배경에서 읽히는 진한 색으로 매핑 */
+  --color-white: #0f2a44;
+  --color-sky-50: #0b2742;
+  --color-sky-100: #123656;
+  --color-sky-200: #1f4a73;
+  --color-sky-300: #2f628f;
+  --color-cyan-100: #075985;
+  --color-cyan-200: #0b6fa0;
+  --color-emerald-200: #166534;
+  --color-emerald-300: #15803d;
+  --color-red-200: #991b1b;
+  --color-red-300: #b91c1c;
+  --color-red-900: #fecaca;
+  --color-orange-200: #9a3412;
+  --color-orange-300: #c2410c;
+  --color-violet-200: #5b21b6;
+  --color-amber-100: #78350f;
+  --color-amber-200: #92400e;
+  --color-amber-300: #b45309;
+  --color-amber-950: #fde68a;
+  --color-slate-200: #334155;
+  --color-slate-300: #475569;
+  --color-teal-200: #115e59;
+}
+
+:root {
+  --background: #f4f8fc;
+  --foreground: #0f2a44;
+}
+
+body {
+  color: var(--foreground);
+  font-family: "Noto Sans KR", "Malgun Gothic", "맑은 고딕", system-ui, sans-serif;
+  background-color: #f4f8fc;
+  /* 흰 바탕에 위쪽만 아주 옅은 푸른 빛 */
+  background-image:
+    radial-gradient(1100px 480px at 50% -10%, rgba(40, 140, 228, 0.13), transparent 70%),
+    linear-gradient(180deg, #f8fbff 0%, #f4f8fc 60%, #eef4fa 100%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+/* 로봇 허브: 은은한 숨쉬기 빛 */
+@keyframes hub-glow {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 0.95; transform: scale(1.04); }
+}
+.hub-glow { animation: hub-glow 3.2s ease-in-out infinite; transform-origin: center; }
+
+/* 화살표를 따라 흐르는 빛 */
+@keyframes flow {
+  to { stroke-dashoffset: -40; }
+}
+.flow-line { stroke-dasharray: 10 10; animation: flow 1.6s linear infinite; }
+
+/* 실제로 running일 때만 쓰는 카드 맥박 */
+@keyframes desk-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(11, 143, 196, 0.45); }
+  50% { box-shadow: 0 0 0 7px rgba(11, 143, 196, 0); }
+}
+.desk-running { animation: desk-pulse 1.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hub-glow, .flow-line, .desk-running { animation: none; }
+  .desk-running { outline: 2px solid #0b8fc4; }
+}
+
+/* 스크롤바도 어둡게 */
+* { scrollbar-width: thin; scrollbar-color: #b5c7d9 transparent; }

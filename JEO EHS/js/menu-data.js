@@ -217,5 +217,32 @@ const EHS_MENU = [
       }
     ],
     plannedItems: []
+  },
+  {
+    key: "ai",
+    label: "AI 관제센터",
+    icon: "🤖",
+    items: [
+      {
+        name: "AI 에이전트 관제센터",
+        // 같은 주소(/control-center)로 연결 — 포털 vercel.json의 rewrites가 별도 앱으로 전달한다.
+        // 같은 도메인이라 로그인 쿠키가 iframe 안에서도 유지된다.
+        url: "/control-center",
+        flow: {
+          stack: "Next.js · 서명 쿠키 로그인 · 메모리 저장(DEMO)",
+          statusTone: "live",
+          statusLabel: "운영중 (DEMO 데이터)",
+          access: "로그인 필요 (조회 / EHS 담당자 / 관리자)",
+          input: ["담당자 6명(Legal·Safety·Environment·Report·Action·QA)의 실행 이벤트", "EHS 담당자의 승인·반려·재검토 결정과 사유"],
+          processing: [
+            "법적 의무 판정·외부 제출은 승인된 EHS 담당자 확인 필수 (서버에서 권한 재검증)",
+            "승인 직전 서버가 최종 검증 재실행 — QA 통과·이벤트 누락·결과물 해시 일치",
+            "중복 승인·동시 수정·근거 변경은 서버가 거부, 같은 요청 재전송은 1건만 반영"
+          ],
+          output: ["가상 AI 사무실·워크플로우 모니터·승인센터 화면", "해시로 연결된 감사 로그(승인 시각·담당자·근거 버전·사유)"]
+        }
+      }
+    ],
+    plannedItems: []
   }
 ];
