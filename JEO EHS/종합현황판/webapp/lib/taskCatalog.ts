@@ -155,6 +155,17 @@ export const TASK_CATALOG: TaskDef[] = [
     defaultEnabled: true,
   },
   {
+    id: "health-aed-check",
+    category: "health",
+    role: "보건관리자",
+    title: "자동심장충격기(AED) 정기점검·관리 (월 1회)",
+    cadence: MONTHLY,
+    basis: "응급의료에 관한 법률 제47조의2 (자동심장충격기 등 심폐소생술을 할 수 있는 응급장비 구비·관리) — 월 1회 점검은 사업장 자체 기준, 세부 의무 확인필요",
+    penalty: "과태료 (확인필요)",
+    note: "월 1회: 본체 상태표시등, 배터리 잔량·유효기간, 전극패드 유효기간·포장 상태, 보관함·안내표지 확인. 점검 기록(날짜·점검자)은 완료 기록에 파일로 남기세요.",
+    defaultEnabled: true,
+  },
+  {
     id: "health-general-exam",
     category: "health",
     role: "보건관리자",

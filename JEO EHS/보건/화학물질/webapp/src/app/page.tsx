@@ -169,6 +169,12 @@ export default async function Home() {
             임직원 명부 관리
           </Link>
           <Link
+            href="/work-env"
+            className="h-fit rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100"
+          >
+            작업환경측정
+          </Link>
+          <Link
             href="/dashboard"
             className="h-fit rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100"
           >

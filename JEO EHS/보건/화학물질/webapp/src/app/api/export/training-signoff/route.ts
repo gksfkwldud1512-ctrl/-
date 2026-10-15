@@ -2,7 +2,6 @@ import ExcelJS from "exceljs";
 import { getDashboardData, getEmployeesForScope } from "@/lib/db/repo";
 import { COMMON_DEPARTMENT } from "@/lib/constants";
 import { filterRowsForTraining } from "@/lib/trainingScope";
-import { INDUSTRIAL_SAFETY_ACT_CATEGORIES } from "@/lib/law/categories";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -23,7 +22,7 @@ function rowHeightFor(texts: { text: string; chars: number }[], minHeight = 20):
 }
 
 /**
- * 부서(+공정) 교육 서명지: 맨 위에 교육대상 물질(제품별 해당 법령/성분)을 표로 정리하고,
+ * 부서(+공정) 교육 서명지: 맨 위에 교육대상 물질(제품별 구성 성분)을 표로 정리하고,
  * 그 아래에 소속 인원 명단과 서명란을 둔다. A4 가로 1쪽 너비로 인쇄되도록 설정한다.
  */
 export async function GET(request: Request) {
@@ -42,21 +41,12 @@ export async function GET(request: Request) {
   // 공정공통 제품은 모든 공정에서 쓰므로 어느 공정의 교육자료에도 포함한다.
   const scopedRows = filterRowsForTraining(allRows, department, workProcess || null);
 
-  // 제품별로 해당 법령과 해당 성분을 모은다.
-  type Product = { name: string; laws: Set<string>; substances: Set<string> };
+  // 제품별로 구성 성분을 모은다. (해당 법령은 오해의 소지가 있어 서명지에 표시하지 않는다)
+  type Product = { name: string; substances: Set<string> };
   const products = new Map<string, Product>();
   for (const r of scopedRows) {
-    const p = products.get(r.mixtureId) ?? { name: r.productName, laws: new Set<string>(), substances: new Set<string>() };
-    if (r.chemicalsActFlag) {
-      p.laws.add("화관법");
-      p.substances.add(r.ingredientName);
-    }
-    for (const c of INDUSTRIAL_SAFETY_ACT_CATEGORIES) {
-      if (r.categoryFlags[c.key]) {
-        p.laws.add(`산안법·${c.label.replace(" 대상 유해인자", "")}`);
-        p.substances.add(r.ingredientName);
-      }
-    }
+    const p = products.get(r.mixtureId) ?? { name: r.productName, substances: new Set<string>() };
+    p.substances.add(r.ingredientName);
     products.set(r.mixtureId, p);
   }
   const productList = Array.from(products.values()).sort((a, b) => a.name.localeCompare(b.name, "ko"));
@@ -96,11 +86,10 @@ export async function GET(request: Request) {
   sheet.getRow(row).height = 22;
   row++;
 
-  const head1 = ["No", "제품명", "", "해당 법령", "", "해당 성분", ""];
+  const head1 = ["No", "제품명", "", "", "구성 성분", "", ""];
   head1.forEach((v, i) => (sheet.getCell(row, i + 1).value = v || undefined));
-  sheet.mergeCells(`B${row}:C${row}`);
-  sheet.mergeCells(`D${row}:E${row}`);
-  sheet.mergeCells(`F${row}:G${row}`);
+  sheet.mergeCells(`B${row}:D${row}`);
+  sheet.mergeCells(`E${row}:G${row}`);
   for (let c = 1; c <= 7; c++) {
     const cell = sheet.getCell(row, c);
     cell.font = { bold: true };
@@ -118,25 +107,20 @@ export async function GET(request: Request) {
     row++;
   }
   productList.forEach((p, idx) => {
-    const laws = Array.from(p.laws).join(", ") || "해당없음";
     const subs = Array.from(p.substances).join(", ") || "-";
     sheet.getCell(row, 1).value = idx + 1;
     sheet.getCell(row, 2).value = p.name;
-    sheet.getCell(row, 4).value = laws;
-    sheet.getCell(row, 6).value = subs;
-    sheet.mergeCells(`B${row}:C${row}`);
-    sheet.mergeCells(`D${row}:E${row}`);
-    sheet.mergeCells(`F${row}:G${row}`);
+    sheet.getCell(row, 5).value = subs;
+    sheet.mergeCells(`B${row}:D${row}`);
+    sheet.mergeCells(`E${row}:G${row}`);
     for (let c = 1; c <= 7; c++) {
       const cell = sheet.getCell(row, c);
       cell.border = BORDER;
       cell.alignment = { vertical: "middle", horizontal: c === 1 ? "center" : "left", wrapText: true };
-      if (c === 4 && p.laws.size > 0) cell.font = { color: { argb: "FFB91C1C" }, bold: true };
     }
     sheet.getRow(row).height = rowHeightFor([
-      { text: p.name, chars: 32 },
-      { text: laws, chars: 28 },
-      { text: subs, chars: 36 },
+      { text: p.name, chars: 44 },
+      { text: subs, chars: 52 },
     ]);
     row++;
   });

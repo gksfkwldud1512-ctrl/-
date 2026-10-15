@@ -85,6 +85,23 @@ const EHS_MENU = [
         }
       },
       {
+        name: "작업환경측정",
+        url: "https://webapp-one-eta-66.vercel.app/work-env",
+        flow: {
+          stack: "Next.js · Neon Postgres (화학물질관리 앱의 /work-env)",
+          statusTone: "live",
+          statusLabel: "운영중 (제외 기준은 법령 원문 확인 전)",
+          access: "공개",
+          input: ["화학물질관리 앱의 부서·공정별 부자재와 사원명부", "야간근무자 체크", "부자재별 월·일 사용시간(단시간·임시작업 제외 확인)"],
+          processing: [
+            "공정별 인원·야간근무자 집계",
+            "부자재 성분 중 작업환경측정 대상(시행규칙 별표 21) 판정 재사용",
+            "사용시간 기준 미달 시 제외 후보 표시, 담당자 확인 후 제외 확정(사유·확인자·날짜 기록)"
+          ],
+          output: ["공정별 예비조사 현황표", "예비조사표 엑셀(공정현황·대상물질·인원)", "예비조사 자료실(출처·확인필요 표시)"]
+        }
+      },
+      {
         name: "배치전검진",
         url: "https://webapp-one-eta-66.vercel.app/placement-exam",
         // 비밀번호 로그인 쿠키가 iframe(제3자 쿠키)에서 브라우저에 의해 차단되어 로그인이

@@ -209,6 +209,11 @@ export async function getEmployeeCount(): Promise<number> {
   return rows.length;
 }
 
+/** 전 직원(작업환경측정 예비조사의 공정별 인원·야간근무자 명단용). */
+export async function getAllEmployees(): Promise<(typeof employees.$inferSelect)[]> {
+  return db.select().from(employees).orderBy(employees.department, employees.name);
+}
+
 export type DepartmentSummary = { department: string; positions: { label: string; count: number }[]; total: number };
 
 /** 부서별·포지션별 인원수 요약(임직원 명부 관리 화면용). */

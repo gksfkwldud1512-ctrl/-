@@ -2,7 +2,6 @@ import ExcelJS from "exceljs";
 import { getDashboardData } from "@/lib/db/repo";
 import { COMMON_DEPARTMENT } from "@/lib/constants";
 import { filterRowsForTraining } from "@/lib/trainingScope";
-import { INDUSTRIAL_SAFETY_ACT_CATEGORIES } from "@/lib/law/categories";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -33,8 +32,6 @@ export async function GET(request: Request) {
     { header: "제품명", key: "productName", width: 26 },
     { header: "물질명", key: "ingredientName", width: 22 },
     { header: "CAS번호", key: "casNo", width: 14 },
-    { header: "화관법 유해화학물질", key: "chemicalsAct", width: 16 },
-    ...INDUSTRIAL_SAFETY_ACT_CATEGORIES.map((c) => ({ header: c.label, key: c.key, width: 16 })),
     { header: "보호구(MSDS 8장)", key: "ppe", width: 40 },
   ];
 
@@ -44,8 +41,6 @@ export async function GET(request: Request) {
         productName: idx === 0 ? productName : "",
         ingredientName: r.ingredientName,
         casNo: r.casNo ?? "",
-        chemicalsAct: r.chemicalsActFlag ? "O" : "X",
-        ...Object.fromEntries(INDUSTRIAL_SAFETY_ACT_CATEGORIES.map((c) => [c.key, r.categoryFlags[c.key] ? "O" : "X"])),
         ppe: idx === 0 ? (ppeText ?? "") : "",
       });
     });
