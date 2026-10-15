@@ -48,6 +48,13 @@ export type RowLite = {
   categoryFlags: Record<string, boolean>;
 };
 
+/** 현장직 사번 접두 — 작업환경측정은 현장직만 대상이며 그 외(관리직)는 인원·야간근무자에서 모두 제외한다. */
+export const FIELD_EMPLOYEE_PREFIXES = ["HSM", "HSX"] as const;
+
+export function isFieldWorker(employeeNo: string | null): boolean {
+  return !!employeeNo && FIELD_EMPLOYEE_PREFIXES.some((p) => employeeNo.toUpperCase().startsWith(p));
+}
+
 /** 사번이 있으면 사번, 없으면 이름|부서. 사원명부를 다시 올려도 야간 체크가 유지되게 하는 키. */
 export function employeeKey(e: Pick<EmployeeLite, "name" | "employeeNo" | "department">): string {
   return e.employeeNo ? e.employeeNo : `${e.name}|${e.department}`;
@@ -126,6 +133,7 @@ export function buildProcesses(employees: EmployeeLite[], rows: RowLite[], state
   };
 
   for (const e of employees) {
+    if (!isFieldWorker(e.employeeNo)) continue; // 관리직 제외
     const p = get(e.department, e.positionLabel ?? "(미지정)");
     const key = employeeKey(e);
     p.people.push({ key, name: e.name, employeeNo: e.employeeNo, night: night.has(key) });
@@ -164,7 +172,7 @@ export function buildProcesses(employees: EmployeeLite[], rows: RowLite[], state
     });
   }
 
-  const result = Array.from(map.values());
+  const result = Array.from(map.values()).filter((p) => p.people.length > 0 || p.products.length > 0);
   for (const p of result) {
     p.people.sort((a, b) => a.name.localeCompare(b.name, "ko"));
     p.products.sort((a, b) => a.productName.localeCompare(b.productName, "ko"));

@@ -20,7 +20,7 @@ export default async function WorkEnvPage() {
         <h1 className="mt-2 text-2xl font-semibold">작업환경측정 예비조사</h1>
         <p className="mt-1 text-sm text-zinc-500">
           공정별 인원·야간근무자와, 공정에서 쓰는 부자재 중 작업환경측정 대상 물질을 확인합니다. 단시간·임시작업은 사용시간을
-          입력해 제외 후보를 확인하고, 담당자가 확인해야 제외로 확정됩니다.
+          입력해 제외 후보를 확인하고, 담당자가 확인해야 제외로 확정됩니다. 인원은 현장직(사번 HSM·HSX)만 집계하며 관리직은 제외했습니다.
         </p>
       </div>
 
