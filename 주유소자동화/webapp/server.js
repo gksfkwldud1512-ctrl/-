@@ -146,6 +146,7 @@ const { parseBosDaily, parseCustomerSales } = require('./lib/dailyBosParser');
 const { parseEasyshop }    = require('./lib/easyshopParser');
 const { matchCards }       = require('./lib/cardMatcher');
 const { parseBankDeposits } = require('./lib/bankParser');
+const { calcVatQuarter, loadSettings: loadVatSettings } = require('./lib/vatCalculator');
 
 function vendorFile(year, month) {
   const mo = String(month).padStart(2, '0');
@@ -2847,6 +2848,110 @@ app.delete('/api/oilbank-supports/:id', (req, res) => {
     res.json({ ok: true, supports: buildSupports() });
   } catch (e) {
     console.error('[oilbank-supports:delete]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── 부가세 신고 (분기별 예상 세액) ──────────────────────────────
+// 계산은 lib/vatCalculator.js, 설정·수동 입력·실제 신고값은 data/vat_settings.json
+const VAT_SETTINGS_FILE = path.join(DATA_DIR, 'vat_settings.json');
+const VAT_KEY_RE = /^\d{4}-Q[1-4]$/;
+
+function updateVatSettings(fn) {
+  const s = loadVatSettings(DATA_DIR);
+  fn(s);
+  writeJSON(VAT_SETTINGS_FILE, s);
+  return s;
+}
+
+app.get('/api/vat/summary', (req, res) => {
+  try {
+    const year = parseInt(req.query.year) || new Date().getFullYear();
+    const quarter = parseInt(req.query.quarter) || Math.floor(new Date().getMonth() / 3) + 1;
+    if (quarter < 1 || quarter > 4) return res.status(400).json({ ok: false, error: '분기는 1~4입니다.' });
+    res.json({ ok: true, ...calcVatQuarter(DATA_DIR, year, quarter), settings: loadVatSettings(DATA_DIR) });
+  } catch (e) {
+    console.error('[vat/summary]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// 기타 매입(소액 세금계산서·사업용 카드 등) 추가/수정 — id 있으면 수정
+app.post('/api/vat/manual-purchase', (req, res) => {
+  try {
+    const { key, entry } = req.body;
+    if (!VAT_KEY_RE.test(key || '')) return res.status(400).json({ ok: false, error: '분기 키가 올바르지 않습니다.' });
+    const toNum = v => Number(String(v ?? '').replace(/,/g, ''));
+    const supply = Math.round(toNum(entry?.supply));
+    if (!entry?.name || !Number.isFinite(supply)) return res.status(400).json({ ok: false, error: '내용과 공급가액을 입력하세요.' });
+    const rec = {
+      id: entry.id || `vp_${Date.now()}`,
+      kind: ['세금계산서', '카드', '현금영수증'].includes(entry.kind) ? entry.kind : '세금계산서',
+      name: String(entry.name).trim(),
+      supply,
+      tax: entry.tax === '' || entry.tax == null ? Math.round(supply * 0.1) : Math.round(toNum(entry.tax)),
+      deductible: entry.deductible !== false,
+      memo: entry.memo || '',
+    };
+    updateVatSettings(s => {
+      const list = (s.manualPurchases[key] = s.manualPurchases[key] || []);
+      const idx = list.findIndex(x => x.id === rec.id);
+      if (idx >= 0) list[idx] = rec; else list.push(rec);
+    });
+    res.json({ ok: true, entry: rec });
+  } catch (e) {
+    console.error('[vat/manual-purchase]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.delete('/api/vat/manual-purchase', (req, res) => {
+  try {
+    const { key, id } = req.body;
+    updateVatSettings(s => {
+      if (s.manualPurchases[key]) s.manualPurchases[key] = s.manualPurchases[key].filter(x => x.id !== id);
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[vat/manual-purchase:delete]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// 실제 신고 금액 저장 (values = null 이면 삭제)
+app.post('/api/vat/actual', (req, res) => {
+  try {
+    const { key, values } = req.body;
+    if (!VAT_KEY_RE.test(key || '')) return res.status(400).json({ ok: false, error: '분기 키가 올바르지 않습니다.' });
+    const fields = ['salesInvoiceSupply', 'salesCardSupply', 'salesOtherSupply', 'outputTax', 'inputInvoiceSupply', 'inputCardSupply', 'inputTax', 'payable'];
+    updateVatSettings(s => {
+      if (!values) { delete s.actual[key]; return; }
+      const rec = { ...(s.actual[key] || {}) };
+      for (const f of fields) {
+        if (values[f] === '' || values[f] == null) delete rec[f];
+        else rec[f] = Math.round(Number(String(values[f]).replace(/,/g, '')));
+      }
+      s.actual[key] = rec;
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[vat/actual]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// 일반 설정: 면세 고객, 전자신고공제, 고정 매입
+app.post('/api/vat/settings', (req, res) => {
+  try {
+    const { taxFreeCustomers, eFilingCredit, fixedPurchases } = req.body;
+    updateVatSettings(s => {
+      if (Array.isArray(taxFreeCustomers)) s.taxFreeCustomers = [...new Set(taxFreeCustomers.map(String))];
+      if (typeof eFilingCredit === 'boolean') s.eFilingCredit = eFilingCredit;
+      if (Array.isArray(fixedPurchases)) s.fixedPurchases = fixedPurchases;
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[vat/settings]', e);
     res.status(500).json({ ok: false, error: e.message });
   }
 });

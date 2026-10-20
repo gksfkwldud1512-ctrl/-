@@ -16,6 +16,7 @@
       <button class="main-tab" data-group="summary">종합</button>
       <button class="main-tab" data-group="daily">일마감</button>
       <button class="main-tab active" data-group="monthly">월마감</button>
+      <button class="main-tab" data-group="vat">부가세 신고</button>
     </nav>
   </div>
   <!-- subnav: 종합/일마감/월마감 groups all use this -->
@@ -1356,6 +1357,22 @@
   </div>
 
   </section><!-- /group-monthly -->
+
+  <!-- ───── 대분류: 부가세 신고 ───── -->
+  <section id="group-vat" class="group-content">
+    <div class="toolbar">
+      <div class="toolbar-group">
+        <label class="label-sm">연도</label>
+        <select id="vat-year" onchange="vatState.year = +this.value; loadVat()"></select>
+        <div id="vat-quarters" style="display:flex;gap:6px;margin-left:8px;"></div>
+      </div>
+    </div>
+    <div class="notice notice-info">
+      🧾 (주)미소주유소는 <b>법인 일반과세자</b> — 분기마다 신고합니다 (1분기 예정 4/25 · 2분기 확정 7/25 · 3분기 예정 10/25 · 4분기 확정 다음해 1/25).<br>
+      일마감 BOS 판매(부가세 포함 ÷ 1.1)와 입고이력으로 계산한 <b>예상 세액</b>입니다. 최종 신고는 홈택스 자료와 세무사 확인을 거치세요.
+    </div>
+    <div id="vat-body"></div>
+  </section><!-- /group-vat -->
 
 </main>
 

@@ -126,7 +126,7 @@ function initTabs() {
 
 function switchGroup(group) {
   // 모든 그룹 숨기기 (inline style 사용 — CSS보다 우선순위 확실)
-  ['group-usage', 'group-summary', 'group-daily', 'group-monthly'].forEach(id => {
+  ['group-usage', 'group-summary', 'group-daily', 'group-monthly', 'group-vat'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.style.display = 'none'; el.classList.remove('active'); }
   });
@@ -165,6 +165,8 @@ function switchGroup(group) {
   } else if (group === 'summary') {
     const activeTab = document.querySelector('#subnav-summary .tab-btn.active')?.dataset.tab || 'summary-main';
     switchSummarySubTab(activeTab);
+  } else if (group === 'vat') {
+    loadVat();
   }
 }
 
@@ -5002,3 +5004,244 @@ async function saveBankBalance(month) {
 }
 
 // ── 업체별 결제주기 설정 ──────────────────────────────────────
+
+// ── 부가세 신고 (분기별 예상 세액) ─────────────────────────────
+// 서버 lib/vatCalculator.js 계산 결과를 표시. 기타 매입·실제 신고값·면세 고객은 data/vat_settings.json
+const vatState = { year: null, quarter: null, data: null };
+const vatN = v => Math.round(v || 0).toLocaleString();
+const vatSigned = v => `${v > 0 ? '+' : ''}${vatN(v)}`;
+
+function initVatPeriod() {
+  // 기본: 방금 끝난 분기 (신고 준비 대상)
+  const now = new Date();
+  let q = Math.floor(now.getMonth() / 3), y = now.getFullYear();
+  if (q === 0) { q = 4; y -= 1; }
+  vatState.year = y; vatState.quarter = q;
+  const sel = document.getElementById('vat-year');
+  sel.innerHTML = [now.getFullYear() - 1, now.getFullYear()].map(v => `<option value="${v}">${v}년</option>`).join('');
+  sel.value = y;
+}
+
+function renderVatQuarterChips() {
+  const box = document.getElementById('vat-quarters');
+  box.innerHTML = [1, 2, 3, 4].map(q => {
+    const on = q === vatState.quarter;
+    return `<button class="btn-filter${on ? ' active' : ''}"
+      onclick="vatState.quarter=${q}; loadVat()">${q}분기 <span style="opacity:.75">${q % 2 ? '예정' : '확정'}</span></button>`;
+  }).join('');
+}
+
+async function loadVat() {
+  if (!vatState.year) initVatPeriod();
+  renderVatQuarterChips();
+  const body = document.getElementById('vat-body');
+  body.innerHTML = '<div style="padding:24px;color:#94a3b8;">계산 중…</div>';
+  const res = await api('GET', `/api/vat/summary?year=${vatState.year}&quarter=${vatState.quarter}`);
+  if (!res.ok) { body.innerHTML = `<div class="notice notice-warn">${esc(res.error || '조회 실패')}</div>`; return; }
+  vatState.data = res;
+  renderVat(res);
+}
+
+function vatKpi(label, value, sub, color) {
+  return `<div class="summary-kpi-card" style="border-top-color:${color};">
+    <div class="kpi-label">${label}</div>
+    <div class="kpi-value" style="color:${color};">${value}</div>
+    <div style="font-size:11px;color:#64748b;margin-top:4px;">${sub}</div></div>`;
+}
+
+function renderVat(d) {
+  const p = d.period;
+  const th = 'padding:6px 8px;background:#f1f5f9;font-weight:600;';
+  const td = 'padding:6px 8px;border-bottom:1px solid #f1f5f9;';
+  const r = 'text-align:right;';
+  const dday = p.dDay > 0 ? `D-${p.dDay}` : p.dDay === 0 ? 'D-Day' : `기한 지남 (${-p.dDay}일)`;
+  const payColor = d.payable > 0 ? '#dc2626' : '#2563eb';
+
+  // KPI
+  let html = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px;">
+    ${vatKpi('매출세액', vatN(d.outputTax) + '원', `과세표준 ${vatN(d.sales.supply)}원`, '#0f766e')}
+    ${vatKpi('매입세액 (공제)', vatN(d.inputTax) + '원', `매입 공급가액 ${vatN(d.purchase.supply)}원`, '#7c3aed')}
+    ${vatKpi(d.payable >= 0 ? '납부 예상세액' : '환급 예상세액', vatN(Math.abs(d.payable)) + '원', '매출세액 − 매입세액 − 공제', payColor)}
+    ${vatKpi(`신고기한 · ${p.type}신고`, p.dueDate, `${dday} · 자료 ${p.days}/${p.expectedDays}일${p.lastDataDate ? ` (~${p.lastDataDate.slice(5)})` : ''}`, '#475569')}
+  </div>`;
+
+  // 경고
+  if (d.warnings.length) {
+    html += `<div class="notice notice-warn" style="margin-bottom:16px;line-height:1.8;">
+      ${d.warnings.map(w => `⚠ ${esc(w)}`).join('<br>')}
+      ${d.sales.taxFreeCandidates.map(n => `<br><button class="btn-sm" style="padding:2px 10px;font-size:11px;margin-top:4px;"
+        onclick="vatSetTaxFree(decodeURIComponent('${encodeURIComponent(n)}'), true)">"${esc(n)}" 면세로 지정</button>`).join('')}
+    </div>`;
+  }
+
+  // ① 매출
+  const lines = d.sales.lines;
+  html += `<div class="card"><div class="card-header"><h2>① 매출 — ${esc(p.label)}</h2>
+      <span style="font-size:12px;color:#64748b;">판매금액은 부가세 포함, 공급가액 = 금액 ÷ 1.1</span></div>
+    <div style="padding:12px 16px;overflow-x:auto;">
+    <table style="width:100%;font-size:13px;border-collapse:collapse;">
+      <thead><tr><th style="${th}text-align:left;">구분</th><th style="${th}${r}">판매금액</th><th style="${th}${r}">공급가액</th>
+        <th style="${th}${r}">세액</th><th style="${th}text-align:left;">근거</th></tr></thead><tbody>
+      ${lines.map(l => `<tr><td style="${td}">${esc(l.label)}</td><td style="${td}${r}">${vatN(l.amount)}</td>
+        <td style="${td}${r}">${vatN(l.supply)}</td><td style="${td}${r}">${vatN(l.tax)}</td>
+        <td style="${td}font-size:11px;color:#64748b;">${esc(l.basis)}</td></tr>`).join('')}
+      ${d.sales.taxFree ? `<tr><td style="${td}">면세 매출 (과세표준 제외)</td><td style="${td}${r}">${vatN(d.sales.taxFree)}</td>
+        <td style="${td}${r}">-</td><td style="${td}${r}">-</td><td style="${td}font-size:11px;color:#64748b;">${esc(Object.keys(d.sales.taxFreeCustomers).join(', '))}</td></tr>` : ''}
+      <tr style="font-weight:700;background:#f8fafc;"><td style="${td}">과세 매출 합계</td><td style="${td}${r}">${vatN(d.sales.taxable)}</td>
+        <td style="${td}${r}">${vatN(d.sales.supply)}</td><td style="${td}${r}">${vatN(d.outputTax)}</td><td style="${td}"></td></tr>
+    </tbody></table>
+
+    <div style="margin-top:14px;font-weight:600;font-size:13px;">월별 판매 (BOS)</div>
+    <table style="width:100%;font-size:12px;border-collapse:collapse;margin-top:6px;">
+      <thead><tr>${['월', '자료일수', '유류', '세차', '유외상품', '합계', '신용카드', '현금', '외상', '기타 결제']
+        .map((h, i) => `<th style="${th}${i > 0 ? r : ''}">${h}</th>`).join('')}</tr></thead><tbody>
+      ${d.sales.byMonth.map(m => `<tr>${[m.month, m.days, m.fuel, m.carwash, m.others, m.total, m.card, m.cash, m.credit, m.gift]
+        .map((v, i) => `<td style="${td}${i > 0 ? r : ''}${i === 5 ? 'font-weight:600;' : ''}">${i === 0 ? v : vatN(v)}</td>`).join('')}</tr>`).join('')}
+    </tbody></table>
+
+    <details style="margin-top:12px;"><summary style="cursor:pointer;font-size:13px;font-weight:600;">
+      세금계산서 발급 대상 ${d.sales.invoiceCustomers.length}곳 · 사업자번호 미등록 ${d.sales.noBizCustomers.length}곳 (홈택스 발급 목록과 대조용)</summary>
+      <table style="width:100%;font-size:12px;border-collapse:collapse;margin-top:6px;">
+        <thead><tr><th style="${th}text-align:left;">거래처</th><th style="${th}">사업자번호</th><th style="${th}${r}">외상 판매(부가세 포함)</th>
+          <th style="${th}${r}">공급가액</th><th style="${th}${r}">세액</th></tr></thead><tbody>
+        ${d.sales.invoiceCustomers.concat(d.sales.noBizCustomers).map(c => {
+          const amt = c.amount - (c.nonFuelOnlyFuel || 0), sup = Math.round(amt / 1.1);
+          const reg = String(c.bizNo || '').replace(/\D/g, '').length === 10;
+          return `<tr${reg ? '' : ' style="color:#b45309;"'}>
+            <td style="${td}">${esc(c.name)}${c.nonFuelOnlyFuel ? ` <span style="font-size:11px;color:#64748b;">(유류 ${vatN(c.nonFuelOnlyFuel)} 유가보조금 카드)</span>` : ''}</td>
+            <td style="${td}text-align:center;">${reg ? esc(c.bizNo) : '미등록'}</td><td style="${td}${r}">${vatN(amt)}</td>
+            <td style="${td}${r}">${vatN(sup)}</td><td style="${td}${r}">${vatN(amt - sup)}</td></tr>`;
+        }).join('')}
+      </tbody></table>
+    </details>
+    </div></div>`;
+
+  // ② 매입
+  html += `<div class="card"><div class="card-header"><h2>② 매입세액</h2>
+      <span style="font-size:12px;color:#64748b;">세금계산서·사업용 카드·지출증빙 현금영수증만 공제</span></div>
+    <div style="padding:12px 16px;overflow-x:auto;">
+    <table style="width:100%;font-size:13px;border-collapse:collapse;">
+      <thead><tr><th style="${th}text-align:left;">항목</th><th style="${th}">증빙</th><th style="${th}${r}">공급가액</th><th style="${th}${r}">세액</th>
+        <th style="${th}">공제</th><th style="${th}text-align:left;">근거</th><th style="${th}"></th></tr></thead><tbody>
+      ${d.purchase.items.map(it => `<tr${it.deductible ? '' : ' style="color:#94a3b8;text-decoration:line-through;"'}>
+        <td style="${td}">${esc(it.label)}</td><td style="${td}text-align:center;">${esc(it.kind)}</td>
+        <td style="${td}${r}">${vatN(it.supply)}</td><td style="${td}${r}">${vatN(it.tax)}</td>
+        <td style="${td}text-align:center;">${it.deductible ? '공제' : '불공제'}</td>
+        <td style="${td}font-size:11px;color:#64748b;">${esc(it.basis)}</td>
+        <td style="${td}">${it.id ? `<button class="btn-sm" style="padding:2px 8px;font-size:11px;" onclick="vatDeleteManual('${esc(it.id)}')">삭제</button>` : ''}</td></tr>`).join('')}
+      <tr style="font-weight:700;background:#f8fafc;"><td style="${td}" colspan="2">공제 매입 합계</td>
+        <td style="${td}${r}">${vatN(d.purchase.supply)}</td><td style="${td}${r}">${vatN(d.purchase.tax)}</td><td style="${td}" colspan="3"></td></tr>
+    </tbody></table>
+    <div style="margin-top:6px;font-size:11px;color:#64748b;">
+      연료: ${d.purchase.fuel.byFuel.map(f => `${f.fuel} ${vatN(f.qty)}L (${f.count}건) ${vatN(f.supply)}원`).join(' · ')}
+    </div>
+
+    <div style="margin-top:14px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
+      <div style="font-weight:600;font-size:13px;margin-bottom:8px;">기타 매입 추가 (홈택스 매입 세금계산서·카드 매입 합계)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;">
+        <select id="vat-mp-kind"><option>세금계산서</option><option>카드</option><option>현금영수증</option></select>
+        <input id="vat-mp-name" placeholder="내용 (예: 기타 세금계산서 합계)" style="width:220px;">
+        <input id="vat-mp-supply" placeholder="공급가액" style="width:120px;text-align:right;">
+        <input id="vat-mp-tax" placeholder="세액 (비우면 10%)" style="width:120px;text-align:right;">
+        <label><input type="checkbox" id="vat-mp-nonded"> 불공제 (접대비·비영업용 승용차 등)</label>
+        <input id="vat-mp-memo" placeholder="메모" style="width:160px;">
+        <button class="btn-primary btn-sm" onclick="vatAddManual()">추가</button>
+      </div>
+    </div>
+    </div></div>`;
+
+  // ③ 납부세액
+  html += `<div class="card"><div class="card-header"><h2>③ 납부세액</h2></div>
+    <div style="padding:12px 16px;">
+    <table style="width:100%;max-width:860px;font-size:13px;border-collapse:collapse;"><colgroup><col style="width:260px"><col style="width:150px"><col></colgroup>
+      <tr><td style="${td}">매출세액 (㉮)</td><td style="${td}${r}">${vatN(d.outputTax)}</td><td style="${td}"></td></tr>
+      <tr><td style="${td}">매입세액 (㉯)</td><td style="${td}${r}white-space:nowrap;">− ${vatN(d.inputTax)}</td><td style="${td}"></td></tr>
+      ${d.credits.map(c => `<tr><td style="${td}">${esc(c.label)}</td><td style="${td}${r}white-space:nowrap;">− ${vatN(c.amount)}</td>
+        <td style="${td}font-size:11px;color:#64748b;">${esc(c.note)}${c.key === 'eFiling' ? `
+          <label style="margin-left:6px;"><input type="checkbox" ${d.settings.eFilingCredit ? 'checked' : ''} onchange="vatSetEFiling(this.checked)"> 직접 전자신고</label>` : ''}</td></tr>`).join('')}
+      <tr style="font-weight:700;font-size:15px;"><td style="${td}">${d.payable >= 0 ? '납부할 세액' : '환급받을 세액'}</td>
+        <td style="${td}${r}color:${payColor};">${vatN(Math.abs(d.payable))}</td><td style="${td}"></td></tr>
+    </table>
+    ${p.type === '확정' ? `<div style="margin-top:8px;font-size:11px;color:#64748b;">※ 확정신고서는 6개월분으로 작성하고 예정신고 때 신고·납부한 세액을 빼서 냅니다. 이 화면은 이번 분기(3개월)분만 계산합니다.</div>` : ''}
+    ${p.type === '예정' && d.payable < 0 ? `<div style="margin-top:8px;font-size:11px;color:#64748b;">※ 예정신고 환급세액은 조기환급 대상이 아니면 바로 돌려받지 않고 확정신고 때 차감됩니다.</div>` : ''}
+    ${d.settings.taxFreeCustomers.length ? `<div style="margin-top:8px;font-size:12px;">면세 고객: ${d.settings.taxFreeCustomers.map(n =>
+      `${esc(n)} <a href="#" onclick="vatSetTaxFree(decodeURIComponent('${encodeURIComponent(n)}'), false);return false;">[해제]</a>`).join(' · ')}</div>` : ''}
+    </div></div>`;
+
+  // ④ 실제 신고 대조
+  const a = d.actual || {};
+  const fields = [['salesInvoiceSupply', '매출 세금계산서 발급분 공급가액'], ['salesCardSupply', '매출 카드·현금영수증 공급가액'],
+    ['salesOtherSupply', '매출 기타 공급가액'], ['outputTax', '매출세액'], ['inputInvoiceSupply', '매입 세금계산서 공급가액'],
+    ['inputCardSupply', '매입 카드 등 공급가액'], ['inputTax', '매입세액'], ['payable', '납부세액']];
+  html += `<div class="card"><div class="card-header"><h2>④ 실제 신고 대조</h2>
+      <span style="font-size:12px;color:#64748b;">신고 후 신고서 금액을 넣으면 예상치와 비교</span></div>
+    <div style="padding:12px 16px;overflow-x:auto;">
+    ${d.compare ? `<table style="width:100%;font-size:13px;border-collapse:collapse;">
+      <thead><tr><th style="${th}text-align:left;">항목</th><th style="${th}${r}">웹앱 예상</th><th style="${th}${r}">실제 신고</th>
+        <th style="${th}${r}">차이</th><th style="${th}${r}">차이율</th></tr></thead><tbody>
+      ${d.compare.map(c => `<tr><td style="${td}">${esc(c.label)}</td><td style="${td}${r}">${vatN(c.estimate)}</td><td style="${td}${r}">${vatN(c.actual)}</td>
+        <td style="${td}${r}color:${Math.abs(c.rate || 0) > 0.01 ? '#dc2626' : '#15803d'};">${vatSigned(c.diff)}</td>
+        <td style="${td}${r}">${c.rate == null ? '-' : (c.rate * 100).toFixed(2) + '%'}</td></tr>`).join('')}
+    </tbody></table>` : '<div style="color:#94a3b8;font-size:13px;">이 분기 실제 신고 금액이 없습니다.</div>'}
+    <details style="margin-top:10px;"><summary style="cursor:pointer;font-size:13px;">실제 신고 금액 입력/수정</summary>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:6px;margin-top:8px;font-size:12px;">
+        ${fields.map(([k, l]) => `<label style="display:flex;justify-content:space-between;gap:6px;align-items:center;">${l}
+          <input id="vat-act-${k}" value="${a[k] != null ? vatN(a[k]) : ''}" style="width:140px;text-align:right;"></label>`).join('')}
+      </div>
+      <div style="margin-top:8px;display:flex;gap:6px;">
+        <button class="btn-primary btn-sm" onclick="vatSaveActual()">저장</button>
+        ${d.actual ? `<button class="btn-danger btn-sm" onclick="vatSaveActual(true)">삭제</button>` : ''}
+      </div>
+    </details>
+    </div></div>`;
+
+  document.getElementById('vat-body').innerHTML = html;
+}
+
+async function vatAddManual() {
+  const v = id => document.getElementById(id).value.trim();
+  const entry = {
+    kind: v('vat-mp-kind'), name: v('vat-mp-name'),
+    supply: v('vat-mp-supply').replace(/,/g, ''), tax: v('vat-mp-tax').replace(/,/g, ''),
+    deductible: !document.getElementById('vat-mp-nonded').checked, memo: v('vat-mp-memo'),
+  };
+  if (!entry.name || !entry.supply) { toast('내용과 공급가액을 입력하세요.', 'error'); return; }
+  const res = await api('POST', '/api/vat/manual-purchase', { key: vatState.data.period.key, entry });
+  if (!res.ok) { toast(res.error || '저장 실패', 'error'); return; }
+  toast('매입을 추가했습니다.', 'success');
+  loadVat();
+}
+
+async function vatDeleteManual(id) {
+  if (!confirm('이 매입 항목을 삭제할까요?')) return;
+  const res = await api('DELETE', '/api/vat/manual-purchase', { key: vatState.data.period.key, id });
+  if (!res.ok) { toast(res.error || '삭제 실패', 'error'); return; }
+  loadVat();
+}
+
+async function vatSaveActual(remove) {
+  let values = null;
+  if (!remove) {
+    values = {};
+    ['salesInvoiceSupply', 'salesCardSupply', 'salesOtherSupply', 'outputTax', 'inputInvoiceSupply', 'inputCardSupply', 'inputTax', 'payable']
+      .forEach(k => { values[k] = document.getElementById(`vat-act-${k}`).value.trim(); });
+  } else if (!confirm('이 분기 실제 신고 금액을 삭제할까요?')) return;
+  const res = await api('POST', '/api/vat/actual', { key: vatState.data.period.key, values });
+  if (!res.ok) { toast(res.error || '저장 실패', 'error'); return; }
+  toast(remove ? '삭제했습니다.' : '저장했습니다.', 'success');
+  loadVat();
+}
+
+async function vatSetTaxFree(name, on) {
+  const cur = vatState.data.settings.taxFreeCustomers || [];
+  const list = on ? cur.concat(name) : cur.filter(n => n !== name);
+  const res = await api('POST', '/api/vat/settings', { taxFreeCustomers: list });
+  if (!res.ok) { toast(res.error || '저장 실패', 'error'); return; }
+  loadVat();
+}
+
+async function vatSetEFiling(on) {
+  const res = await api('POST', '/api/vat/settings', { eFilingCredit: on });
+  if (!res.ok) { toast(res.error || '저장 실패', 'error'); return; }
+  loadVat();
+}
