@@ -208,16 +208,21 @@ function calcVatQuarter(dataDir, year, quarter, today = new Date().toISOString()
       inputInvoiceSupply: purchase.invoiceSupply,
       inputCardSupply: purchase.cardSupply,
       inputTax: purchase.tax,
-      payable,
+      payable: outputTax - purchase.tax,   // 신고서 ㉰ = ㉮ − ㉯ (경감·공제세액 차감 전)
     };
+    // 일반과세자 신고서 칸 번호 기준
     const labels = {
-      salesSupply: '매출 과세표준(공급가액) 합계', salesInvoiceSupply: '└ 세금계산서 발급분', salesCardSupply: '└ 카드·현금영수증·기타',
-      outputTax: '매출세액', inputInvoiceSupply: '매입 세금계산서 공급가액', inputCardSupply: '매입 카드 등 공급가액', inputTax: '매입세액', payable: '납부세액',
+      salesSupply: '매출 과세표준 합계 (9) 금액', salesInvoiceSupply: '└ 세금계산서 발급분 (1)', salesCardSupply: '└ 신용카드·현금영수증 (3) + 기타 (4)',
+      outputTax: '매출세액 ㉮ (9) 세액', inputInvoiceSupply: '세금계산서 수취분 (10)+(11) 금액', inputCardSupply: '그 밖의 공제매입 (14) 금액',
+      inputTax: '매입세액 ㉯ (17) 세액', payable: '납부(환급)세액 ㉰ = ㉮ − ㉯',
     };
-    if (actual.salesSupply == null && actual.salesInvoiceSupply != null) actual.salesSupply = (actual.salesInvoiceSupply || 0) + (actual.salesCardSupply || 0) + (actual.salesOtherSupply || 0);
-    compare = Object.keys(labels).filter(k => actual[k] != null).map(k => ({
-      key: k, label: labels[k], estimate: est[k], actual: actual[k], diff: est[k] - actual[k],
-      rate: actual[k] ? (est[k] - actual[k]) / actual[k] : null,
+    // 웹앱 예상의 "카드·현금 등"은 세금계산서 외 전부라서 실제도 (3)+(4)로 맞춰 비교
+    const act = { ...actual };
+    if (act.salesCardSupply != null || act.salesOtherSupply != null) act.salesCardSupply = (act.salesCardSupply || 0) + (act.salesOtherSupply || 0);
+    if (act.salesSupply == null && act.salesInvoiceSupply != null) act.salesSupply = (act.salesInvoiceSupply || 0) + (act.salesCardSupply || 0);
+    compare = Object.keys(labels).filter(k => act[k] != null).map(k => ({
+      key: k, label: labels[k], estimate: est[k], actual: act[k], diff: est[k] - act[k],
+      rate: act[k] ? (est[k] - act[k]) / act[k] : null,
     }));
   }
 

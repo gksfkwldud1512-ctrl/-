@@ -5162,7 +5162,7 @@ function renderVat(d) {
       <tr style="font-weight:700;font-size:15px;"><td style="${td}">${d.payable >= 0 ? '납부할 세액' : '환급받을 세액'}</td>
         <td style="${td}${r}color:${payColor};">${vatN(Math.abs(d.payable))}</td><td style="${td}"></td></tr>
     </table>
-    ${p.type === '확정' ? `<div style="margin-top:8px;font-size:11px;color:#64748b;">※ 확정신고서는 6개월분으로 작성하고 예정신고 때 신고·납부한 세액을 빼서 냅니다. 이 화면은 이번 분기(3개월)분만 계산합니다.</div>` : ''}
+    ${p.type === '확정' ? `<div style="margin-top:8px;font-size:11px;color:#64748b;">※ 법인 확정신고는 예정신고한 분기를 빼고 이번 분기(3개월)분만 신고합니다. 예정신고 때 빠뜨린 금액이 있으면 확정신고서 "예정신고누락분" 칸에 더해집니다.</div>` : ''}
     ${p.type === '예정' && d.payable < 0 ? `<div style="margin-top:8px;font-size:11px;color:#64748b;">※ 예정신고 환급세액은 조기환급 대상이 아니면 바로 돌려받지 않고 확정신고 때 차감됩니다.</div>` : ''}
     ${d.settings.taxFreeCustomers.length ? `<div style="margin-top:8px;font-size:12px;">면세 고객: ${d.settings.taxFreeCustomers.map(n =>
       `${esc(n)} <a href="#" onclick="vatSetTaxFree(decodeURIComponent('${encodeURIComponent(n)}'), false);return false;">[해제]</a>`).join(' · ')}</div>` : ''}
@@ -5170,11 +5170,12 @@ function renderVat(d) {
 
   // ④ 실제 신고 대조
   const a = d.actual || {};
-  const fields = [['salesInvoiceSupply', '매출 세금계산서 발급분 공급가액'], ['salesCardSupply', '매출 카드·현금영수증 공급가액'],
-    ['salesOtherSupply', '매출 기타 공급가액'], ['outputTax', '매출세액'], ['inputInvoiceSupply', '매입 세금계산서 공급가액'],
-    ['inputCardSupply', '매입 카드 등 공급가액'], ['inputTax', '매입세액'], ['payable', '납부세액']];
+  // 일반과세자 부가가치세 신고서 칸 번호 — 세무사 신고서에서 그대로 옮겨 적기
+  const fields = [['salesInvoiceSupply', '(1) 과세 세금계산서 발급분 — 금액'], ['salesCardSupply', '(3) 신용카드·현금영수증 발행분 — 금액'],
+    ['salesOtherSupply', '(4) 기타(정규영수증 외) — 금액'], ['outputTax', '(9) 합계 — 세액 ㉮'], ['inputInvoiceSupply', '(10)+(11) 세금계산서 수취분 — 금액'],
+    ['inputCardSupply', '(14) 그 밖의 공제매입세액 — 금액'], ['inputTax', '(17) 차감계 — 세액 ㉯'], ['payable', '납부(환급)세액 ㉰']];
   html += `<div class="card"><div class="card-header"><h2>④ 실제 신고 대조</h2>
-      <span style="font-size:12px;color:#64748b;">신고 후 신고서 금액을 넣으면 예상치와 비교</span></div>
+      <span style="font-size:12px;color:#64748b;">세무사 신고서의 칸 번호대로 금액을 넣으면 웹앱 예상과 비교 (차이 1% 넘으면 빨간색)</span></div>
     <div style="padding:12px 16px;overflow-x:auto;">
     ${d.compare ? `<table style="width:100%;font-size:13px;border-collapse:collapse;">
       <thead><tr><th style="${th}text-align:left;">항목</th><th style="${th}${r}">웹앱 예상</th><th style="${th}${r}">실제 신고</th>
