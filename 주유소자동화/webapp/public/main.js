@@ -5163,6 +5163,7 @@ function renderVat(d) {
         <td style="${td}${r}color:${payColor};">${vatN(Math.abs(d.payable))}</td><td style="${td}"></td></tr>
     </table>
     ${p.type === '확정' ? `<div style="margin-top:8px;font-size:11px;color:#64748b;">※ 법인 확정신고는 예정신고한 분기를 빼고 이번 분기(3개월)분만 신고합니다. 예정신고 때 빠뜨린 금액이 있으면 확정신고서 "예정신고누락분" 칸에 더해집니다.</div>` : ''}
+    <div style="margin-top:8px;font-size:11px;color:#64748b;">※ 정유사 지원금은 따로 입금되는 판매장려금(금전)이라 매출·매입세액 어디에도 넣지 않습니다. 정유사가 지원금만큼 수정세금계산서(−)를 발행했다면 매입세액이 줄어드니 세무사 신고서 (10)번과 비교하세요.</div>
     ${p.type === '예정' && d.payable < 0 ? `<div style="margin-top:8px;font-size:11px;color:#64748b;">※ 예정신고 환급세액은 조기환급 대상이 아니면 바로 돌려받지 않고 확정신고 때 차감됩니다.</div>` : ''}
     ${d.settings.taxFreeCustomers.length ? `<div style="margin-top:8px;font-size:12px;">면세 고객: ${d.settings.taxFreeCustomers.map(n =>
       `${esc(n)} <a href="#" onclick="vatSetTaxFree(decodeURIComponent('${encodeURIComponent(n)}'), false);return false;">[해제]</a>`).join(' · ')}</div>` : ''}
