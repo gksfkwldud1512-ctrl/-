@@ -836,3 +836,18 @@ webapp\시작.bat 더블클릭
 - 법인 확정신고 = 예정신고분 제외 3개월분 (예정 누락분만 확정에 가산)
 - 정유사 지원금 = 따로 입금되는 판매장려금(사용자 확인 2026-10-20) → 부가세 과세대상 아님, 계산 제외. 정유사가 수정세금계산서(−) 발행 시에만 매입세액 감소
 - 미결: 면세유 고객("면세박충남") 확인
+
+---
+
+## 완료된 작업 (2026-10-21) — 오피넷 단가표 + 바탕화면 위젯 (commit 0f9e90d)
+- 목적: 바탕화면 상단 수기 단가표 대체 — 미소 휘발유·경유·등유, 주변 주유소(반경 5km), 전국·충북·음성군 평균가 자동 표시
+- 오피넷 일반 API 무료(1500call/일), 회원가입 후 인증키 자동 발급. 1회 갱신 7call, 30분 캐시 → 하루 약 300call
+  - `lib/opinetClient.js` `getBoard(dataDir, {force})`: 상세(우리 가격·KATEC 좌표·시군코드) → 반경 3제품 + 평균 3종. 실패 시 마지막 값 + `stale`
+  - 우리 주유소 ID 없으면 `searchByName.do`('미소') + 주소 '대금로 199'로 자동 검색 후 저장
+  - `data/opinet_settings.json`(certkey·myStationId·radius·pinned), `opinet_cache.json`, `opinet_history.json`(하루 1건) — .gitignore 추가
+- API: `GET /api/prices/board?refresh=1`(강제 갱신은 1분 1회), `POST /api/prices/settings`
+- 화면: `public/board.html` (`?compact=1` 위젯용), 웹앱 상단 "단가" 탭 = 같은 페이지 iframe. 별 = 경쟁 업체 위에 고정
+- 위젯: `scripts/price-board/board-widget.ps1` — 서버 꺼져 있으면 `node server.js` 최소화 실행 → Edge 앱 창(별도 프로필 %LOCALAPPDATA%\MisoPriceBoard) 오른쪽 위 440×560, 항상 위
+  - `install-widget.ps1`로 바탕화면·시작프로그램 바로가기 설치함 (`-Uninstall`로 제거)
+- 검증: 가짜 오피넷 응답으로 캐시·실패·이력 테스트, 3999 포트 테스트 서버로 화면·위젯(항상 위, 위치) 확인
+- 남은 것: **사용자 인증키 발급·입력 후 실데이터 확인** (미소 가격이 BOS 단가와 맞는지, 주변 업체 수). 3000 포트 서버 재시작(시작.bat) 필요
