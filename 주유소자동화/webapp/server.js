@@ -147,6 +147,7 @@ const { parseEasyshop }    = require('./lib/easyshopParser');
 const { matchCards }       = require('./lib/cardMatcher');
 const { parseBankDeposits } = require('./lib/bankParser');
 const { calcVatQuarter, loadSettings: loadVatSettings } = require('./lib/vatCalculator');
+const opinet = require('./lib/opinetClient');
 
 function vendorFile(year, month) {
   const mo = String(month).padStart(2, '0');
@@ -2952,6 +2953,42 @@ app.post('/api/vat/settings', (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     console.error('[vat/settings]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── 오피넷 단가표 (미소 + 주변 주유소 + 평균가) ─────────────────
+app.get('/api/prices/board', async (req, res) => {
+  try {
+    const board = { ...(await opinet.getBoard(DATA_DIR, { force: req.query.refresh === '1' })) };
+    const s = opinet.loadSettings(DATA_DIR);
+    const pinned = new Set(s.pinned.map(String));
+    if (board.nearby) board.nearby = board.nearby.map(n => ({ ...n, pinned: pinned.has(n.id) }));
+    res.json({ ...board, settings: { hasKey: !!s.certkey, myStationId: s.myStationId, radius: s.radius, pinned: s.pinned } });
+  } catch (e) {
+    console.error('[prices/board]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// 인증키·주유소 ID·반경·강조 업체 저장 (키·ID가 바뀌면 캐시 초기화)
+app.post('/api/prices/settings', (req, res) => {
+  try {
+    const { certkey, myStationId, radius, pinned } = req.body;
+    const s = opinet.loadSettings(DATA_DIR);
+    let reset = false;
+    if (typeof certkey === 'string' && certkey.trim() && certkey.trim() !== s.certkey) { s.certkey = certkey.trim(); reset = true; }
+    if (typeof myStationId === 'string' && myStationId.trim() !== s.myStationId) { s.myStationId = myStationId.trim(); reset = true; }
+    if (radius != null && !isNaN(Number(radius))) {
+      const r = Math.max(500, Math.min(5000, Math.round(Number(radius))));
+      if (r !== s.radius) { s.radius = r; reset = true; }
+    }
+    if (Array.isArray(pinned)) s.pinned = [...new Set(pinned.map(String))];
+    opinet.saveSettings(DATA_DIR, s);
+    if (reset) opinet.resetCache(DATA_DIR);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[prices/settings]', e);
     res.status(500).json({ ok: false, error: e.message });
   }
 });

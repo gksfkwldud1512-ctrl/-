@@ -17,6 +17,7 @@
       <button class="main-tab" data-group="daily">일마감</button>
       <button class="main-tab active" data-group="monthly">월마감</button>
       <button class="main-tab" data-group="vat">부가세 신고</button>
+      <button class="main-tab" data-group="price">단가</button>
     </nav>
   </div>
   <!-- subnav: 종합/일마감/월마감 groups all use this -->
@@ -1373,6 +1374,11 @@
     </div>
     <div id="vat-body"></div>
   </section><!-- /group-vat -->
+
+  <!-- ───── 대분류: 단가 (오피넷, board.html 재사용 — 바탕화면 위젯과 같은 화면) ───── -->
+  <section id="group-price" class="group-content">
+    <iframe id="price-frame" title="단가표" style="width:100%;height:calc(100vh - 140px);border:0;"></iframe>
+  </section><!-- /group-price -->
 
 </main>
 

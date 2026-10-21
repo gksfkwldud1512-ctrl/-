@@ -126,7 +126,7 @@ function initTabs() {
 
 function switchGroup(group) {
   // 모든 그룹 숨기기 (inline style 사용 — CSS보다 우선순위 확실)
-  ['group-usage', 'group-summary', 'group-daily', 'group-monthly', 'group-vat'].forEach(id => {
+  ['group-usage', 'group-summary', 'group-daily', 'group-monthly', 'group-vat', 'group-price'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.style.display = 'none'; el.classList.remove('active'); }
   });
@@ -167,6 +167,9 @@ function switchGroup(group) {
     switchSummarySubTab(activeTab);
   } else if (group === 'vat') {
     loadVat();
+  } else if (group === 'price') {
+    const f = document.getElementById('price-frame');
+    if (!f.src) f.src = 'board.html';
   }
 }
 

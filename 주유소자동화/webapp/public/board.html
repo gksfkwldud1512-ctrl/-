@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>미소 단가표</title>
+<style>
+  :root {
+    --bg: #f7f8fa; --card: #fff; --line: #e3e6eb; --text: #1f2933; --muted: #6b7785;
+    --mine: #fff7e0; --cheap: #d93025; --dear: #1a73e8; --accent: #0b6e4f;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font-family: "Malgun Gothic", "맑은 고딕", sans-serif; font-size: 14px; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 12px 16px; }
+  header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  header h1 { font-size: 17px; margin: 0; }
+  header .at { color: var(--muted); font-size: 12px; }
+  header .sp { flex: 1; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); border-radius: 6px;
+           padding: 4px 10px; cursor: pointer; }
+  button:hover { background: #eef1f4; }
+  button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+  .mine { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .mine .p { text-align: center; }
+  .mine .p .k { color: var(--muted); font-size: 12px; }
+  .mine .p .v { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+  .mine .p .r { font-size: 12px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 5px 6px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  th { color: var(--muted); font-weight: normal; font-size: 12px; }
+  th.l, td.l { text-align: left; }
+  td.l { white-space: normal; }
+  tr.me td { background: var(--mine); font-weight: 700; }
+  tr.pin td { background: #fffbea; }
+  .d { font-size: 11px; margin-left: 3px; }
+  .cheap { color: var(--cheap); } .dear { color: var(--dear); }
+  .brand { color: var(--muted); font-size: 11px; margin-left: 4px; }
+  .msg { padding: 8px 12px; border-radius: 6px; margin-bottom: 10px; font-size: 13px; }
+  .msg.warn { background: #fff4e5; border: 1px solid #f5c26b; }
+  .msg.err { background: #fdecea; border: 1px solid #f1a7a0; }
+  .settings label { display: block; margin: 6px 0; font-size: 13px; }
+  .settings input { font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; width: 280px; max-width: 100%; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .scroll { overflow-x: auto; }
+  .star { cursor: pointer; color: #c3c9d0; }
+  .star.on { color: #e8a400; }
+  /* 바탕화면 위젯용 축소 모드 */
+  body.compact { font-size: 12px; }
+  body.compact .wrap { padding: 6px 8px; }
+  body.compact header h1 { font-size: 14px; }
+  body.compact .mine .p .v { font-size: 20px; }
+  body.compact th, body.compact td { padding: 3px 4px; }
+  body.compact .card { padding: 6px 8px; margin-bottom: 6px; }
+  body.compact .day, body.compact .note, body.compact header .at { display: none; }
+  body.compact header { margin-bottom: 6px; }
+  @media (max-width: 560px) { .mine .p .v { font-size: 20px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>⛽ 미소 단가표</h1>
+    <span class="at" id="at"></span>
+    <span class="sp"></span>
+    <button id="btn-refresh" title="오피넷에서 다시 가져오기">↻ 새로고침</button>
+    <button id="btn-settings" title="설정">⚙</button>
+  </header>
+  <div id="msg"></div>
+  <div id="settings" class="card settings" style="display:none"></div>
+  <div id="body"></div>
+</div>
+<script>
+const PRODUCTS = [['B027', '휘발유'], ['D047', '경유'], ['C004', '등유']];
+const REFRESH_MS = 30 * 60 * 1000;
+const params = new URLSearchParams(location.search);
+if (params.get('compact') === '1') document.body.classList.add('compact');
+
+let board = null;
+let sortKey = 'distance';
+
+const fmt = n => (n == null ? '-' : Math.round(n).toLocaleString('ko-KR'));
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// 상대 가격 − 우리 가격. 음수(더 쌈) = 빨강
+function diffHtml(price, mine) {
+  if (price == null || mine == null) return '';
+  const d = Math.round(price - mine);
+  if (d === 0) return '<span class="d muted">=</span>';
+  return `<span class="d ${d < 0 ? 'cheap' : 'dear'}">${d > 0 ? '+' : ''}${d.toLocaleString('ko-KR')}</span>`;
+}
+
+function fmtTradeAt(s) {
+  if (!s || s.length < 12) return '';
+  return `${+s.slice(4, 6)}/${+s.slice(6, 8)} ${s.slice(8, 10)}:${s.slice(10, 12)}`;
+}
+
+function setMsg(html, cls) {
+  document.getElementById('msg').innerHTML = html ? `<div class="msg ${cls}">${html}</div>` : '';
+}
+
+async function load(refresh) {
+  try {
+    const r = await fetch('/api/prices/board' + (refresh ? '?refresh=1' : ''));
+    board = await r.json();
+  } catch (e) {
+    setMsg('웹앱 서버가 꺼져 있습니다. <b>시작.bat</b>을 실행하면 자동으로 다시 불러옵니다.', 'err');
+    setTimeout(() => load(false), 60 * 1000);
+    return;
+  }
+  render();
+}
+
+function render() {
+  const b = board;
+  const at = document.getElementById('at');
+  if (!b.ok) {
+    at.textContent = '';
+    document.getElementById('body').innerHTML = '';
+    if (b.settings && !b.settings.hasKey) { showKeyGuide(); return; }
+    setMsg(esc(b.error || '불러오기 실패'), 'err');
+    return;
+  }
+  const upd = new Date(b.updatedAt);
+  at.textContent = `오피넷 기준 ${fmtTradeAt(b.my.tradeAt)} · 조회 ${upd.getHours()}:${String(upd.getMinutes()).padStart(2, '0')}`;
+  setMsg(b.stale ? `오피넷 갱신 실패 — 마지막 값을 표시합니다. (${esc(b.error)})` : '', 'warn');
+
+  const mine = b.my.prices;
+  const nearbyAll = b.nearby.filter(n => !n.isMine);
+  const rank = code => {
+    const list = b.nearby.filter(n => n.prices[code] != null).map(n => n.prices[code]).sort((a, c) => a - c);
+    if (mine[code] == null || !list.length) return '';
+    return `반경 ${list.length}곳 중 ${list.filter(p => p < mine[code]).length + 1}위`;
+  };
+
+  let html = `<div class="card mine">${PRODUCTS.map(([c, n]) => `
+    <div class="p"><div class="k">${n}</div><div class="v">${fmt(mine[c])}</div><div class="r">${rank(c)}</div></div>`).join('')}</div>`;
+
+  html += `<div class="card scroll"><table>
+    <tr><th class="l">평균가</th>${PRODUCTS.map(([, n]) => `<th>${n}</th>`).join('')}</tr>
+    ${b.averages.map(a => `<tr><td class="l">${esc(a.label)}</td>${PRODUCTS.map(([c]) => {
+      const p = a.prices[c];
+      if (!p) return '<td>-</td>';
+      const day = p.diff ? `<span class="d muted day">(전일 ${p.diff > 0 ? '+' : ''}${p.diff.toFixed(1)})</span>` : '';
+      return `<td>${p.price.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}${diffHtml(p.price, mine[c])} ${day}</td>`;
+    }).join('')}</tr>`).join('')}
+  </table><div class="muted note">옆 숫자 = 평균가 − 미소 가격 (빨강: 평균보다 우리가 비쌈)</div></div>`;
+
+  const sorted = [...b.nearby].sort((x, y) => {
+    if (x.isMine !== y.isMine) return x.isMine ? -1 : 1;
+    if (x.pinned !== y.pinned) return x.pinned ? -1 : 1;
+    if (sortKey === 'distance') return (x.distance ?? 1e9) - (y.distance ?? 1e9);
+    return (x.prices[sortKey] ?? 1e9) - (y.prices[sortKey] ?? 1e9);
+  });
+  const cheaper = code => nearbyAll.filter(n => n.prices[code] != null && mine[code] != null && n.prices[code] < mine[code]).length;
+  html += `<div class="card scroll">
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+      <b>주변 주유소</b><span class="muted">반경 ${(b.radius / 1000).toFixed(1)}km · ${nearbyAll.length}곳 · 우리보다 싼 곳 휘발유 ${cheaper('B027')} / 경유 ${cheaper('D047')}</span>
+      <span class="sp" style="flex:1"></span>
+      ${[['distance', '거리순'], ['B027', '휘발유순'], ['D047', '경유순']].map(([k, n]) =>
+        `<button class="${sortKey === k ? 'on' : ''}" onclick="sortKey='${k}';render()">${n}</button>`).join('')}
+    </div>
+    <table>
+      <tr><th></th><th class="l">상호</th><th>거리</th>${PRODUCTS.map(([, n]) => `<th>${n}</th>`).join('')}</tr>
+      ${sorted.map(n => `<tr class="${n.isMine ? 'me' : ''} ${n.pinned ? 'pin' : ''}">
+        <td>${n.isMine ? '' : `<span class="star ${n.pinned ? 'on' : ''}" title="위에 고정" onclick="togglePin('${esc(n.id)}')">★</span>`}</td>
+        <td class="l">${esc(n.name)}<span class="brand">${esc(n.brand)}</span></td>
+        <td>${n.distance == null ? '-' : (n.distance / 1000).toFixed(1) + 'km'}</td>
+        ${PRODUCTS.map(([c]) => `<td>${fmt(n.prices[c])}${n.isMine ? '' : diffHtml(n.prices[c], mine[c])}</td>`).join('')}
+      </tr>`).join('')}
+    </table>
+    <div class="muted note">옆 숫자 = 그 주유소 − 미소 가격 (빨강: 우리보다 쌈). 가격은 각 주유소가 오피넷에 신고한 값이라 늦게 반영될 수 있습니다.</div>
+  </div>`;
+  document.getElementById('body').innerHTML = html;
+}
+
+async function togglePin(id) {
+  const set = new Set(board.settings.pinned || []);
+  set.has(id) ? set.delete(id) : set.add(id);
+  await saveSettings({ pinned: [...set] });
+  load(false);
+}
+
+async function saveSettings(body) {
+  const r = await fetch('/api/prices/settings', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  return r.json();
+}
+
+function showKeyGuide() {
+  setMsg(`오피넷 인증키가 아직 없습니다.<br>
+    ① <a href="https://www.opinet.co.kr" target="_blank">opinet.co.kr</a> 회원가입·로그인 →
+    ② 이용안내 › 유가정보 API › <b>인증키 발급</b> (자동 승인, 무료) →
+    ③ 받은 키를 아래 설정에 붙여넣고 저장`, 'warn');
+  openSettings(true);
+}
+
+function openSettings(force) {
+  const el = document.getElementById('settings');
+  if (!force && el.style.display !== 'none') { el.style.display = 'none'; return; }
+  const s = (board && board.settings) || {};
+  el.innerHTML = `
+    <label>오피넷 인증키 ${s.hasKey ? '<span class="muted">(등록됨 — 바꿀 때만 입력)</span>' : ''}<br>
+      <input id="s-key" placeholder="${s.hasKey ? '••••••••' : '인증키 붙여넣기'}"></label>
+    <label>미소주유소 오피넷 ID <span class="muted">(비우면 이름·주소로 자동 검색)</span><br>
+      <input id="s-id" value="${esc(s.myStationId || '')}"></label>
+    <label>주변 반경 (m, 최대 5000)<br><input id="s-radius" type="number" min="500" max="5000" step="500" value="${s.radius || 5000}"></label>
+    <button class="on" id="s-save">저장</button> <span id="s-res" class="muted"></span>`;
+  el.style.display = '';
+  document.getElementById('s-save').onclick = async () => {
+    const res = await saveSettings({
+      certkey: document.getElementById('s-key').value,
+      myStationId: document.getElementById('s-id').value,
+      radius: document.getElementById('s-radius').value,
+    });
+    document.getElementById('s-res').textContent = res.ok ? '저장됨 — 불러오는 중…' : (res.error || '저장 실패');
+    if (res.ok) { el.style.display = 'none'; await load(true); }
+  };
+}
+
+document.getElementById('btn-refresh').onclick = () => load(true);
+document.getElementById('btn-settings').onclick = () => openSettings(false);
+load(false);
+setInterval(() => load(false), REFRESH_MS);
+</script>
+</body>
+</html>
