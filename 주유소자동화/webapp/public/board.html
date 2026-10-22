@@ -73,7 +73,7 @@
 </div>
 <script>
 const PRODUCTS = [['B027', '휘발유'], ['D047', '경유'], ['C004', '등유']];
-const REFRESH_MS = 30 * 60 * 1000;
+const REFRESH_MS = 30 * 60 * 1000;   // 서버 캐시만 다시 읽음 (오피넷 호출은 서버가 매일 9시에)
 const params = new URLSearchParams(location.search);
 if (params.get('compact') === '1') document.body.classList.add('compact');
 
@@ -123,7 +123,7 @@ function render() {
     return;
   }
   const upd = new Date(b.updatedAt);
-  at.textContent = `오피넷 기준 ${fmtTradeAt(b.my.tradeAt)} · 조회 ${upd.getHours()}:${String(upd.getMinutes()).padStart(2, '0')}`;
+  at.textContent = `매일 9시 갱신 · 조회 ${upd.getMonth() + 1}/${upd.getDate()} ${upd.getHours()}:${String(upd.getMinutes()).padStart(2, '0')}`;
   setMsg(b.stale ? `오피넷 갱신 실패 — 마지막 값을 표시합니다. (${esc(b.error)})` : '', 'warn');
 
   const mine = b.my.prices;

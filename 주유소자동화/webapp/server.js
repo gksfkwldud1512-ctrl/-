@@ -3989,4 +3989,5 @@ app.delete('/api/deposit/reset', (req, res) => {
 app.listen(PORT, () => {
   console.log('\n✅  주유소 자동화 웹앱 실행 중');
   console.log(`    브라우저에서 열기 → http://localhost:${PORT}\n`);
+  opinet.scheduleDaily(DATA_DIR);
 });

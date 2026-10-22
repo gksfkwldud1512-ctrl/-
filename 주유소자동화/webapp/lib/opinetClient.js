@@ -1,6 +1,6 @@
 // ── 오피넷 유가정보 API: 미소주유소·주변 주유소·평균가 단가표 ─────────
 // 일반 API(무료, 1500call/일). 키는 data/opinet_settings.json (커밋 안 함)
-// 1회 갱신 = 상세 1 + 반경 3(휘발유·경유·등유) + 평균 3 = 7call, 30분 캐시
+// 1회 갱신 = 상세 1 + 반경 3(휘발유·경유·등유) + 평균 3 = 7call, 매일 09시 기준 1회 갱신
 const fs   = require('fs');
 const path = require('path');
 
@@ -10,7 +10,7 @@ const BRANDS = {
   SKE: 'SK', GSC: 'GS', HDO: '현대', SOL: 'S-OIL', RTE: '알뜰', RTX: '고속도로알뜰',
   NHO: '농협알뜰', ETC: '자가', E1G: 'E1', SKG: 'SK가스',
 };
-const CACHE_MS  = 30 * 60 * 1000;
+const DAILY_HOUR = 9;            // 매일 이 시각 기준으로 갱신
 const FORCE_MIN = 60 * 1000;     // 강제 새로고침도 1분에 한 번만 (호출 한도 보호)
 
 const SETTINGS_DEFAULT = {
@@ -150,13 +150,21 @@ let memCache = null;
 let lastForced = 0;
 let inflight = null;
 
-// 캐시 우선. 오피넷 오류 시 마지막 값 + error 를 돌려줌
+// 가장 최근에 지난 09:00 (아직 9시 전이면 어제 09:00)
+function lastBoundary(now) {
+  const d = new Date(now);
+  d.setHours(DAILY_HOUR, 0, 0, 0);
+  if (d.getTime() > now) d.setDate(d.getDate() - 1);
+  return d.getTime();
+}
+
+// 캐시 우선 — 최근 09:00 이후에 받은 값이면 그대로 씀. 오피넷 오류 시 마지막 값 + error
 async function getBoard(dataDir, { force = false, fetchImpl = fetch, now = Date.now() } = {}) {
   const f = files(dataDir);
   if (!memCache) memCache = readJson(f.cache, null);
-  const age = memCache ? now - Date.parse(memCache.updatedAt) : Infinity;
+  const fresh = memCache && Date.parse(memCache.updatedAt) >= lastBoundary(now);
   const canForce = force && now - lastForced >= FORCE_MIN;
-  if (memCache && !memCache.error && age < CACHE_MS && !canForce) return { ...memCache, cached: true };
+  if (memCache && !memCache.error && fresh && !canForce) return { ...memCache, cached: true };
   if (force) lastForced = now;
 
   if (!inflight) {
@@ -186,4 +194,19 @@ function resetCache(dataDir) {
   try { fs.unlinkSync(files(dataDir).cache); } catch {}
 }
 
-module.exports = { getBoard, loadSettings, saveSettings, resetCache, PRODUCTS, SETTINGS_DEFAULT };
+// 서버가 켜져 있으면 매일 09:00에 미리 받아 둠 (켜질 때도 오늘 값이 없으면 바로 받음)
+function scheduleDaily(dataDir) {
+  const run = async () => {
+    if (!loadSettings(dataDir).certkey) return;
+    const b = await getBoard(dataDir);
+    console.log(b.ok && !b.stale ? `[opinet] 단가표 갱신 ${b.updatedAt}` : `[opinet] 단가표 갱신 실패: ${b.error}`);
+  };
+  const next = () => {
+    const at = lastBoundary(Date.now()) + 24 * 60 * 60 * 1000;
+    setTimeout(() => { run().finally(next); }, at - Date.now() + 1000);
+  };
+  run().catch(e => console.error('[opinet]', e.message));
+  next();
+}
+
+module.exports = { getBoard, loadSettings, saveSettings, resetCache, scheduleDaily, PRODUCTS, SETTINGS_DEFAULT };
