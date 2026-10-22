@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { recordAirDownload } from "@/lib/airRecords";
 import { computeUnjeonRows, type Calendar, type MeterReadings } from "@/lib/calc";
 import { buildUnjeonWorkbook } from "@/lib/xlsx";
 
@@ -16,6 +17,9 @@ export async function POST(req: NextRequest) {
   const rows = computeUnjeonRows(year, month, calendar, meterReadings);
   const wb = await buildUnjeonWorkbook(year, rows);
   const buffer = await wb.xlsx.writeBuffer();
+
+  // 종합업무현황판이 월별 작성 여부를 알 수 있도록 다운로드 기록을 남긴다(실패해도 다운로드는 계속).
+  await recordAirDownload("unjeon", year, month);
 
   const filename = encodeURIComponent(`시설운전사항목록양식_${year}년_${month}월.xlsx`);
   return new NextResponse(buffer as unknown as BodyInit, {

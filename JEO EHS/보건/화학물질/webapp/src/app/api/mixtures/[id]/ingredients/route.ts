@@ -6,6 +6,15 @@ const bodySchema = z.object({
   productName: z.string().optional(),
   manufacturer: z.string().nullable().optional(),
   materialType: z.enum(["raw", "auxiliary"]).optional(),
+  department: z.string().nullable().optional(),
+  workProcess: z.string().nullable().optional(),
+  revisionDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .optional(),
+  reviewCycleYears: z.number().int().positive().nullable().optional(),
+  ppeText: z.string().nullable().optional(),
   ingredients: z.array(
     z.object({
       ingredientName: z.string().min(1),
@@ -27,6 +36,11 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/mixtures/[
     productName: parsed.data.productName,
     manufacturer: parsed.data.manufacturer,
     materialType: parsed.data.materialType,
+    department: parsed.data.department,
+    workProcess: parsed.data.workProcess,
+    revisionDate: parsed.data.revisionDate,
+    reviewCycleYears: parsed.data.reviewCycleYears,
+    ppeText: parsed.data.ppeText,
   });
 
   return NextResponse.json({ ok: true });

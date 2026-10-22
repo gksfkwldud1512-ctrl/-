@@ -4,17 +4,16 @@ import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { referenceSubstances, type CategoryRefCodes } from "@/lib/db/schema";
 import { parseThresholdText } from "@/lib/parsing/threshold";
+import { LAW_CATEGORIES } from "@/lib/law/categories";
 
 const REFERENCE_DIR = path.join(process.cwd(), "data", "reference");
 
-// 파일명 -> 이 물질이 "어느 카테고리 파일에서 왔는지"를 나타내는 라벨
-const SOURCE_FILES: { file: string; category: string }[] = [
-  { file: "사고대비물질.xlsx", category: "사고대비" },
-  { file: "인체등유해성물질.xlsx", category: "인체유해성" },
-  { file: "잔류성오염물질.xlsx", category: "잔류성오염" },
-  { file: "제한금지허가물질.xlsx", category: "제한금지허가" },
-  { file: "중점관리물질.xlsx", category: "중점관리" },
-];
+// 파일명 -> 이 물질이 "어느 카테고리 파일에서 왔는지"를 나타내는 라벨.
+// 화관법 5종 + 산안법 4종 전체를 categories.ts 레지스트리 한 곳에서 관리한다.
+const SOURCE_FILES: { file: string; category: string }[] = LAW_CATEGORIES.map((c) => ({
+  file: c.sourceFile,
+  category: c.key,
+}));
 
 // 행 안의 '사고대비/제한금지허가/중점/잔류' 참조코드 컬럼 (7,8,9,10번째 컬럼)
 const REF_CODE_COLUMNS: { col: number; key: string }[] = [
@@ -34,6 +33,26 @@ function splitCasNumbers(raw: string | null | undefined): string[] {
     .split(/[,&]/)
     .map((s) => s.trim())
     .filter((s) => CAS_RE.test(s));
+}
+
+/**
+ * 서로 다른 카테고리 파일에서 같은 CAS가 다시 나올 때 thresholdRaw를 합친다.
+ * 화관법 5종은 각 파일에 이미 같은 물질의 전체 함량기준 문구가 중복 기재돼 있어
+ * (원래 하나의 마스터 표에서 파생) 사실상 겹치는 문구만 추가되지만, 화관법 파일과
+ * 산안법 파일(관리대상유해물질 등)에 동시에 속한 CAS는 서로 다른 절이 붙어 있으므로
+ * 앞선 " ||= " 방식(첫 파일만 채택)으로는 뒤에 seed되는 파일의 문구가 유실된다.
+ * 이미 포함된 문구(정확히 일치)는 중복 추가하지 않는다.
+ */
+function mergeThresholdRaw(existing: string, incoming: string): string {
+  if (!incoming) return existing;
+  if (!existing) return incoming;
+  const existingBlocks = existing.split("/").map((s) => s.trim());
+  const incomingBlocks = incoming
+    .split("/")
+    .map((s) => s.trim())
+    .filter((b) => b !== "" && !existingBlocks.includes(b));
+  if (incomingBlocks.length === 0) return existing;
+  return [...existingBlocks, ...incomingBlocks].join(" / ");
 }
 
 function cellText(value: ExcelJS.CellValue): string {
@@ -124,7 +143,7 @@ export async function seedReferenceData(
           existing.nameKr ||= nameKr;
           existing.existingCode ||= existingCode;
           existing.hazardClassRaw ||= hazardClassRaw;
-          existing.thresholdRaw ||= thresholdRaw;
+          existing.thresholdRaw = mergeThresholdRaw(existing.thresholdRaw, thresholdRaw);
           existing.registrationNo ||= registrationNo;
           if (existing.existingSubstanceYn === null) {
             existing.existingSubstanceYn = existingSubstanceYn;

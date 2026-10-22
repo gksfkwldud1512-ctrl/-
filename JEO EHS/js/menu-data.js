@@ -1,12 +1,14 @@
 // EH&S 포털 메뉴 구성 데이터
+
+// 사이드바 맨 위 "종합업무현황판" 버튼과 첫 화면에 표시되는 안전환경보건 종합업무현황판 주소.
+const EHS_DASHBOARD_URL = "https://ehs-status-board.vercel.app";
 //
 // [배포된 항목 추가] 아래 categories 안의 해당 대분류 items 배열에
 // { name, url, flow } 형태로 한 줄 추가하면 사이드바/홈카드/종합화면에 동시 반영됩니다.
 // flow는 종합화면(입력→처리→출력 카드)에 쓰이며 생략 가능합니다.
 //
 // [아직 배포 전인 항목 추가] items 대신 같은 카테고리의 plannedItems 배열에
-// { name, flow }(url 없이) 형태로 추가하면 종합화면에는 "설계 단계" 카드로 보이되
-// 사이드바/홈카드에는 나타나지 않습니다. 나중에 배포되면 items로 옮기고 url만 채우면 됩니다.
+// { name, flow }(url 없이) 형태로 추가하면 사이드바에 "계획됨" 항목으로 표시되고, 누르면 종합업무현황판으로 이동합니다. 나중에 배포되면 items로 옮기고 url만 채우면 됩니다.
 const EHS_MENU = [
   {
     key: "safety",
@@ -80,6 +82,23 @@ const EHS_MENU = [
             "확정 시 기준물질 DB와 CAS 매칭 (repo.ts: confirmMixture)"
           ],
           output: ["유해화학물질 해당여부 판정", "성분별 상세", "원본 PDF 다운로드"]
+        }
+      },
+      {
+        name: "작업환경측정",
+        url: "https://webapp-one-eta-66.vercel.app/work-env",
+        flow: {
+          stack: "Next.js · Neon Postgres (화학물질관리 앱의 /work-env)",
+          statusTone: "live",
+          statusLabel: "운영중 (제외 기준은 법령 원문 확인 전)",
+          access: "공개",
+          input: ["화학물질관리 앱의 부서·공정별 부자재와 사원명부", "야간근무자 체크", "부자재별 월·일 사용시간(단시간·임시작업 제외 확인)"],
+          processing: [
+            "공정별 인원·야간근무자 집계",
+            "부자재 성분 중 작업환경측정 대상(시행규칙 별표 21) 판정 재사용",
+            "사용시간 기준 미달 시 제외 후보 표시, 담당자 확인 후 제외 확정(사유·확인자·날짜 기록)"
+          ],
+          output: ["공정별 예비조사 현황표", "예비조사표 엑셀(공정현황·대상물질·인원)", "예비조사 자료실(출처·확인필요 표시)"]
         }
       },
       {
@@ -211,6 +230,33 @@ const EHS_MENU = [
             "표지 → 개요(신규이슈/진행중업무 목록) → 진행중인 업무 항목별 상세 슬라이드 자동 생성"
           ],
           output: ["EHS Weekly Meeting 양식 영어 PPT 다운로드"]
+        }
+      }
+    ],
+    plannedItems: []
+  },
+  {
+    key: "ai",
+    label: "AI 관제센터",
+    icon: "🤖",
+    items: [
+      {
+        name: "AI 에이전트 관제센터",
+        // 같은 주소(/control-center)로 연결 — 포털 vercel.json의 rewrites가 별도 앱으로 전달한다.
+        // 같은 도메인이라 로그인 쿠키가 iframe 안에서도 유지된다.
+        url: "/control-center",
+        flow: {
+          stack: "Next.js · 서명 쿠키 로그인 · 메모리 저장(DEMO)",
+          statusTone: "live",
+          statusLabel: "운영중 (DEMO 데이터)",
+          access: "로그인 필요 (조회 / EHS 담당자 / 관리자)",
+          input: ["담당자 6명(Legal·Safety·Environment·Report·Action·QA)의 실행 이벤트", "EHS 담당자의 승인·반려·재검토 결정과 사유"],
+          processing: [
+            "법적 의무 판정·외부 제출은 승인된 EHS 담당자 확인 필수 (서버에서 권한 재검증)",
+            "승인 직전 서버가 최종 검증 재실행 — QA 통과·이벤트 누락·결과물 해시 일치",
+            "중복 승인·동시 수정·근거 변경은 서버가 거부, 같은 요청 재전송은 1건만 반영"
+          ],
+          output: ["가상 AI 사무실·워크플로우 모니터·승인센터 화면", "해시로 연결된 감사 로그(승인 시각·담당자·근거 버전·사유)"]
         }
       }
     ],

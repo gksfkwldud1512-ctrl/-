@@ -5,11 +5,13 @@ import {
   MATCH_STATUS_COLOR,
   MATCH_STATUS_LABEL,
   OVERALL_VERDICT_COLOR,
-  OVERALL_VERDICT_LABEL,
   MATERIAL_TYPE_LABEL,
   formatDate,
   formatThreshold,
 } from "@/lib/format";
+import { RevisionStatusBadge } from "@/components/RevisionStatusBadge";
+import { computeReviewStatus, isManuallyChecked, REVISION_RECHECK_YEARS } from "@/lib/msds/reviewStatus";
+import { INDUSTRIAL_SAFETY_ACT_CATEGORIES } from "@/lib/law/categories";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +26,7 @@ export default async function MixtureDetailPage(props: PageProps<"/mixtures/[id]
   );
   const refs = await getReferencesByIds(refIds);
   const refMap = new Map(refs.map((r) => [r.id, r]));
+  const reviewStatus = computeReviewStatus(mixture.revisionDate, mixture.revisionCheckedFor);
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-6 py-10">
@@ -36,21 +39,54 @@ export default async function MixtureDetailPage(props: PageProps<"/mixtures/[id]
           <span className="rounded-full bg-zinc-100 px-3 py-1 text-sm font-medium text-zinc-600">
             {MATERIAL_TYPE_LABEL[mixture.materialType]}
           </span>
-          {mixture.status === "confirmed" && mixture.overallVerdict && (
-            <span
-              className={`rounded-full px-3 py-1 text-sm font-medium ${OVERALL_VERDICT_COLOR[mixture.overallVerdict]}`}
-            >
-              {OVERALL_VERDICT_LABEL[mixture.overallVerdict]}
-            </span>
+          {mixture.status === "confirmed" && (
+            <>
+              <span
+                className={`rounded-full px-3 py-1 text-sm font-medium ${
+                  ingredients.some((i) => i.matchStatus === "matched_hazardous")
+                    ? OVERALL_VERDICT_COLOR.hazardous
+                    : OVERALL_VERDICT_COLOR.not_hazardous
+                }`}
+              >
+                화관법 {ingredients.some((i) => i.matchStatus === "matched_hazardous") ? "해당" : "해당없음"}
+              </span>
+              <span
+                className={`rounded-full px-3 py-1 text-sm font-medium ${
+                  ingredients.some((i) => i.categoryVerdicts.some((v) => v.matched))
+                    ? OVERALL_VERDICT_COLOR.hazardous
+                    : OVERALL_VERDICT_COLOR.not_hazardous
+                }`}
+              >
+                산안법 {ingredients.some((i) => i.categoryVerdicts.some((v) => v.matched)) ? "해당" : "해당없음"}
+              </span>
+            </>
           )}
+          <span className="flex items-center gap-1.5 text-sm text-zinc-500">
+            개정확인여부:
+            <RevisionStatusBadge
+              mixtureId={mixture.id}
+              status={reviewStatus}
+              manuallyChecked={isManuallyChecked(mixture.revisionDate, mixture.revisionCheckedFor)}
+              size="md"
+            />
+          </span>
         </div>
         <p className="mt-1 text-sm text-zinc-500">
-          제조사: {mixture.manufacturer ?? "미확인"}
+          제조사: {mixture.manufacturer ?? "미확인"} · 부서: {mixture.department ?? "미지정"}
+          {mixture.materialType === "auxiliary" && ` · 공정: ${mixture.workProcess ?? "미지정"}`}
         </p>
         <p className="mt-1 text-sm text-zinc-500">
           업로드: {formatDate(mixture.uploadedAt)}
           {mixture.confirmedAt && ` · 확정: ${formatDate(mixture.confirmedAt)}`}
+          {mixture.revisionDate && ` · MSDS 개정일: ${mixture.revisionDate}`}
+          {mixture.reviewCycleYears && ` (재검토주기 ${mixture.reviewCycleYears}년)`}
         </p>
+        {reviewStatus === "needs_check" && (
+          <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800">
+            MSDS 개정일이 {REVISION_RECHECK_YEARS}년을 넘었습니다 — 공급업체에 재개정 여부를 확인하세요. 변경사항이
+            없으면 &apos;재개정확인필요&apos; 배지를 눌러 확인 처리할 수 있습니다.
+          </p>
+        )}
         <a
           href={mixture.pdfBlobUrl}
           target="_blank"
@@ -71,13 +107,18 @@ export default async function MixtureDetailPage(props: PageProps<"/mixtures/[id]
       )}
 
       <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white">
-        <table className="w-full min-w-[720px] text-sm">
+        <table className="w-full min-w-[960px] text-sm">
           <thead className="bg-zinc-50 text-left text-zinc-500">
             <tr>
               <th className="px-3 py-2 font-medium">화학물질명</th>
               <th className="px-3 py-2 font-medium">CAS번호</th>
               <th className="px-3 py-2 font-medium">함유량(%)</th>
-              <th className="px-3 py-2 font-medium">판정</th>
+              <th className="px-3 py-2 font-medium">화관법 유해물질</th>
+              {INDUSTRIAL_SAFETY_ACT_CATEGORIES.map((c) => (
+                <th key={c.key} className="px-3 py-2 font-medium whitespace-nowrap">
+                  {c.label.replace(" 대상 유해인자", "")}
+                </th>
+              ))}
               <th className="px-3 py-2 font-medium">적용 기준함량</th>
             </tr>
           </thead>
@@ -100,7 +141,31 @@ export default async function MixtureDetailPage(props: PageProps<"/mixtures/[id]
                     >
                       {MATCH_STATUS_LABEL[ing.matchStatus]}
                     </span>
+                    {ing.matchedReferenceId && !ing.contentPercentRaw && (
+                      <div className="mt-1 text-xs font-medium text-amber-700">
+                        함유량 미확인 — 기준 초과 여부 판단 불가
+                      </div>
+                    )}
                   </td>
+                  {INDUSTRIAL_SAFETY_ACT_CATEGORIES.map((c) => {
+                    const v = ing.categoryVerdicts.find((cv) => cv.category === c.key);
+                    return (
+                      <td key={c.key} className="px-3 py-2 text-center">
+                        {v ? (
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-xs font-medium ${
+                              v.matched ? "bg-red-100 text-red-800" : "bg-zinc-100 text-zinc-400"
+                            }`}
+                            title={v.threshold ? formatThreshold(v.threshold) : undefined}
+                          >
+                            {v.matched ? "O" : "X"}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-300">-</span>
+                        )}
+                      </td>
+                    );
+                  })}
                   <td className="px-3 py-2 text-xs text-zinc-600">
                     {ing.appliedThresholds.length > 0 ? (
                       <ul className="list-inside list-disc">
@@ -122,6 +187,13 @@ export default async function MixtureDetailPage(props: PageProps<"/mixtures/[id]
           </tbody>
         </table>
       </div>
+
+      {mixture.ppeText && (
+        <div className="rounded-lg border border-zinc-200 bg-white p-4">
+          <h2 className="text-sm font-semibold text-zinc-700">보호구(MSDS 8장 발췌)</h2>
+          <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-600">{mixture.ppeText}</p>
+        </div>
+      )}
     </main>
   );
 }

@@ -11,6 +11,8 @@ export async function POST(request: Request) {
   const file = formData.get("file");
   const productNameField = formData.get("productName");
   const materialTypeField = formData.get("materialType");
+  const departmentField = formData.get("department");
+  const workProcessField = formData.get("workProcess");
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "PDF 파일이 필요합니다." }, { status: 400 });
@@ -26,10 +28,16 @@ export async function POST(request: Request) {
 
   let draftIngredients: Awaited<ReturnType<typeof parseMsdsDocument>>["ingredients"] = [];
   let manufacturer: string | null = null;
+  let revisionDate: string | null = null;
+  let reviewCycleYears: number | null = null;
+  let ppeText: string | null = null;
   try {
     const parsed = await parseMsdsDocument(buffer);
     draftIngredients = parsed.ingredients;
     manufacturer = parsed.manufacturer;
+    revisionDate = parsed.revisionDate;
+    reviewCycleYears = parsed.reviewCycleYears;
+    ppeText = parsed.ppeText;
   } catch (err) {
     console.error("MSDS PDF 파싱 실패, 빈 초안으로 진행:", err);
   }
@@ -40,11 +48,19 @@ export async function POST(request: Request) {
       : file.name.replace(/\.pdf$/i, "");
 
   const materialType: MaterialType = materialTypeField === "auxiliary" ? "auxiliary" : "raw";
+  const department = typeof departmentField === "string" && departmentField.trim() !== "" ? departmentField.trim() : null;
+  const workProcess =
+    typeof workProcessField === "string" && workProcessField.trim() !== "" ? workProcessField.trim() : null;
 
   const mixture = await createDraftMixture({
     productName,
     manufacturer,
     materialType,
+    department,
+    workProcess,
+    revisionDate,
+    reviewCycleYears,
+    ppeText,
     pdfBlobUrl,
     pdfFilename: file.name,
     draftIngredients,

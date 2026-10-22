@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/control-center", "destination": "https://jeo-ai-control-center.vercel.app/control-center" },
+    { "source": "/control-center/:path*", "destination": "https://jeo-ai-control-center.vercel.app/control-center/:path*" }
+  ]
+}

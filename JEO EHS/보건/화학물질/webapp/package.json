@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx --env-file=.env.local src/scripts/seedReference.ts",
+    "seed:employees": "tsx --env-file=.env.local src/scripts/seedEmployees.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

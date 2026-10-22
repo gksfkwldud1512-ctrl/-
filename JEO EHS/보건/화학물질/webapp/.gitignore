@@ -43,3 +43,6 @@ next-env.d.ts
 .vercel
 .env*
 /samples
+
+# 임직원 PII(이름/사번/입사일) — DB 시딩용으로만 쓰고 git 이력에는 남기지 않는다.
+/data/employees/
