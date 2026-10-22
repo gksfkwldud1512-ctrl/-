@@ -195,18 +195,23 @@ function resetCache(dataDir) {
 }
 
 // 서버가 켜져 있으면 매일 09:00에 미리 받아 둠 (켜질 때도 오늘 값이 없으면 바로 받음)
-function scheduleDaily(dataDir) {
+// onDaily(board): 매 확인마다 호출 — 카카오 발송처럼 하루 1번 할 일은 받는 쪽에서 판단
+// 30분마다도 확인 (캐시가 있으면 오피넷 호출 없음, 9시 갱신·발송 실패 시 재시도 역할)
+function scheduleDaily(dataDir, onDaily) {
   const run = async () => {
     if (!loadSettings(dataDir).certkey) return;
     const b = await getBoard(dataDir);
-    console.log(b.ok && !b.stale ? `[opinet] 단가표 갱신 ${b.updatedAt}` : `[opinet] 단가표 갱신 실패: ${b.error}`);
+    if (!b.cached) console.log(b.ok && !b.stale ? `[opinet] 단가표 갱신 ${b.updatedAt}` : `[opinet] 단가표 갱신 실패: ${b.error}`);
+    if (onDaily) await onDaily(b);
   };
+  const safeRun = () => run().catch(e => console.error('[opinet]', e.message));
   const next = () => {
     const at = lastBoundary(Date.now()) + 24 * 60 * 60 * 1000;
-    setTimeout(() => { run().finally(next); }, at - Date.now() + 1000);
+    setTimeout(() => { safeRun().finally(next); }, at - Date.now() + 1000);
   };
-  run().catch(e => console.error('[opinet]', e.message));
+  safeRun();
   next();
+  setInterval(safeRun, 30 * 60 * 1000);
 }
 
 module.exports = { getBoard, loadSettings, saveSettings, resetCache, scheduleDaily, PRODUCTS, SETTINGS_DEFAULT };

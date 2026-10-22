@@ -207,8 +207,10 @@ function openSettings(force) {
     <label>미소주유소 오피넷 ID <span class="muted">(비우면 이름·주소로 자동 검색)</span><br>
       <input id="s-id" value="${esc(s.myStationId || '')}"></label>
     <label>주변 반경 (m, 최대 5000)<br><input id="s-radius" type="number" min="500" max="5000" step="500" value="${s.radius || 5000}"></label>
-    <button class="on" id="s-save">저장</button> <span id="s-res" class="muted"></span>`;
+    <button class="on" id="s-save">저장</button> <span id="s-res" class="muted"></span>
+    <div id="kakao" style="border-top:1px solid var(--line);margin-top:10px;padding-top:8px"><span class="muted">카카오톡 설정 불러오는 중…</span></div>`;
   el.style.display = '';
+  renderKakao();
   document.getElementById('s-save').onclick = async () => {
     const res = await saveSettings({
       certkey: document.getElementById('s-key').value,
@@ -217,6 +219,80 @@ function openSettings(force) {
     });
     document.getElementById('s-res').textContent = res.ok ? '저장됨 — 불러오는 중…' : (res.error || '저장 실패');
     if (res.ok) { el.style.display = 'none'; await load(true); }
+  };
+}
+
+// ── 카카오톡 매일 발송 설정 ──
+async function postJson(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+  return r.json();
+}
+
+async function renderKakao() {
+  const el = document.getElementById('kakao');
+  if (!el) return;
+  const k = await (await fetch('/api/kakao/status')).json();
+  const chosen = new Set(k.recipients.map(r => r.uuid));
+  const last = k.lastResult
+    ? (k.lastResult.ok ? `마지막 발송 ${new Date(k.lastResult.at).toLocaleString('ko-KR')} → ${esc(k.lastResult.sent.join(', '))}`
+                       : `<span class="cheap">마지막 발송 실패: ${esc(k.lastResult.error)}</span>`)
+    : '아직 발송 기록 없음';
+  const expireSoon = k.refreshExpiresAt && k.refreshExpiresAt - Date.now() < 7 * 86400000;
+  el.innerHTML = `
+    <b>카카오톡 매일 발송</b> <span class="muted">(매일 9시 갱신 후 1번, 나 + 체크한 가족)</span>
+    <label>REST API 키 ${k.hasKey ? '<span class="muted">(등록됨 — 바꿀 때만 입력)</span>' : ''}<br>
+      <input id="k-key" placeholder="${k.hasKey ? '••••••••' : '카카오 개발자 앱의 REST API 키'}"></label>
+    <label>Client Secret <span class="muted">(카카오 앱에서 '사용함'일 때만 · ${k.hasSecret ? '등록됨' : '없음'})</span><br>
+      <input id="k-secret" placeholder="비워두면 그대로"></label>
+    <button id="k-save-key">키 저장</button>
+    ${k.hasKey ? `<button class="on" onclick="location.href='/api/kakao/auth'">${k.connected ? '카카오 다시 연결' : '카카오 연결 (내 계정)'}</button>` : ''}
+    <span class="muted">${k.connected ? '✔ 연결됨' : '연결 안 됨'}</span>
+    ${expireSoon ? '<div class="cheap">카카오 연결이 곧 만료됩니다. [카카오 다시 연결]을 눌러 주세요.</div>' : ''}
+    ${k.connected ? `
+      <div style="margin-top:8px"><b>받을 사람</b></div>
+      <label><input type="checkbox" id="k-me" style="width:auto" ${k.sendToMe ? 'checked' : ''}> 나 (나에게 보내기)</label>
+      ${k.friends.map(f => `<label><input type="checkbox" class="k-f" style="width:auto" data-uuid="${esc(f.uuid)}" data-name="${esc(f.name)}" ${chosen.has(f.uuid) ? 'checked' : ''}> ${esc(f.name)}</label>`).join('')}
+      ${k.friendsError ? `<div class="cheap">친구 목록 오류: ${esc(k.friendsError)}</div>` : ''}
+      ${!k.friends.length ? '<div class="muted">가족이 아직 목록에 없습니다. 아래 가족 동의 링크를 엄마·누나 폰으로 보내 한 번 열게 해 주세요.</div>' : ''}
+      <label><input type="checkbox" id="k-on" style="width:auto" ${k.enabled ? 'checked' : ''}> 매일 자동 발송 사용</label>
+      <button class="on" id="k-save">받을 사람 저장</button> <button id="k-test">지금 테스트 발송</button>
+      <span id="k-res" class="muted"></span>
+      <div class="muted" style="margin-top:4px">${last}</div>` : ''}
+    ${k.familyUrl ? `<div class="muted" style="margin-top:8px">가족 동의 링크 (엄마·누나 폰에서 한 번 열고 카카오 로그인·동의. 마지막에 '연결할 수 없음'이 떠도 정상):<br>
+      <input id="k-family" readonly value="${esc(k.familyUrl)}" style="width:100%"> <button id="k-copy">링크 복사</button></div>` : ''}
+    <details class="muted" style="margin-top:8px"><summary>처음 설정 방법</summary>
+      ① <a href="https://developers.kakao.com" target="_blank">developers.kakao.com</a> 로그인 → 내 애플리케이션 → 앱 만들기<br>
+      ② 앱 키의 <b>REST API 키</b>를 위에 붙여넣고 [키 저장]<br>
+      ③ 카카오 로그인: 사용 ON, Redirect URI에 <code>${esc(k.redirectUri)}</code> 등록<br>
+      ④ 플랫폼 › Web 사이트 도메인에 <code>http://localhost:3000</code> 등록<br>
+      ⑤ 동의항목: <b>카카오톡 메시지 전송</b>, <b>카카오 서비스 내 친구목록</b> 켜기<br>
+      ⑥ 팀 관리 → 엄마·누나 카카오계정으로 팀원 초대 → 각자 수락 (서로 카톡 친구여야 함)<br>
+      ⑦ [카카오 연결] → 가족 동의 링크를 엄마·누나에게 보내 한 번씩 동의 → 받을 사람 체크 → [지금 테스트 발송]
+    </details>`;
+
+  document.getElementById('k-save-key').onclick = async () => {
+    const r = await postJson('/api/kakao/settings', {
+      restKey: document.getElementById('k-key').value,
+      ...(document.getElementById('k-secret').value ? { clientSecret: document.getElementById('k-secret').value } : {}),
+    });
+    if (r.ok) renderKakao(); else alert(r.error || '저장 실패');
+  };
+  const copy = document.getElementById('k-copy');
+  if (copy) copy.onclick = () => { const i = document.getElementById('k-family'); i.select(); navigator.clipboard.writeText(i.value).catch(() => document.execCommand('copy')); copy.textContent = '복사됨'; };
+  if (!k.connected) return;
+  const res = document.getElementById('k-res');
+  document.getElementById('k-save').onclick = async () => {
+    const recipients = [...document.querySelectorAll('.k-f:checked')].map(c => ({ uuid: c.dataset.uuid, name: c.dataset.name }));
+    const r = await postJson('/api/kakao/settings', {
+      recipients, sendToMe: document.getElementById('k-me').checked, enabled: document.getElementById('k-on').checked,
+    });
+    res.textContent = r.ok ? '저장됨' : (r.error || '저장 실패');
+  };
+  document.getElementById('k-test').onclick = async () => {
+    await document.getElementById('k-save').onclick();   // 체크한 받을 사람부터 저장
+    res.textContent = '보내는 중…';
+    const r = await postJson('/api/kakao/test');
+    res.textContent = r.ok ? `발송 완료 → ${r.sent.join(', ')}` : `실패: ${r.error}`;
   };
 }
 

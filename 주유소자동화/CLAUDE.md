@@ -857,3 +857,12 @@ webapp\시작.bat 더블클릭
 - 미소 ID A0033074 자동 검색 성공. 휘발유 1,909·등유 1,600이 BOS 10/19~20 평균판매가와 일치, 평균 전국/충북/충북 음성군, 반경 25곳
 - 30분 캐시 → **매일 09:00 기준 1회 갱신**: 최근 09:00 이후 받은 값이면 캐시 사용(9시 전이면 어제 9시 값),
   `scheduleDaily()`가 서버 켜질 때 + 매일 09:00에 미리 받아 둠. PC를 9시 이후 켜도 첫 조회 때 받음. 수동 ↻ 새로고침은 그대로(1분 1회)
+
+### 추가 (2026-10-22) — 카카오톡 매일 단가 발송 (나 + 엄마·누나, 무료)
+- 카카오 메시지 API: 개발자 앱 팀원에게는 검수 없이 하루 30건 무료. 나에게 보내기 + 친구(팀원)에게 보내기, 텍스트 200자 한도 → 2통(우리+평균 / 주변 5곳, 별표 업체 우선)
+- `lib/kakaoMessenger.js`: OAuth(scope talk_message,friends), 토큰 자동 갱신, `buildMessages`, `dueToday`(하루 1번·09~21시·오늘 9시 이후 단가), `sendDaily`
+- 설정 `data/kakao_settings.json` (gitignore): restKey, clientSecret, tokens, recipients, sendToMe, enabled, lastSentDate, lastResult
+- `scheduleDaily(dataDir, onDaily)`: 시작·09:00·30분마다 확인(캐시 있으면 오피넷 호출 없음) → server.js `kakaoDaily`
+- API: GET /api/kakao/auth, /api/kakao/callback (state=family는 가족 동의용, 토큰 저장 안 함), GET /api/kakao/status, POST /api/kakao/settings, POST /api/kakao/test
+- 화면: 단가표 ⚙ 설정 하단 "카카오톡 매일 발송" (키 저장 → 카카오 연결 → 가족 동의 링크 → 받을 사람 체크 → 테스트 발송, 처음 설정 방법 안내)
+- 남은 것: **사용자가 카카오 개발자 앱 생성·팀원 초대 후 실제 발송 확인** (가짜 응답으로 발송·중복방지·토큰갱신만 검증함)

@@ -148,6 +148,7 @@ const { matchCards }       = require('./lib/cardMatcher');
 const { parseBankDeposits } = require('./lib/bankParser');
 const { calcVatQuarter, loadSettings: loadVatSettings } = require('./lib/vatCalculator');
 const opinet = require('./lib/opinetClient');
+const kakao = require('./lib/kakaoMessenger');
 
 function vendorFile(year, month) {
   const mo = String(month).padStart(2, '0');
@@ -2971,6 +2972,83 @@ app.get('/api/prices/board', async (req, res) => {
   }
 });
 
+// ── 카카오톡 매일 단가 발송 (나 + 팀원 가족) ─────────────────────
+const KAKAO_REDIRECT = `http://localhost:${PORT}/api/kakao/callback`;
+
+function kakaoDaily(board) {
+  return kakao.sendDaily(DATA_DIR, board, opinet.loadSettings(DATA_DIR).pinned).then(r => {
+    if (r) console.log(r.ok ? `[kakao] 단가 발송 → ${r.sent.join(', ')}` : `[kakao] 단가 발송 실패: ${r.error}`);
+  });
+}
+
+app.get('/api/kakao/auth', (req, res) => {
+  const s = kakao.loadSettings(DATA_DIR);
+  if (!s.restKey) return res.status(400).send('카카오 REST API 키를 먼저 저장하세요.');
+  res.redirect(kakao.authUrl(s, KAKAO_REDIRECT));
+});
+
+app.get('/api/kakao/callback', async (req, res) => {
+  const page = msg => `<!DOCTYPE html><meta charset="utf-8"><body style="font-family:'Malgun Gothic';padding:24px">${msg}</body>`;
+  if (req.query.state === 'family') return res.send(page('동의 완료. 이 창은 닫아도 됩니다.'));
+  if (req.query.error) return res.send(page(`카카오 연결 취소/실패: ${req.query.error_description || req.query.error}`));
+  try {
+    await kakao.handleCallback(DATA_DIR, req.query.code, KAKAO_REDIRECT);
+    res.send(page('카카오 연결 완료. 단가표 설정으로 돌아가 받을 사람을 고르세요.<script>setTimeout(()=>location.href="/board.html",1500)</script>'));
+  } catch (e) {
+    console.error('[kakao/callback]', e);
+    res.send(page(`카카오 연결 실패: ${e.message}`));
+  }
+});
+
+app.get('/api/kakao/status', async (req, res) => {
+  const s = kakao.loadSettings(DATA_DIR);
+  const out = {
+    ok: true, hasKey: !!s.restKey, hasSecret: !!s.clientSecret, connected: !!(s.tokens && s.tokens.refresh),
+    refreshExpiresAt: s.tokens && s.tokens.refreshExpiresAt, recipients: s.recipients, sendToMe: s.sendToMe,
+    enabled: s.enabled, lastSentDate: s.lastSentDate, lastResult: s.lastResult, redirectUri: KAKAO_REDIRECT,
+    familyUrl: s.restKey ? kakao.authUrl(s, KAKAO_REDIRECT, 'family') : '', friends: [],
+  };
+  if (out.connected) {
+    try { out.friends = await kakao.listFriends(DATA_DIR); } catch (e) { out.friendsError = e.message; }
+  }
+  res.json(out);
+});
+
+app.post('/api/kakao/settings', (req, res) => {
+  try {
+    const { restKey, clientSecret, recipients, sendToMe, enabled } = req.body;
+    const s = kakao.loadSettings(DATA_DIR);
+    if (typeof restKey === 'string' && restKey.trim() && restKey.trim() !== s.restKey) {
+      s.restKey = restKey.trim();
+      s.tokens = null;   // 다른 앱 키면 기존 연결은 못 씀
+    }
+    if (typeof clientSecret === 'string') s.clientSecret = clientSecret.trim();
+    if (Array.isArray(recipients)) {
+      s.recipients = recipients.filter(r => r && r.uuid).map(r => ({ uuid: String(r.uuid), name: String(r.name || '') }));
+    }
+    if (typeof sendToMe === 'boolean') s.sendToMe = sendToMe;
+    if (typeof enabled === 'boolean') s.enabled = enabled;
+    kakao.saveSettings(DATA_DIR, s);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[kakao/settings]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// 지금 바로 발송 (매일 발송 기록은 바꾸지 않음)
+app.post('/api/kakao/test', async (req, res) => {
+  try {
+    const board = await opinet.getBoard(DATA_DIR);
+    if (!board.ok) throw new Error(board.error || '단가표를 불러오지 못했습니다.');
+    const sent = await kakao.send(DATA_DIR, board, opinet.loadSettings(DATA_DIR).pinned);
+    res.json({ ok: true, sent });
+  } catch (e) {
+    console.error('[kakao/test]', e);
+    res.json({ ok: false, error: e.message });
+  }
+});
+
 // 인증키·주유소 ID·반경·강조 업체 저장 (키·ID가 바뀌면 캐시 초기화)
 app.post('/api/prices/settings', (req, res) => {
   try {
@@ -3989,5 +4067,5 @@ app.delete('/api/deposit/reset', (req, res) => {
 app.listen(PORT, () => {
   console.log('\n✅  주유소 자동화 웹앱 실행 중');
   console.log(`    브라우저에서 열기 → http://localhost:${PORT}\n`);
-  opinet.scheduleDaily(DATA_DIR);
+  opinet.scheduleDaily(DATA_DIR, kakaoDaily);
 });
