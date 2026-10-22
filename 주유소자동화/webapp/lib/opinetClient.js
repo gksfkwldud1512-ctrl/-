@@ -63,7 +63,7 @@ const brandOf = o => BRANDS[o.POLL_DIV_CD || o.POLL_DIV_CO] || (o.POLL_DIV_CD ||
 
 // 상호로 우리 주유소 ID 찾기 (주소 힌트로 동명 주유소 구분)
 async function findMyStation(s, fetchImpl) {
-  const list = await call('searchByName.do', { certkey: s.certkey, osnm: s.myStationName }, fetchImpl);
+  const list = await call('searchByName.do', { code: s.certkey, osnm: s.myStationName }, fetchImpl);
   const hint = (s.myAddressHint || '').replace(/\s/g, '');
   const hit = list.find(o => (String(o.NEW_ADR || '') + String(o.VAN_ADR || '')).replace(/\s/g, '').includes(hint))
            || list.find(o => /대소면/.test(String(o.NEW_ADR || '') + String(o.VAN_ADR || '')));
@@ -79,7 +79,7 @@ async function fetchBoard(s, fetchImpl) {
     notes.push('stationIdFound');
   }
 
-  const [detail] = await call('detailById.do', { certkey: s.certkey, id: s.myStationId }, fetchImpl);
+  const [detail] = await call('detailById.do', { code: s.certkey, id: s.myStationId }, fetchImpl);
   if (!detail) throw new Error('오피넷 응답이 비어 있습니다. 인증키 또는 주유소 ID를 확인하세요.');
 
   const my = {
@@ -99,10 +99,10 @@ async function fetchBoard(s, fetchImpl) {
   const prodcds = Object.keys(PRODUCTS);
   const [aroundLists, avgAll, avgSido, avgSigun] = await Promise.all([
     Promise.all(prodcds.map(prodcd => call('aroundAll.do',
-      { certkey: s.certkey, x, y, radius: Math.min(5000, Number(s.radius) || 5000), prodcd, sort: 2 }, fetchImpl))),
-    call('avgAllPrice.do', { certkey: s.certkey }, fetchImpl),
-    sido ? call('avgSidoPrice.do', { certkey: s.certkey, sido }, fetchImpl) : [],
-    sigun ? call('avgSigunPrice.do', { certkey: s.certkey, sido, sigun }, fetchImpl) : [],
+      { code: s.certkey, x, y, radius: Math.min(5000, Number(s.radius) || 5000), prodcd, sort: 2 }, fetchImpl))),
+    call('avgAllPrice.do', { code: s.certkey }, fetchImpl),
+    sido ? call('avgSidoPrice.do', { code: s.certkey, sido }, fetchImpl) : [],
+    sigun ? call('avgSigunPrice.do', { code: s.certkey, sido, sigun }, fetchImpl) : [],
   ]);
 
   // 제품별 반경 결과를 주유소 하나로 합침
