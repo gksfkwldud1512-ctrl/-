@@ -215,6 +215,20 @@ function isStatementNonFuelOnly(name) {
   return readJSON(STATEMENT_NONFUEL_FILE, []).includes(name);
 }
 
+// ── 카드 결제분도 거래명세서에 넣는 업체 ──────────────────────
+// data/statement_include_card.json = ["업체명", ...]. BOS에 신용카드(유가보조금 카드)로 찍혀
+// 외상이 없어도 거래명세서는 받아야 하는 업체. 업로드 시 카드 거래를 cardTxs로 따로 보관
+const STATEMENT_CARD_FILE = path.join(DATA_DIR, 'statement_include_card.json');
+const statementCardVendors = () => new Set(readJSON(STATEMENT_CARD_FILE, []));
+
+// 외상 거래 + 카드 거래를 합친 거래명세서용 업체 (금액 필드도 명세서 기준으로)
+function withStatementCard(v) {
+  if (!v || !(v.cardTxs || []).length || !statementCardVendors().has(v.name)) return v;
+  const txs = (v.txs || []).concat(v.cardTxs).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const amt = txs.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+  return { ...v, txs, totalCredit: amt, total: amt, hasCredit: true };
+}
+
 // 명세서 품목 범위: 'nonfuel'(유외상품만, 기본) / 'fuel'(유류만) / 'all'(전체)
 // 이 업체들만 고를 수 있음. 마지막 선택은 customers.json statementScope 에 저장
 const STATEMENT_SCOPES = ['nonfuel', 'fuel', 'all'];
@@ -230,19 +244,25 @@ function filterStatementScope(v, scope) {
 function statementScopeOf(name, customers, requested) {
   if (STATEMENT_SCOPES.includes(requested)) return requested;
   const saved = (customers.find(c => c.name === name) || {}).statementScope;
-  return STATEMENT_SCOPES.includes(saved) ? saved : 'nonfuel';
+  if (STATEMENT_SCOPES.includes(saved)) return saved;
+  return statementCardVendors().has(name) ? 'all' : 'nonfuel';   // 카드분 명세서 업체는 기본 전체
 }
 
 // 업체 목록 표시용: 유가보조금 업체에 유외/유류 금액과 선택 범위 표시 (금액 필드는 그대로)
 function annotateNonFuelOnly(vendors) {
   const list = readJSON(STATEMENT_NONFUEL_FILE, []);
   const customers = readJSON(CUSTOMERS_FILE, []);
-  return vendors.map(v => list.includes(v.name)
-    ? { ...v, statementNonFuelOnly: true,
-        statementNonFuelAmount: filterStatementScope(v, 'nonfuel').totalCredit,
-        statementFuelAmount: filterStatementScope(v, 'fuel').totalCredit,
-        statementScope: statementScopeOf(v.name, customers) }
-    : v);
+  return vendors.map(v => {
+    const sv = withStatementCard(v);
+    const card = sv !== v ? { statementCardAmount: (v.cardTxs || []).reduce((s, t) => s + (Number(t.amount) || 0), 0),
+                              statementAllAmount: sv.totalCredit } : {};
+    return list.includes(v.name)
+      ? { ...v, ...card, statementNonFuelOnly: true,
+          statementNonFuelAmount: filterStatementScope(sv, 'nonfuel').totalCredit,
+          statementFuelAmount: filterStatementScope(sv, 'fuel').totalCredit,
+          statementScope: statementScopeOf(v.name, customers) }
+      : { ...v, ...card };
+  });
 }
 
 function readJSON(file, def) {
@@ -295,7 +315,7 @@ app.post('/api/parse-excel', upload.single('file'), (req, res) => {
 
     for (const [ym, ymRows] of byMonth) {
       const [y, mo] = ym.split('-');
-      const { vendors, fuelSummary } = buildVendorsFromRows(ymRows);
+      const { vendors, fuelSummary } = buildVendorsFromRows(ymRows, { keepCardTxsFor: statementCardVendors() });
       writeJSON(vendorFile(y, mo), vendors);
       writeJSON(fuelSummaryFile(y, mo), fuelSummary);
       savedMonths.push(ym);
@@ -306,10 +326,10 @@ app.post('/api/parse-excel', upload.single('file'), (req, res) => {
     // 화면에는 빈 배열 대신 방금 처리된 것 중 하나를 대표로 보여준다.
     if (primaryVendors === null) {
       const first = byMonth.values().next().value;
-      primaryVendors = first ? buildVendorsFromRows(first).vendors : [];
+      primaryVendors = first ? buildVendorsFromRows(first, { keepCardTxsFor: statementCardVendors() }).vendors : [];
     }
 
-    res.json({ ok: true, vendors: annotateStatementMerges(primaryVendors, year, month), savedMonths });
+    res.json({ ok: true, vendors: annotateNonFuelOnly(annotateStatementMerges(primaryVendors, year, month)), savedMonths });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -648,7 +668,7 @@ app.post('/api/generate', async (req, res) => {
     const names     = [...new Set(vendorNames.map(n => merges[n] || n))];
     // 외상 거래가 있는 업체만 생성
     const selected  = names
-      .map(n => vendors.find(v => v.name === n))
+      .map(n => withStatementCard(vendors.find(v => v.name === n)))
       .filter(v => v?.hasCredit)
       .map(v => buildStatementVendor(v, vendors, merges))
       .map(v => isStatementNonFuelOnly(v.name)

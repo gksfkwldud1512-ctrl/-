@@ -24,7 +24,9 @@ function readExcelRows(filePath) {
 
 // rows(위 readExcelRows 결과)로부터 업체별 집계 생성.
 // 여러 달이 섞인 파일에서 특정 월만 뽑아 재구성할 때 등 rows를 미리 필터링해서 넘길 수 있음.
-function buildVendorsFromRows(rows) {
+// opts.keepCardTxsFor: 외상 아닌(카드 등) 거래도 cardTxs에 보관할 업체명 Set — 거래명세서용
+function buildVendorsFromRows(rows, opts = {}) {
+  const keepCardFor = opts.keepCardTxsFor || new Set();
   const custMap = {};
   const fuelSummary = {};  // { 'YYYY/MM/DD': { '휘발유': {qty, amount}, ... } }
   const FUEL_SET = new Set(['휘발유', '경유', '등유']);
@@ -70,6 +72,10 @@ function buildVendorsFromRows(rows) {
       custMap[name].txs.push({ date, vehicle, product, qty, unitPrice, amount, taxType: r[17] || '과세', isDelivery });
     } else {
       custMap[name].totalOther += amount;
+      if (keepCardFor.has(name)) {
+        (custMap[name].cardTxs ||= []).push({ date, vehicle, product, qty, unitPrice, amount,
+          taxType: r[17] || '과세', isDelivery: outType === '배달', payType });
+      }
     }
 
     // 월별 유종별 판매 집계 (ALL 거래, 영업이익 계산용)
@@ -138,8 +144,8 @@ function buildVendorsFromRows(rows) {
   };
 }
 
-function parseExcel(filePath) {
-  return buildVendorsFromRows(readExcelRows(filePath));
+function parseExcel(filePath, opts) {
+  return buildVendorsFromRows(readExcelRows(filePath), opts);
 }
 
 // 배달판매전표리스트 Excel 파싱 (별도 배달 리포트 형식)

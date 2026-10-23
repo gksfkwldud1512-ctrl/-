@@ -874,3 +874,10 @@ webapp\시작.bat 더블클릭
 - 파일명은 기존과 동일(접미사 없음) → 유류·유외 둘 다 필요하면 하나 받은 뒤 다른 것으로 다시 생성(덮어씀). 메일 발송도 마지막 생성 파일 기준
 - 세금계산서·부가세(vatCalculator nonFuelOnlyFrom)는 변경 없음
 - 9월 검증: 하나항공 음성 유외 32,000 / 유류 4,398,807 / 전체 4,430,807 등 5개 업체 합계 일치
+- (추가 2026-10-23) **카드 결제분도 거래명세서**: `data/statement_include_card.json` = ["한누리관광(주)", "한누리투어(주)"]
+  - 9월부터 BOS에 유가보조금 카드를 "신용카드"로 입력 → 외상 0이라 "해당없음"이던 문제
+  - `excelParser.buildVendorsFromRows(rows, { keepCardTxsFor })`: 이 업체의 외상 아닌 거래를 `cardTxs`로 보관 (합계 필드는 그대로)
+  - server.js `withStatementCard(v)`: 명세서 생성 시 txs + cardTxs 합침. 이 업체 품목 기본값은 '전체'(유외만이면 0원)
+  - `/api/parse-excel` 응답에도 annotateNonFuelOnly 적용(업로드 직후 화면에 품목 선택 표시)
+  - vendors_2026_09.json은 원본 uploads/upload_1790817471172.xlsx로 재생성 (cardTxs 외 기존과 완전 동일 확인)
+  - 9월: 한누리관광 카드 2건 1,099,869 / 한누리투어 외상 3,576,372 + 카드 371,931 = 3,948,303

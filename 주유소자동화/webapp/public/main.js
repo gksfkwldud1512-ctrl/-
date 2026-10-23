@@ -519,7 +519,7 @@ function renderVendors() {
     // 업체 통합: 합쳐지는 업체(예: 명신)는 받는 업체(현대스크랩) 거래명세서에 포함 → 따로 발행 안 함
     const mergedInto = v.statementMergedInto;
     const mergedFrom = v.statementMergedFrom || [];
-    const checkCell = (v.hasCredit && !mergedInto)
+    const checkCell = (canStatement(v) && !mergedInto)
       ? `<input type="checkbox" class="vendor-check" value="${esc(v.name)}">`
       : '';
 
@@ -528,6 +528,7 @@ function renderVendors() {
       ? `<strong>${credit.toLocaleString()}원</strong>`
       : `<span style="color:#94a3b8">-</span>`)
       + (mergedAdd ? `<div style="font-size:11px;color:#7c3aed;">+ ${mergedFrom.map(x => `${esc(x.name)} ${x.credit.toLocaleString()}`).join(', ')}<br>= 명세서 ${(credit + mergedAdd).toLocaleString()}원</div>` : '')
+      + (v.statementCardAmount ? `<div style="font-size:11px;color:#0369a1;" title="BOS에 신용카드로 입력된 거래도 거래명세서에 포함">+ 카드 ${v.statementCardAmount.toLocaleString()}원 = ${(v.statementAllAmount || 0).toLocaleString()}원</div>` : '')
       + (v.statementNonFuelOnly ? statementScopeCell(v) : '');
 
     const otherCell = other > 0
@@ -537,7 +538,7 @@ function renderVendors() {
     const stmtDone = state.completion.statements.includes(v.name);
     const statCell = mergedInto
       ? `<span class="badge" style="background:#ede9fe;color:#6d28d9" title="이 업체 외상 거래는 ${esc(mergedInto)} 거래명세서에 합산됩니다">${esc(mergedInto)}에 합산</span>`
-      : v.hasCredit
+      : canStatement(v)
       ? (hasFile
           ? (stmtDone
               ? '<span class="badge badge-done">완료</span>'
@@ -545,7 +546,7 @@ function renderVendors() {
           : '<span class="badge badge-no">미생성</span>')
       : '<span class="badge" style="background:#f1f5f9;color:#94a3b8">해당없음</span>';
 
-    const dlCell = (v.hasCredit && hasFile && !mergedInto)
+    const dlCell = (canStatement(v) && hasFile && !mergedInto)
       ? (isSplit
           ? `<a href="/api/download/${encodeURIComponent(splitFile1)}" class="btn-link" download>주유</a>
              <a href="/api/download/${encodeURIComponent(splitFile2)}" class="btn-link" download style="margin-left:4px">배달</a>`
@@ -554,12 +555,12 @@ function renderVendors() {
 
     const savedMethod = state.vendorPrintMethods[v.name]
       ?? (state.customers.find(c => c.name === v.name)?.printMethod ?? '');
-    const methodCell = v.hasCredit
+    const methodCell = canStatement(v)
       ? `<select class="select-method" onchange="updateVendorPrintMethod('${esc(v.name)}', this.value)">${printMethodOptions(savedMethod)}</select>`
       : dash();
 
     const hasDeliveryTxs = v.txs && v.txs.some(t => t.isDelivery) && v.txs.some(t => !t.isDelivery);
-    const splitCell = (v.hasCredit && hasDeliveryTxs)
+    const splitCell = (canStatement(v) && hasDeliveryTxs)
       ? `<select class="select-method" onchange="updateVendorSplitDelivery('${esc(v.name)}', this.value)">
            <option value=""${!isSplit ? ' selected' : ''}>통합 (1부)</option>
            <option value="true"${isSplit ? ' selected' : ''}>배달/주유 분리 (2부)</option>
@@ -627,8 +628,8 @@ function renderCustomers() {
 // ── 메일 발송 목록 ───────────────────────────────────────────
 function renderEmail() {
   const tbody = document.getElementById('email-tbody');
-  // 외상 업체만 표시
-  const creditVendors = state.vendors.filter(v => v.hasCredit);
+  // 외상 업체만 표시 (카드 결제분도 명세서 받는 업체 포함)
+  const creditVendors = state.vendors.filter(canStatement);
 
   if (!creditVendors.length) {
     tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Excel 파일을 업로드하면 목록이 표시됩니다</td></tr>';
@@ -830,10 +831,13 @@ async function generateTaxExcel() {
   renderTaxInvoice();
 }
 
+// 거래명세서 발행 가능: 외상 거래가 있거나, 카드 결제분도 명세서에 넣는 업체
+function canStatement(v) { return !!(v.hasCredit || v.statementCardAmount); }
+
 // 유가보조금 업체: 명세서에 넣을 품목 선택 (유외상품만 / 유류만 / 전체)
 function statementScopeCell(v) {
   const scope = state.vendorStatementScopes[v.name] || v.statementScope || 'nonfuel';
-  const amt = { nonfuel: v.statementNonFuelAmount || 0, fuel: v.statementFuelAmount || 0, all: v.totalCredit || 0 };
+  const amt = { nonfuel: v.statementNonFuelAmount || 0, fuel: v.statementFuelAmount || 0, all: v.statementAllAmount ?? v.totalCredit ?? 0 };
   const opt = (val, label) => `<option value="${val}"${scope === val ? ' selected' : ''}>${label} ${amt[val].toLocaleString()}원</option>`;
   return `<div style="font-size:11px;color:#0369a1;margin-top:2px;" title="유가보조금 업체 — 거래명세서에 넣을 품목 선택">명세서:
     <select class="select-method" style="font-size:11px;" onchange="updateVendorStatementScope('${esc(v.name)}', this.value)">
