@@ -30,6 +30,7 @@ const state = {
   sort:                { col: 'name', dir: 'asc' },
   vendorPrintMethods:   {},   // { 업체명: 출력방법 } — 세션 내
   vendorSplitDelivery: {},   // { 업체명: true|false } — 배달/주유 분리 발행
+  vendorStatementScopes: {}, // { 업체명: 'nonfuel'|'fuel'|'all' } — 유가보조금 업체 명세서 품목
   hometaxMethods:      {},   // { 업체명: '통합'|'분리' } — 세션 내 (구 자동화용)
   taxIssuanceMethods:  {},   // { 업체명: '합산'|'분리' } — 세션 내 (일괄발행용)
   monthlyProfit:       null, // /api/monthly-profit 응답
@@ -331,6 +332,16 @@ function updateVendorSplitDelivery(name, value) {
   renderVendors();
 }
 
+// 유가보조금 업체 명세서 품목 변경 → customers.json 자동 저장
+function updateVendorStatementScope(name, value) {
+  state.vendorStatementScopes[name] = value;
+  let existing = state.customers.find(c => c.name === name);
+  if (!existing) { existing = { name }; state.customers.push(existing); }
+  existing.statementScope = value;
+  api('POST', '/api/customers', { ...existing });
+  renderVendors();
+}
+
 // 파일명 생성 (서버와 동일한 규칙)
 function getFilename(name, suffix = '') {
   const safe = name.replace(/[\\/:*?"<>|]/g, '_');
@@ -517,7 +528,7 @@ function renderVendors() {
       ? `<strong>${credit.toLocaleString()}원</strong>`
       : `<span style="color:#94a3b8">-</span>`)
       + (mergedAdd ? `<div style="font-size:11px;color:#7c3aed;">+ ${mergedFrom.map(x => `${esc(x.name)} ${x.credit.toLocaleString()}`).join(', ')}<br>= 명세서 ${(credit + mergedAdd).toLocaleString()}원</div>` : '')
-      + (v.statementNonFuelOnly ? `<div style="font-size:11px;color:#0369a1;" title="유류는 유가보조금 카드로 결제됨 — 거래명세서엔 유외상품만 포함">유외상품만 → 명세서 ${(v.statementNonFuelAmount || 0).toLocaleString()}원</div>` : '');
+      + (v.statementNonFuelOnly ? statementScopeCell(v) : '');
 
     const otherCell = other > 0
       ? `${other.toLocaleString()}원`
@@ -819,6 +830,17 @@ async function generateTaxExcel() {
   renderTaxInvoice();
 }
 
+// 유가보조금 업체: 명세서에 넣을 품목 선택 (유외상품만 / 유류만 / 전체)
+function statementScopeCell(v) {
+  const scope = state.vendorStatementScopes[v.name] || v.statementScope || 'nonfuel';
+  const amt = { nonfuel: v.statementNonFuelAmount || 0, fuel: v.statementFuelAmount || 0, all: v.totalCredit || 0 };
+  const opt = (val, label) => `<option value="${val}"${scope === val ? ' selected' : ''}>${label} ${amt[val].toLocaleString()}원</option>`;
+  return `<div style="font-size:11px;color:#0369a1;margin-top:2px;" title="유가보조금 업체 — 거래명세서에 넣을 품목 선택">명세서:
+    <select class="select-method" style="font-size:11px;" onchange="updateVendorStatementScope('${esc(v.name)}', this.value)">
+      ${opt('nonfuel', '유외상품만')}${opt('fuel', '유류만')}${opt('all', '전체')}
+    </select></div>`;
+}
+
 // ── 거래명세서 생성 ─────────────────────────────────────────
 async function generateSelected() {
   const names = getChecked('vendor-check');
@@ -827,7 +849,10 @@ async function generateSelected() {
   const issueDate      = state.issueDate.replace(/-/g, '/');
   const printMethods   = {};
   const splitDelivery  = {};
+  const statementScopes = {};
   names.forEach(n => {
+    const v = state.vendors.find(x => x.name === n);
+    if (v?.statementNonFuelOnly) statementScopes[n] = state.vendorStatementScopes[n] || v.statementScope || 'nonfuel';
     if (state.vendorPrintMethods[n]) printMethods[n] = state.vendorPrintMethods[n];
     splitDelivery[n] = !!state.vendorSplitDelivery[n]; // 통합이어도 false로 명시 전달
   });
@@ -840,6 +865,7 @@ async function generateSelected() {
     month: state.month,
     printMethods,
     splitDelivery,
+    statementScopes,
   });
 
   if (res.ok) {

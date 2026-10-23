@@ -215,17 +215,33 @@ function isStatementNonFuelOnly(name) {
   return readJSON(STATEMENT_NONFUEL_FILE, []).includes(name);
 }
 
-function toNonFuelOnly(v) {
-  const txs = (v.txs || []).filter(t => !STATEMENT_FUELS.has(t.product));
+// 명세서 품목 범위: 'nonfuel'(유외상품만, 기본) / 'fuel'(유류만) / 'all'(전체)
+// 이 업체들만 고를 수 있음. 마지막 선택은 customers.json statementScope 에 저장
+const STATEMENT_SCOPES = ['nonfuel', 'fuel', 'all'];
+
+function filterStatementScope(v, scope) {
+  if (scope === 'all') return v;
+  const wantFuel = scope === 'fuel';
+  const txs = (v.txs || []).filter(t => STATEMENT_FUELS.has(t.product) === wantFuel);
   const amt = txs.reduce((s, t) => s + (Number(t.amount) || 0), 0);
   return { ...v, txs, totalCredit: amt, total: amt, hasCredit: txs.length > 0 };
 }
 
-// 업체 목록 표시용: 유외상품만 발행 업체에 명세서 금액 표시 (금액 필드는 그대로)
+function statementScopeOf(name, customers, requested) {
+  if (STATEMENT_SCOPES.includes(requested)) return requested;
+  const saved = (customers.find(c => c.name === name) || {}).statementScope;
+  return STATEMENT_SCOPES.includes(saved) ? saved : 'nonfuel';
+}
+
+// 업체 목록 표시용: 유가보조금 업체에 유외/유류 금액과 선택 범위 표시 (금액 필드는 그대로)
 function annotateNonFuelOnly(vendors) {
   const list = readJSON(STATEMENT_NONFUEL_FILE, []);
+  const customers = readJSON(CUSTOMERS_FILE, []);
   return vendors.map(v => list.includes(v.name)
-    ? { ...v, statementNonFuelOnly: true, statementNonFuelAmount: toNonFuelOnly(v).totalCredit }
+    ? { ...v, statementNonFuelOnly: true,
+        statementNonFuelAmount: filterStatementScope(v, 'nonfuel').totalCredit,
+        statementFuelAmount: filterStatementScope(v, 'fuel').totalCredit,
+        statementScope: statementScopeOf(v.name, customers) }
     : v);
 }
 
@@ -622,7 +638,7 @@ app.get('/api/export-vendor-prices', async (req, res) => {
 // ── 거래명세서 생성 (외상 업체만) ────────────────────────────
 app.post('/api/generate', async (req, res) => {
   try {
-    const { vendorNames, issueDate, year, month, printMethods, splitDelivery } = req.body;
+    const { vendorNames, issueDate, year, month, printMethods, splitDelivery, statementScopes } = req.body;
     if (!vendorNames?.length) return res.status(400).json({ ok: false, error: '업체를 선택하세요.' });
 
     const vendors   = getVendors(year, month);
@@ -635,7 +651,9 @@ app.post('/api/generate', async (req, res) => {
       .map(n => vendors.find(v => v.name === n))
       .filter(v => v?.hasCredit)
       .map(v => buildStatementVendor(v, vendors, merges))
-      .map(v => isStatementNonFuelOnly(v.name) ? toNonFuelOnly(v) : v)
+      .map(v => isStatementNonFuelOnly(v.name)
+        ? filterStatementScope(v, statementScopeOf(v.name, customers, (statementScopes || {})[v.name]))
+        : v)
       .filter(v => v.hasCredit);
 
     if (!selected.length) return res.status(400).json({ ok: false, error: '선택한 업체 중 거래명세서에 넣을 외상 거래가 없습니다.' });
@@ -672,7 +690,7 @@ app.get('/api/customers', (req, res) => {
 
 // ── 고객 저장 ────────────────────────────────────────────────
 app.post('/api/customers', (req, res) => {
-  const { name, bizNo, ceoName, contactName, email, taxEmail, phone, address, bizType, bizItem, printMethod, hometaxMethod, taxIssuance, splitDelivery, mergeGasoline } = req.body;
+  const { name, bizNo, ceoName, contactName, email, taxEmail, phone, address, bizType, bizItem, printMethod, hometaxMethod, taxIssuance, splitDelivery, mergeGasoline, statementScope } = req.body;
   if (!name) return res.status(400).json({ ok: false, error: '업체명은 필수입니다.' });
   const customers = readJSON(CUSTOMERS_FILE, []);
   const idx = customers.findIndex(c => c.name === name);
@@ -699,6 +717,8 @@ app.post('/api/customers', (req, res) => {
     mergeGasoline: mergeGasoline !== undefined
       ? (mergeGasoline === true || mergeGasoline === 'true')
       : (existing.mergeGasoline || false),
+    // 유가보조금 업체 거래명세서 품목 범위 (nonfuel/fuel/all)
+    statementScope: ['nonfuel', 'fuel', 'all'].includes(statementScope) ? statementScope : (existing.statementScope || ''),
   };
   if (idx >= 0) customers[idx] = customer;
   else customers.push(customer);

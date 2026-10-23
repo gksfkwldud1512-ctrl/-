@@ -866,3 +866,11 @@ webapp\시작.bat 더블클릭
 - API: GET /api/kakao/auth, /api/kakao/callback (state=family는 가족 동의용, 토큰 저장 안 함), GET /api/kakao/status, POST /api/kakao/settings, POST /api/kakao/test
 - 화면: 단가표 ⚙ 설정 하단 "카카오톡 매일 발송" (키 저장 → 카카오 연결 → 가족 동의 링크 → 받을 사람 체크 → 테스트 발송, 처음 설정 방법 안내)
 - 남은 것: **사용자가 카카오 개발자 앱 생성·팀원 초대 후 실제 발송 확인** (가짜 응답으로 발송·중복방지·토큰갱신만 검증함)
+
+## 완료된 작업 (2026-10-23) — 유가보조금 업체 거래명세서 품목 선택
+- 기존(10/01): statement_nonfuel_only.json 5개 업체는 거래명세서에 유외상품만 고정
+- 변경: 거래명세서 업체 목록 외상 칸에 "명세서: [유외상품만 / 유류만 / 전체] (금액)" 선택 → 업체별 customers.json `statementScope`에 저장(기본 nonfuel)
+- server.js `filterStatementScope(v, scope)`, `statementScopeOf(name, customers, requested)`; `/api/generate` body `statementScopes {업체: scope}`; `/api/vendors` 응답에 statementFuelAmount·statementScope 추가
+- 파일명은 기존과 동일(접미사 없음) → 유류·유외 둘 다 필요하면 하나 받은 뒤 다른 것으로 다시 생성(덮어씀). 메일 발송도 마지막 생성 파일 기준
+- 세금계산서·부가세(vatCalculator nonFuelOnlyFrom)는 변경 없음
+- 9월 검증: 하나항공 음성 유외 32,000 / 유류 4,398,807 / 전체 4,430,807 등 5개 업체 합계 일치
