@@ -266,16 +266,20 @@ async function runConsistency(ctx, ym) {
   }
   if (ctx.arSummary) {
     try {
-      // 직전 달 외상은 이번 달에 결제하는 게 보통 → 두 달 전까지의 미수만 "밀린 미수"로 봄
-      const cutoff = shiftDate(`${ym}-01`, -32).slice(0, 7);   // ym 기준 두 달 전 (10월 → 08월)
+      // 업체별 입금 지연(1~2개월 등) 기한이 지났는데 안 들어온 달만 "밀린 미수" (기한 전은 입금 대기라 정상)
+      // 현장카드 업체(받음 체크 전)는 따로 셈
       const ar = ctx.arSummary();
-      const old = ar.map(v => ({ name: v.name, months: v.months.filter(x => x.remaining > 0 && x.month <= cutoff) }))
+      const pick = st => ar.map(v => ({ name: v.name, months: v.months.filter(x => st.includes(x.status) && x.month <= ym) }))
         .filter(v => v.months.length)
-        .map(v => ({ ...v, amount: v.months.reduce((s, x) => s + x.remaining, 0) }))
+        .map(v => ({ ...v, amount: v.months.reduce((s, x) => s + Math.max(0, x.remaining), 0) }))
         .sort((a, b) => b.amount - a.amount);
+      const old = pick(['overdue', 'short']);
+      const card = pick(['card-wait']);
       add('ar-overdue', '밀린 미수', 'archeck', old.length ? 'warn' : 'ok',
-        old.length ? `${old.length}개 업체에 ${cutoff.slice(5)}월 이전 미수가 남아 있습니다 (합계 ${won(old.reduce((s, v) => s + v.amount, 0))}). 실제 미입금인지, 입금 매칭이 안 된 것인지 미수확인에서 보세요.` : `${cutoff.slice(5)}월 이전 미수가 없습니다.`,
-        old.slice(0, 30).map(v => ({ name: v.name, text: `${v.name}: ${v.months.length}개월 ${won(v.amount)} (${v.months.map(x => x.month.slice(5) + '월').join(', ')})` })));
+        (old.length ? `입금 기한이 지난 미수: ${old.length}개 업체 ${won(old.reduce((s, v) => s + v.amount, 0))}.` : '입금 기한이 지난 미수가 없습니다.')
+          + (card.length ? ` 현장카드 업체 받음 체크 전: ${card.length}곳 ${won(card.reduce((s, v) => s + v.amount, 0))}.` : ''),
+        [...old.slice(0, 30).map(v => ({ name: v.name, text: `${v.name}: ${v.months.length}개월 ${won(v.amount)} (${v.months.map(x => x.month.slice(5) + '월').join(', ')})` })),
+         ...card.slice(0, 15).map(v => ({ name: v.name, text: `[카드] ${v.name}: ${v.months.map(x => x.month.slice(5) + '월').join(', ')} 받음 체크 전` }))]);
     } catch (e) { add('ar-overdue', '밀린 미수', 'archeck', 'info', `계산 실패: ${e.message}`); }
   }
 

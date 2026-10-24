@@ -1293,8 +1293,9 @@
   <section id="tab-archeck" class="tab-content" style="display:none;">
 
     <div class="notice notice-info">
-      💰 BOS 외상 거래대금과 통장 입금을 자동 매칭해 업체별 미수 현황을 보여줍니다.<br>
-      [일마감→지출목록] "수시입출예금 업로드" 시 자동 반영됩니다.
+      💰 BOS 외상 거래대금과 통장 입금을 맞춰 업체별 미수를 보여줍니다. 통장 파일은 [📥 자료 올리기]로 올리면 자동 반영됩니다.<br>
+      통장 비고에 적어 두신 대상 월로 업체별 입금자명·입금 시기(1~2개월 뒤)·할인을 학습했고, 새 입금은 비고 없이 금액으로 맞춥니다.
+      딱 맞는 달이 하나로 안 정해지면 <b>확인 필요</b>로 남깁니다. 업체마다 <b>🔎 업체별 점검</b>에서 확인하고 확정하세요.
     </div>
 
     <div class="toolbar">
@@ -1321,6 +1322,24 @@
     <!-- 업체별 상세(입금-충당 내역) -->
 
   </section>
+
+  <!-- 외상 미수금: 업체별 점검 (결제 특징 확인·수정·확정) -->
+  <div id="ar-review-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeArReview()">
+    <div class="modal-box ar-review-box">
+      <div class="modal-head ar-review-head">
+        🔎 업체별 점검 <span>결제방식·입금자명·입금 시기·할인을 확인하고, 달별로 입금이 맞는지 본 뒤 [이 업체 확정]</span>
+        <button class="modal-close" onclick="closeArReview()" aria-label="닫기">✕</button>
+      </div>
+      <div class="ar-review-body">
+        <div class="ar-review-side">
+          <input class="ar-review-search" placeholder="업체 검색" oninput="arReview.search=this.value;renderArReviewList()">
+          <div class="muted ar-review-legend">위에서부터: 결제방식 미정 → 확인 필요 → 미수 → 카드 체크 전 → 정상, ✓ 확정은 맨 아래</div>
+          <div id="ar-review-list"></div>
+        </div>
+        <div id="ar-review-detail" class="ar-review-detail"></div>
+      </div>
+    </div>
+  </div>
 
   <!-- 외상 미수금: 미매칭 입금 모달 -->
   <div id="ar-unmatched-modal" class="modal-overlay" style="display:none;">
@@ -1442,6 +1461,6 @@
 </div>
 
 <div id="toast" class="toast"></div>
-<script src="main.js?v=2.43.0"></script>
+<script src="main.js?v=2.44.0"></script>
 </body>
 </html>

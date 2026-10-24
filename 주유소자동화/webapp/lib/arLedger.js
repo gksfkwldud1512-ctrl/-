@@ -107,6 +107,7 @@ function decomposeUnits(deposits) {
         depositId: d.id, vendorName: d.matchedVendor, amount: primaryAmount,
         date: d.date, note: d.note || '', payer: d.payer || '', isCard: !!d.isCard,
         manualMonthAssign: d.monthAssign || null,
+        basis: d.matchBasis || null, needsReview: !!d.needsReview,
         isSplit: false, splitIndex: null, sourceFragment: null,
       });
     }
@@ -115,6 +116,7 @@ function decomposeUnits(deposits) {
         depositId: d.id, vendorName: s.vendorName, amount: s.amount,
         date: d.date, note: d.note || '', payer: d.payer || '', isCard: !!d.isCard,
         manualMonthAssign: s.monthAssign || null,
+        basis: d.matchBasis || null, needsReview: false,
         isSplit: true, splitIndex: idx, sourceFragment: s.sourceFragment || null,
       });
     });
@@ -219,9 +221,25 @@ function allocateArDeposits(arMatrix, deposits, manualPaid = new Set(), discount
 
     for (const u of vendorUnits) {
       // 0순위: 수동 오버라이드
+      // (월 지정은 사람 확정·비고·학습 자동 매칭에서 옴 — 근거는 basis)
       if (u.manualMonthAssign && u.manualMonthAssign.length) {
+        const before = trackStart && u.manualMonthAssign.every(m => m.month < trackStart);
+        if (before) {
+          beforeTrackCount++;
+          beforeTrackAmount += u.amount;
+          allocations.push({ ...unitMeta(u), appliedTo: [], source: 'before-track' });
+          continue;
+        }
         applyToMonths(u.manualMonthAssign, u.date);
-        allocations.push({ ...unitMeta(u), appliedTo: u.manualMonthAssign, source: u.isCard ? 'card' : 'manual' });
+        allocations.push({ ...unitMeta(u), appliedTo: u.manualMonthAssign, source: u.isCard ? 'card' : (u.basis === 'note' || u.basis === 'auto' ? u.basis : 'manual') });
+        continue;
+      }
+
+      // 업체는 알지만 금액이 맞는 달을 하나로 못 정한 입금 — 추정으로 넣지 않고 "확인 필요"로 남김
+      if (u.needsReview) {
+        const suggested = findGreedyWindow(months, u.amount, true);
+        unresolved.push({ ...unitMeta(u), suggestedWindow: suggested ? suggested.assignments : [] });
+        allocations.push({ ...unitMeta(u), appliedTo: [], source: 'unresolved' });
         continue;
       }
 

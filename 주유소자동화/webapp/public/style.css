@@ -1155,3 +1155,58 @@ table td, table th { font-variant-numeric: tabular-nums; }
 
 /* 카드 제목 옆 요약 글자와 간격 */
 .card-header { gap: 12px; flex-wrap: wrap; }
+
+/* ── 미수확인: 결제방식 필터·업체별 점검 ───────────────────── */
+.ar-filter-bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.btn-filter.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.ar-card-todo { font-size: 12px; color: #be185d; background: #fdf2f8; border-radius: 10px; padding: 2px 10px; }
+.ar-pay-tag { font-size: 10px; font-weight: 700; border-radius: 8px; padding: 0 6px; margin-right: 4px; }
+.ar-pay-tag.card  { background: #fdf2f8; color: #be185d; }
+.ar-pay-tag.other { background: #f1f5f9; color: #475569; }
+.ar-pay-tag.none  { background: #fef9c3; color: #92400e; }
+.ar-confirmed { color: #16a34a; font-weight: 700; margin-left: 3px; }
+.ar-confirmed.big { font-size: 13px; background: #f0fdf4; border-radius: 8px; padding: 2px 8px; }
+
+.ar-review-box { width: 96vw; max-width: 1700px; height: 90vh; display: flex; flex-direction: column; }
+.ar-review-head { position: relative; padding-right: 56px; }
+.ar-review-body { flex: 1; display: grid; grid-template-columns: 300px minmax(0, 1fr); min-height: 0; }
+.ar-review-side { border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; padding: 10px; gap: 6px; }
+.ar-review-search { padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; }
+.ar-review-legend { font-size: 11px; }
+#ar-review-list { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.ar-rv-item { display: flex; align-items: center; gap: 4px; text-align: left; padding: 6px 8px; border: none; border-radius: 6px; background: none; font-size: 13px; cursor: pointer; }
+.ar-rv-item:hover { background: #f1f5f9; }
+.ar-rv-item.active { background: var(--info-bg); }
+.ar-rv-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ar-rv-warn { font-size: 10px; color: #c2410c; background: #fff7ed; border-radius: 8px; padding: 0 6px; }
+.ar-rv-amt  { font-size: 11px; color: #dc2626; font-variant-numeric: tabular-nums; }
+.ar-review-detail { overflow-y: auto; padding: 14px 20px 30px; }
+.ar-rv-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.ar-rv-head h3 { font-size: 18px; }
+.ar-rv-profile { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.ar-rv-field { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ar-rv-field > label { width: 72px; font-weight: 700; color: var(--text-muted); flex: none; }
+.ar-rv-field select, .ar-rv-field input { padding: 4px 6px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; font-family: inherit; }
+.ar-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.ar-seg button { border: none; border-radius: 0; padding: 4px 12px; font-size: 13px; background: #fff; }
+.ar-seg button.on { background: var(--primary); color: #fff; }
+.ar-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.ar-chip { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 2px 4px 2px 10px; font-size: 12px; }
+.ar-chip button { border: none; background: none; padding: 0 4px; color: #94a3b8; }
+.ar-rv-h { margin: 18px 0 6px; font-size: 14px; }
+.ar-rv-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 5px 0; border-bottom: 1px dashed #e2e8f0; font-size: 13px; }
+.ar-dep { display: inline-flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.ar-basis { font-size: 10px; font-weight: 700; border-radius: 8px; padding: 0 6px; background: #f1f5f9; color: #475569; }
+.ar-basis.note   { background: #ecfdf5; color: #047857; }
+.ar-basis.auto   { background: #eff6ff; color: #1d4ed8; }
+.ar-basis.manual { background: #f5f3ff; color: #6d28d9; }
+.ar-basis.review { background: #fff7ed; color: #c2410c; }
+.ar-basis.card   { background: #fdf2f8; color: #be185d; }
+.ar-rv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ar-rv-table th { background: #f1f5f9; padding: 6px 8px; text-align: left; font-size: 12px; color: var(--text-muted); position: sticky; top: 0; }
+.ar-rv-table td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+.ar-rv-table td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ar-rv-table td.c { text-align: center; font-weight: 700; }
+.ar-rv-table td.neg { color: #dc2626; }
+.ar-rv-table td.deps div { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; padding: 1px 0; }
+.ar-st { font-size: 11px; font-weight: 700; border-radius: 8px; padding: 1px 8px; white-space: nowrap; }

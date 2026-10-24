@@ -103,10 +103,171 @@ function loadArDepositsWithCards() {
     matchedVendor: c.vendorName, manual: true, isCard: true, splits: [],
     monthAssign: c.assign || [{ month: c.month, amount: c.amount }],
   }));
-  return readJSON(AR_DEPOSITS_FILE, []).concat(cards);
+  // 통장 입금은 비고·사람 확정·학습 프로필로 업체·월을 정한 뒤 사용 (resolveArDeposits)
+  return resolveArDeposits(readJSON(AR_DEPOSITS_FILE, [])).concat(cards);
 }
 
 function loadArDiscountVendors() { return readJSON(AR_DISCOUNT_FILE, {}); }
+
+// 외상 한 달의 상태 — 입금 지연(lagMonths) 기한 전이면 "입금 대기"(정상), 지나면 "미수"
+//   done 완료 | discount 할인 입금으로 완료 | waiting 입금 대기 | partial-wait 일부 입금·기한 전
+//   short 부족(기한 지남) | overdue 미수(기한 지남) | card-wait 현장카드 업체 받음 체크 전
+const AR_DONE_TOL = 100;
+function arMonthStatus(m, profile, nowYm) {
+  if (!(m.charge > 0)) return null;
+  if (m.remaining <= AR_DONE_TOL) return 'done';
+  const disc = profile?.discount;
+  if (disc && m.paid > 0) {
+    const allow = disc.rate ? m.charge * disc.rate * 1.3 + AR_DONE_TOL : (disc.fixed || 0) + 1000;
+    if (m.remaining <= allow) return 'discount';
+  }
+  if (profile?.payType === 'card') return 'card-wait';
+  const { ymShift } = require('./lib/arLearn');
+  const hi = profile?.lagMonths?.[1] ?? 2;
+  if (nowYm <= ymShift(m.month, hi)) return m.paid > 0 ? 'partial-wait' : 'waiting';
+  return m.paid > 0 ? 'short' : 'overdue';
+}
+
+function currentYm() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// 업체 months 배열에 status를 달고 상태별 금액 합계
+// unresolved: 이 업체의 "확인 필요" 입금 — 그 입금이 들어갈 만한 달(suggestedWindow)은 미수 대신 "확인 필요"(review)
+function annotateArStatus(months, profile, unresolved = [], nowYm = currentYm()) {
+  const sum = { overdue: 0, waiting: 0, cardWait: 0, review: 0, overdueMonths: 0 };
+  const reviewMonths = new Set(unresolved.flatMap(u => (u.suggestedWindow || []).map(w => w.month)));
+  months.forEach(m => {
+    m.status = arMonthStatus(m, profile, nowYm);
+    if ((m.status === 'overdue' || m.status === 'short') && reviewMonths.has(m.month)) m.status = 'review';
+    const left = Math.max(0, m.remaining || 0);
+    if (m.status === 'overdue' || m.status === 'short') { sum.overdue += left; sum.overdueMonths++; }
+    else if (m.status === 'waiting' || m.status === 'partial-wait') sum.waiting += left;
+    else if (m.status === 'card-wait') sum.cardWait += left;
+    else if (m.status === 'review') sum.review += left;
+  });
+  return sum;
+}
+// ── 외상 입금 매칭: 업체별 결제 특징(프로필) + 학습 기반 자동 매칭 ─────────────
+// data/ar_vendor_profiles.json = { 업체명: { payType:'bank'|'card'|'other'|null, payers[], lagMonths:[lo,hi],
+//   discount:{rate}|{fixed}|null, payGroup, noteKeywords[], installments, confirmed, memo, edited, stats } }
+//   처음엔 통장 비고(사장님이 적은 대상 월)로 학습한 초안(lib/arLearn.js), 점검 화면에서 고친 값은 edited=true로 보존
+// data/ar_ignore_payers.json = [정규식 문자열] — 외상과 무관한 입금(카드사 정산·대출·세무서 환급·이자 등)
+const AR_PROFILES_FILE = path.join(DATA_DIR, 'ar_vendor_profiles.json');
+const AR_IGNORE_FILE   = path.join(DATA_DIR, 'ar_ignore_payers.json');
+const DEFAULT_AR_IGNORE = ['^현\\d{6,}', '현대주덕', '세무서', '이자', '결산', '스카이넷', '면세유환급'];
+
+function arIgnoreMatcher() {
+  const { stripBankSuffix } = require('./lib/bankExpenseParser');
+  const res = readJSON(AR_IGNORE_FILE, DEFAULT_AR_IGNORE).map(p => { try { return new RegExp(p); } catch (_) { return null; } }).filter(Boolean);
+  return payer => { const s = stripBankSuffix(payer); return res.some(r => r.test(s)); };
+}
+
+function arMatchContext(arMatrix) {
+  const { buildVendorAliasIndex, matchPayerToVendor } = require('./lib/arLedger');
+  const aliasIndex = buildVendorAliasIndex([...arMatrix.byVendor.keys()], readJSON(CUSTOMERS_FILE, []), readJSON(AR_ALIASES_FILE, {}));
+  return { aliasIndex, matchPayer: matchPayerToVendor, isIgnored: arIgnoreMatcher() };
+}
+
+// 통장 비고로 프로필 초안을 학습해 저장된 프로필과 합침 (사람이 고친 업체(edited)는 그대로 둠)
+function learnArProfiles() {
+  const { buildArMatrix } = require('./lib/arLedger');
+  const { learnFromNotes, buildProfiles } = require('./lib/arLearn');
+  const arMatrix = buildArMatrix(DATA_DIR);
+  const learned  = learnFromNotes(readJSON(AR_DEPOSITS_FILE, []), arMatrix, arMatchContext(arMatrix));
+  const cardVendors = new Set([
+    ...readJSON(AR_CARD_PAYMENTS_FILE, []).map(c => c.vendorName),
+    ...Object.keys(AR_FIXED_CARD_VENDORS), ...Object.keys(AR_FUEL_ONLY_CARD_VENDORS),
+  ]);
+  const drafts = buildProfiles(learned.filter(a => a.vendor && a.months.length), arMatrix, { cardVendors });
+  // 사람이 등록해 둔 입금계좌명(ar_vendor_aliases)도 입금자명으로
+  for (const [v, names] of Object.entries(readJSON(AR_ALIASES_FILE, {}))) {
+    if (!drafts[v]) continue;
+    names.forEach(n => { if (!drafts[v].payers.includes(n)) drafts[v].payers.push(n); });
+  }
+  const saved = readJSON(AR_PROFILES_FILE, {});
+  const merged = {};
+  for (const [v, d] of Object.entries(drafts)) {
+    const s = saved[v];
+    merged[v] = s?.edited ? { ...s, stats: d.stats } : { ...d, confirmed: !!s?.confirmed, memo: s?.memo || '' };
+  }
+  for (const [v, s] of Object.entries(saved)) if (!merged[v]) merged[v] = s;   // 이번 학습에 없는 업체도 유지
+  writeJSON(AR_PROFILES_FILE, merged);
+  return { profiles: merged, learned };
+}
+
+function loadArProfiles() {
+  if (!fs.existsSync(AR_PROFILES_FILE)) return learnArProfiles().profiles;
+  return readJSON(AR_PROFILES_FILE, {});
+}
+
+// ar_deposits(통장 입금) → 업체·월이 정해진 입금 목록
+//   ① 사람이 월까지 정한 것(monthAssign) ② 비고에 적힌 대상 월(학습과 같은 방식으로 업체 판단)
+//   ③ 나머지는 프로필(입금자명·지연·할인·나눠 내기·합산)로 자동 매칭 — 하나로 정해질 때만 확정, 아니면 "확인 필요"
+//   matchBasis: 'manual'|'note'|'auto'|'review'|'ignored'|'none'
+function resolveArDeposits(raw) {
+  const { buildArMatrix } = require('./lib/arLedger');
+  const { learnFromNotes, autoMatch } = require('./lib/arLearn');
+  const arMatrix = buildArMatrix(DATA_DIR);
+  const ctx      = arMatchContext(arMatrix);
+  const profiles = loadArProfiles();
+  const keyOf = d => d.id;
+
+  const noteTruth = new Map(learnFromNotes(raw.filter(d => d.note), arMatrix, ctx)
+    .filter(a => a.vendor && a.months.length).map(a => [a.dep.id, a]));
+  const fixed = new Map(), forceVendor = new Map(), basis = new Map();
+  for (const d of raw) {
+    if (d.ignoredManual) continue;   // 사람이 외상 무관으로 뺀 입금
+    if (d.monthAssign?.length && d.matchedVendor) {
+      fixed.set(d.id, { vendor: d.matchedVendor, months: d.monthAssign, splits: [] });
+      basis.set(d.id, 'manual');
+      continue;
+    }
+    const t = noteTruth.get(d.id);
+    if (d.manual && d.matchedVendor) {
+      // 업체를 사람이 정했으면 그 업체로 — 비고 정답과 같은 업체면 비고 월까지 그대로
+      if (t && t.vendor === d.matchedVendor) { fixed.set(d.id, { vendor: t.vendor, months: t.months, splits: t.splits }); basis.set(d.id, 'manual'); }
+      else forceVendor.set(d.id, d.matchedVendor);
+      continue;
+    }
+    if (t) { fixed.set(d.id, { vendor: t.vendor, months: t.months, splits: t.splits }); basis.set(d.id, 'note'); }
+  }
+
+  // 사람이 "외상 무관"으로 뺀 입금(ignoredManual)도 제외
+  const results = new Map(autoMatch(raw, arMatrix, profiles,
+    { ...ctx, isIgnored: (p, d) => !!d?.ignoredManual || ctx.isIgnored(p), fixed, forceVendor, keyOf }).map(r => [r.dep.id, r]));
+  return raw.map(d => {
+    const r = results.get(d.id);
+    if (!r) return d;
+    if (r.status === 'ignored') return { ...d, matchedVendor: null, monthAssign: null, splits: [], matchBasis: 'ignored', ignored: true };
+    const b = basis.get(d.id) || (r.status === 'auto' ? 'auto' : r.vendor ? 'review' : 'none');
+    // 이미 있는 분할(사람이 나눈 것, 비고 "2,380,128 명신포함"에서 읽은 것)은 그대로 두고
+    // 이 업체 몫(입금액 − 분할)만 대상 월에 배정. 분할이 없을 때만 자동·비고 합산 입금을 분할로 변환
+    let splits, months = r.months?.length ? r.months : null;
+    if ((d.splits || []).length) {
+      splits = d.splits.map(s => s.monthAssign?.length || !months ? s
+        : { ...s, monthAssign: [{ month: months[months.length - 1].month, amount: s.amount }] });
+      const own = d.amount - splits.reduce((t, x) => t + x.amount, 0);
+      if (months) {
+        const sum = months.reduce((t, m) => t + m.amount, 0);
+        if (Math.abs(sum - own) > 1) months = months.length === 1 ? [{ month: months[0].month, amount: own }] : months.map((m, i) => i === months.length - 1 ? { ...m, amount: own - (sum - m.amount) } : m);
+      }
+    } else {
+      splits = (r.splits || []).map(s => ({ vendorName: s.vendor, amount: s.amount, manual: false, sourceFragment: null, monthAssign: [{ month: s.month, amount: s.amount }] }));
+    }
+    return {
+      ...d,
+      matchedVendor: r.vendor || null,
+      monthAssign: months,   // 분할 몫을 뺀 이 업체 몫
+      splits,
+      matchBasis: b,
+      needsReview: b === 'review',
+      candidates: (r.candidates || []).map(c => ({ vendor: c.vendor, months: c.months })),
+    };
+  });
+}
+
 const ASSET_BANK_FILE      = path.join(DATA_DIR, 'asset_bank_balances.json');
 const ASSET_LOANS_FILE     = path.join(DATA_DIR, 'asset_loans.json');
 
@@ -1977,11 +2138,11 @@ function mergeArDeposits(rawDeposits) {
   const all = readJSON(AR_DEPOSITS_FILE, []);
   const preserveMap = new Map();
   all.forEach(d => {
-    const hasManualDecision = d.manual || (d.splits || []).some(s => s.manual) || d.monthAssign;
+    const hasManualDecision = d.manual || (d.splits || []).some(s => s.manual) || d.monthAssign || d.ignoredManual;
     if (hasManualDecision && affectedMonths.includes(d.month)) {
       preserveMap.set(arDepositKey(d), {
         matchedVendor: d.matchedVendor, score: d.score, suggestion: d.suggestion, manual: d.manual,
-        splits: d.splits || [], monthAssign: d.monthAssign || null,
+        splits: d.splits || [], monthAssign: d.monthAssign || null, ignoredManual: !!d.ignoredManual,
       });
     }
   });
@@ -2094,10 +2255,11 @@ app.get('/api/ar/summary', (req, res) => {
   try {
     const { buildArMatrix, allocateArDeposits } = require('./lib/arLedger');
     const arMatrix  = buildArMatrix(DATA_DIR);
-    const deposits  = readJSON(AR_DEPOSITS_FILE, []);
+    const deposits  = loadArDepositsWithCards();   // 비고·사람 확정·학습 자동 매칭으로 업체·월이 정해진 입금
     const aliasMap  = readJSON(AR_ALIASES_FILE, {});
     const discounts = loadArDiscountVendors();
-    const alloc     = allocateArDeposits(arMatrix, loadArDepositsWithCards(), loadArManualPaidSet(), discounts);
+    const profiles  = loadArProfiles();
+    const alloc     = allocateArDeposits(arMatrix, deposits, loadArManualPaidSet(), discounts);
 
     const vendors = [...arMatrix.byVendor.keys()].sort((a, b) => a.localeCompare(b, 'ko')).map(name => {
       const a = alloc[name];
@@ -2105,8 +2267,14 @@ app.get('/api/ar/summary', (req, res) => {
         const split = vendorMonthSplit(name);
         a.months.forEach(m => { m.fuel = split[m.month]?.fuel || 0; m.nonFuel = split[m.month]?.nonFuel || 0; });
       }
+      const profile = profiles[name] || null;
+      const statusSum = annotateArStatus(a.months, profile, a.unresolved);
       return {
         name,
+        payType: profile?.payType || null,   // bank 통장 / card 현장카드 / other 기타 / null 미정
+        profileConfirmed: !!profile?.confirmed,
+        ...statusSum,                        // overdue(기한 지난 미수) · waiting(입금 대기) · cardWait · overdueMonths
+        reviewCount: (a.unresolved || []).length,
         aliases: aliasMap[name] || [],   // 등록된 입금계좌명(통장 적요와 업체명이 다를 때)
         months: a.months,               // [{month,charge,paid,remaining,lagMonths}]
         allocations: a.allocations,      // [{depositId,date,amount,note,isSplit,appliedTo,source}]
@@ -2125,7 +2293,7 @@ app.get('/api/ar/summary', (req, res) => {
     });
 
     const unmatched = deposits
-      .filter(d => !d.matchedVendor)
+      .filter(d => !d.matchedVendor && !d.isCard && !d.ignored)
       .sort((a, b) => b.date.localeCompare(a.date));
 
     // 전체 업체 취합 미확정 배분 목록 (모달용)
@@ -4356,7 +4524,12 @@ function arAllocationSummary() {
   const { buildArMatrix, allocateArDeposits } = require('./lib/arLedger');
   const arMatrix = buildArMatrix(DATA_DIR);
   const alloc    = allocateArDeposits(arMatrix, loadArDepositsWithCards(), loadArManualPaidSet(), loadArDiscountVendors());
-  return [...arMatrix.byVendor.keys()].map(name => ({ name, months: alloc[name]?.months || [] }));
+  const profiles = loadArProfiles();
+  return [...arMatrix.byVendor.keys()].map(name => {
+    const months = alloc[name]?.months || [];
+    annotateArStatus(months, profiles[name], alloc[name]?.unresolved || []);
+    return { name, months };
+  });
 }
 
 // GET /api/statements/stale?year=&month= — 지금 데이터와 다른 거래명세서 파일 (발행 목록 배지용)
@@ -4384,6 +4557,151 @@ app.get('/api/consistency', async (req, res) => {
     res.json({ ok: true, ...result });
   } catch (e) {
     console.error('[consistency]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+
+// ══════════════════════════════════════════════════════════════
+// 미수 — 업체별 점검 (결제 특징 확인·수정·확정)
+// ══════════════════════════════════════════════════════════════
+const AR_PROFILE_FIELDS = ['payType', 'payers', 'lagMonths', 'discount', 'payGroup', 'noteKeywords', 'installments', 'memo', 'confirmed'];
+
+app.get('/api/ar/profiles', (req, res) => {
+  try { res.json({ ok: true, profiles: loadArProfiles(), ignore: readJSON(AR_IGNORE_FILE, DEFAULT_AR_IGNORE) }); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// 통장 비고로 다시 학습 (점검 화면에서 고친 업체는 그대로)
+app.post('/api/ar/profiles/relearn', (req, res) => {
+  try {
+    const { profiles, learned } = learnArProfiles();
+    res.json({ ok: true, vendors: Object.keys(profiles).length, learned: learned.filter(a => a.vendor).length });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// POST /api/ar/profile { name, patch: { payType, payers, lagMonths, discount, payGroup, noteKeywords, memo, confirmed } }
+app.post('/api/ar/profile', (req, res) => {
+  try {
+    const { name, patch } = req.body || {};
+    if (!name || !patch) return res.status(400).json({ ok: false, error: 'name, patch 필요' });
+    const all = loadArProfiles();
+    const cur = all[name] || { payType: null, payers: [], lagMonths: null, discount: null, payGroup: null, noteKeywords: [], stats: {} };
+    for (const k of AR_PROFILE_FIELDS) if (k in patch) cur[k] = patch[k];
+    if (!['bank', 'card', 'other', null].includes(cur.payType)) return res.status(400).json({ ok: false, error: '결제방식 값 오류' });
+    if (cur.lagMonths && !(Array.isArray(cur.lagMonths) && cur.lagMonths.length === 2 && cur.lagMonths.every(n => Number.isInteger(n) && n >= 0 && n <= 12)))
+      return res.status(400).json({ ok: false, error: '입금 시기는 0~12개월' });
+    cur.edited = true;
+    all[name] = cur;
+    writeJSON(AR_PROFILES_FILE, all);
+    res.json({ ok: true, profile: cur });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post('/api/ar/ignore-payers', (req, res) => {
+  try {
+    const list = (req.body?.patterns || []).map(String).map(s => s.trim()).filter(Boolean);
+    for (const p of list) { try { new RegExp(p); } catch (_) { return res.status(400).json({ ok: false, error: `잘못된 패턴: ${p}` }); } }
+    writeJSON(AR_IGNORE_FILE, list);
+    res.json({ ok: true, patterns: list });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// 입금 한 건 직접 배정 — POST /api/ar/assign { depositId, vendor, months:[{month,amount}] } | { depositId, ignore:true } | { depositId, clear:true }
+app.post('/api/ar/assign', (req, res) => {
+  try {
+    const { depositId, vendor, months, ignore, clear } = req.body || {};
+    const list = readJSON(AR_DEPOSITS_FILE, []);
+    const dep = list.find(d => d.id === depositId);
+    if (!dep) return res.status(404).json({ ok: false, error: '해당 입금 건을 찾을 수 없습니다.' });
+    if (clear) {
+      Object.assign(dep, { matchedVendor: null, manual: false, monthAssign: null, ignoredManual: false });
+    } else if (ignore) {
+      Object.assign(dep, { matchedVendor: null, manual: true, monthAssign: null, ignoredManual: true, splits: [] });
+    } else {
+      if (!vendor) return res.status(400).json({ ok: false, error: 'vendor 필요' });
+      const ms = Array.isArray(months) ? months.filter(m => /^\d{4}-\d{2}$/.test(m.month) && Number(m.amount) > 0) : [];
+      const splitTotal = (dep.splits || []).reduce((s, x) => s + x.amount, 0);
+      if (ms.length && Math.abs(ms.reduce((s, m) => s + Number(m.amount), 0) - (dep.amount - splitTotal)) > 1)
+        return res.status(400).json({ ok: false, error: '달별 금액 합계가 입금액과 다릅니다.' });
+      Object.assign(dep, { matchedVendor: vendor, manual: true, score: 1, ignoredManual: false,
+        monthAssign: ms.length ? ms.map(m => ({ month: m.month, amount: Number(m.amount) })) : null });
+      // 이 입금자명을 업체 입금자명으로 기억 (다음부터 자동)
+      const all = loadArProfiles();
+      const { stripBankSuffix } = require('./lib/bankExpenseParser');
+      const payer = stripBankSuffix(dep.payer);
+      if (all[vendor] && payer && !all[vendor].payers.includes(payer)) {
+        all[vendor].payers.push(payer);
+        writeJSON(AR_PROFILES_FILE, all);
+      }
+    }
+    writeJSON(AR_DEPOSITS_FILE, list);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// 업체 확정 — 지금 화면에 보이는 배정(비고·자동)을 사람 확정으로 고정하고 프로필 confirmed
+app.post('/api/ar/confirm-vendor', (req, res) => {
+  try {
+    const { name, confirmed = true } = req.body || {};
+    if (!name) return res.status(400).json({ ok: false, error: 'name 필요' });
+    const all = loadArProfiles();
+    all[name] = { ...(all[name] || { payers: [], noteKeywords: [] }), confirmed: !!confirmed, edited: true };
+    writeJSON(AR_PROFILES_FILE, all);
+    let frozen = 0;
+    if (confirmed) {
+      const effective = new Map(loadArDepositsWithCards().filter(d => !d.isCard).map(d => [d.id, d]));
+      const list = readJSON(AR_DEPOSITS_FILE, []);
+      for (const d of list) {
+        const e = effective.get(d.id);
+        if (!e || e.matchedVendor !== name || !e.monthAssign?.length || (d.manual && d.monthAssign)) continue;
+        d.matchedVendor = name; d.manual = true; d.score = 1; d.monthAssign = e.monthAssign;
+        if (e.splits?.length && !(d.splits || []).some(s => s.manual)) d.splits = e.splits.map(s => ({ ...s, manual: true }));
+        frozen++;
+      }
+      writeJSON(AR_DEPOSITS_FILE, list);
+    }
+    res.json({ ok: true, frozen });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// 업체별 점검 상세 — GET /api/ar/vendor-review?name=
+app.get('/api/ar/vendor-review', (req, res) => {
+  try {
+    const name = req.query.name;
+    const { buildArMatrix, allocateArDeposits } = require('./lib/arLedger');
+    const { normName, monthDiff } = require('./lib/arLearn');
+    const { vendorSimilarity } = require('./lib/bankExpenseParser');
+    const arMatrix = buildArMatrix(DATA_DIR);
+    if (!arMatrix.byVendor.has(name)) return res.status(404).json({ ok: false, error: '외상 거래가 없는 업체입니다.' });
+    const deposits = loadArDepositsWithCards();
+    const alloc = allocateArDeposits(arMatrix, deposits, loadArManualPaidSet(), loadArDiscountVendors())[name];
+    const profiles = loadArProfiles();
+    const profile = profiles[name] || null;
+    annotateArStatus(alloc.months, profile, alloc.unresolved);
+
+    const mine = deposits.filter(d => d.matchedVendor === name || (d.splits || []).some(s => s.vendorName === name));
+    // 후보: 업체가 안 정해졌거나 확인 필요인 입금 중 이름이 비슷하거나, 금액이 남은 달 외상과 비슷한 것
+    const n = normName(name);
+    const openMonths = alloc.months.filter(m => m.remaining > AR_DONE_TOL);
+    const payers = new Set((profile?.payers || []).map(normName));
+    const candidates = deposits.filter(d => !d.isCard && !d.ignored && (!d.matchedVendor || d.needsReview) && !mine.includes(d))
+      .map(d => {
+        const pn = normName(d.payer);
+        const nameScore = payers.has(pn) ? 1 : vendorSimilarity(pn, n);
+        const near = openMonths.find(m => Math.abs(m.remaining - d.amount) <= Math.max(1000, m.remaining * 0.03)
+          && monthDiff(m.month, d.month) >= 0 && monthDiff(m.month, d.month) <= 4);
+        return { d, nameScore, near: near?.month || null };
+      })
+      .filter(x => x.nameScore >= 0.6 || (x.near && !x.d.matchedVendor))   // 금액만 비슷한 건 업체 모르는 입금만
+      .sort((a, b) => (b.nameScore - a.nameScore) || a.d.date.localeCompare(b.d.date))
+      .slice(0, 40)
+      .map(x => ({ ...x.d, nameScore: x.nameScore, nearMonth: x.near }));
+
+    res.json({ ok: true, name, profile, months: alloc.months, allocations: alloc.allocations, unresolved: alloc.unresolved,
+      deposits: mine, candidates, otherVendors: [...arMatrix.byVendor.keys()].sort((a, b) => a.localeCompare(b, 'ko')) });
+  } catch (e) {
+    console.error('[ar/vendor-review]', e);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
