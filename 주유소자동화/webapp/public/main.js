@@ -48,7 +48,7 @@ window.addEventListener('DOMContentLoaded', () => {
   initVendorPriceYearMonth();
   initTabs();
   // URL 파라미터로 시작 그룹 지정 가능 (?group=summary 등)
-  const startGroup = new URLSearchParams(location.search).get('group') || 'monthly';
+  const startGroup = new URLSearchParams(location.search).get('group') || 'today';
   switchGroup(startGroup);
   initFileUpload();
   initDailyUpload();
@@ -128,7 +128,7 @@ function initTabs() {
 
 function switchGroup(group) {
   // 모든 그룹 숨기기 (inline style 사용 — CSS보다 우선순위 확실)
-  ['group-usage', 'group-summary', 'group-daily', 'group-monthly', 'group-vat', 'group-price'].forEach(id => {
+  ['group-today', 'group-usage', 'group-summary', 'group-daily', 'group-monthly', 'group-vat', 'group-price'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.style.display = 'none'; el.classList.remove('active'); }
   });
@@ -167,6 +167,8 @@ function switchGroup(group) {
   } else if (group === 'summary') {
     const activeTab = document.querySelector('#subnav-summary .tab-btn.active')?.dataset.tab || 'summary-main';
     switchSummarySubTab(activeTab);
+  } else if (group === 'today') {
+    loadToday();
   } else if (group === 'vat') {
     loadVat();
   } else if (group === 'price') {
@@ -1974,12 +1976,129 @@ function calcDailyProfit(day) {
   return b ? b.total : null;
 }
 
+// ── 일마감 표 ────────────────────────────────────────────────
+// 열 정의(DAILY_COLS) 한 곳에서 머리글·행·합계를 만든다.
+// 기본은 요약 열만(detail:false) 보여주고, [상세 열 보기]를 켜면 드럼·매출·매입가·카드수수료 등 전체 열.
+// 행의 ▸ 를 누르면 그날 유종별 상세가 표 아래로 펼쳐진다.
+const DAILY_FUELS = [
+  { name: '휘발유', group: 'group-gasoline' },
+  { name: '경유',   group: 'group-diesel' },
+  { name: '등유',   group: 'group-kerosene' },
+];
+
+const dailyView = {
+  showDetail: (() => { try { return localStorage.getItem('dailyShowDetail') === '1'; } catch (_) { return false; } })(),
+  expanded: new Set(),   // 펼친 날짜
+};
+
+const dFmt = {
+  drum:  v => v > 0 ? Math.floor(v / 200).toLocaleString() : '-',
+  lit:   v => v > 0 ? Math.floor(v).toLocaleString() : '-',
+  won:   v => v > 0 ? v.toLocaleString() : '-',
+  price: (a, q) => q > 0 ? Math.round(a / q).toLocaleString() : '-',
+  money: v => v != null ? `<span class="${v >= 0 ? 'profit-pos' : 'profit-neg'}">${v.toLocaleString()}</span>` : '-',
+};
+
+// group: 머리글 1행 묶음 이름(없으면 2행 합침), cls: 머리글·셀 색 클래스
+const DAILY_COLS = [
+  { key: 'date',   label: '날짜', cls: 'daily-col-date sticky-col' },
+  { key: 'sales',  label: '판매금액', cls: 'group-summary', cellCls: 'group-summary-cell strong' },
+  { key: 'drum',   label: '합계 드럼', cls: 'group-summary', cellCls: 'group-summary-cell', detail: true },
+  { key: 'pfFuel', label: '유종 이익', cls: 'group-summary daily-col-profit', cellCls: 'group-summary-cell daily-col-profit',
+    title: '휘발유+경유+등유 판매이익 (매출 − 판매량×FIFO매입단가)' },
+  { key: 'pfEtc',  label: '유외·세차 이익', cls: 'group-summary daily-col-profit', cellCls: 'group-summary-cell daily-col-profit',
+    title: '세차 매출 + (유외상품 매출 − 수기 원가)' },
+  { key: 'pf',     label: '영업이익', cls: 'group-summary daily-col-profit', cellCls: 'group-summary-cell daily-col-profit strong',
+    title: '영업이익 = 유종이익 + 유외·세차이익 − 카드수수료' },
+  ...DAILY_FUELS.flatMap(f => [
+    { key: `${f.name}L`,  group: f.name, gcls: f.group, label: 'L' },
+    { key: `${f.name}D`,  group: f.name, gcls: f.group, label: '드럼', detail: true },
+    { key: `${f.name}A`,  group: f.name, gcls: f.group, label: '매출', detail: true },
+    { key: `${f.name}P`,  group: f.name, gcls: f.group, label: '판매가' },
+    { key: `${f.name}B`,  group: f.name, gcls: f.group, label: '매입가', detail: true },
+  ]),
+  { key: 'otA',    group: '유외상품', gcls: 'group-other', label: '매출' },
+  { key: 'otC',    group: '유외상품', gcls: 'group-other', label: '원가(수기)', detail: true },
+  { key: 'cwA',    group: '세차', gcls: 'group-carwash', label: '매출' },
+  { key: 'fee',    group: '카드(이지샵+나이스)', gcls: 'group-card', label: '수수료', detail: true },
+  { key: 'depDate', group: '카드(이지샵+나이스)', gcls: 'group-card', label: '입금예정일', detail: true },
+  { key: 'match',  label: '카드대사', cls: 'group-match', cellCls: 'center' },
+];
+
+function dailyVisibleCols() {
+  return DAILY_COLS.filter(c => dailyView.showDetail || !c.detail);
+}
+
+function toggleDailyDetail(on) {
+  dailyView.showDetail = on;
+  try { localStorage.setItem('dailyShowDetail', on ? '1' : '0'); } catch (_) {}
+  renderDailyTable();
+}
+
+function toggleDailyExpand(ev, date) {
+  ev.stopPropagation();   // 행 클릭(탱크현황 날짜 선택)과 분리
+  if (dailyView.expanded.has(date)) dailyView.expanded.delete(date); else dailyView.expanded.add(date);
+  renderDailyTable();
+}
+
+function renderDailyHead(cols) {
+  const thead = document.getElementById('daily-thead');
+  if (!thead) return;
+  const top = [], sub = [];
+  for (let i = 0; i < cols.length; i++) {
+    const c = cols[i];
+    if (!c.group) {
+      top.push(`<th rowspan="2" class="${c.cls || ''}"${c.title ? ` title="${esc(c.title)}"` : ''}>${esc(c.label)}</th>`);
+      continue;
+    }
+    let n = 1;
+    while (cols[i + n]?.group === c.group) n++;
+    top.push(`<th colspan="${n}" class="${c.gcls}">${esc(c.group)}</th>`);
+    for (let k = 0; k < n; k++) sub.push(`<th class="${cols[i + k].gcls}">${esc(cols[i + k].label)}</th>`);
+    i += n - 1;
+  }
+  thead.innerHTML = `<tr>${top.join('')}</tr><tr>${sub.join('')}</tr>`;
+  // 머리글 2행 고정 위치 = 1행 실제 높이 (글자 크기에 따라 달라짐)
+  const h = thead.rows[1]?.offsetTop;
+  if (h) document.getElementById('daily-table').style.setProperty('--daily-head-row1', `${h}px`);
+}
+
+// 그날 유종별 상세 (행 펼침)
+function dailyExpandRow(day, v, span) {
+  const fuelRows = DAILY_FUELS.map(f => {
+    const L = v[`${f.name}Lraw`], A = v[`${f.name}Araw`];
+    return `<tr><th class="${f.group}">${f.name}</th><td>${dFmt.lit(L)}</td><td>${dFmt.drum(L)}</td><td>${dFmt.won(A)}</td>
+      <td>${dFmt.price(A, L)}</td><td>${v[`${f.name}B`]}</td></tr>`;
+  }).join('');
+  return `<tr class="daily-expand-row"><td colspan="${span}">
+    <div class="daily-expand">
+      <table class="daily-expand-table">
+        <thead><tr><th></th><th>L</th><th>드럼</th><th>매출</th><th>판매가</th><th>매입가</th></tr></thead>
+        <tbody>${fuelRows}</tbody>
+      </table>
+      <div class="daily-expand-side">
+        <div><span class="muted">유외상품 매출</span> ${dFmt.won(v.otAraw)}원</div>
+        <div><span class="muted">유외상품 원가(수기)</span>
+          <input class="input-other-cost" type="number" value="${day.otherCost || ''}" placeholder="0"
+                 onclick="event.stopPropagation()" onchange="saveOtherCost('${day.date}', this.value)"></div>
+        <div><span class="muted">세차 매출</span> ${dFmt.won(v.cwAraw)}원</div>
+        <div><span class="muted">카드 수수료</span> ${v.feeRaw > 0 ? v.feeRaw.toLocaleString() + '원' : '-'}
+             <span class="muted">· 입금예정일</span> ${esc(day.card?.depositDate || '-')}</div>
+      </div>
+    </div>
+  </td></tr>`;
+}
+
 function renderDailyTable() {
   const tbody = document.getElementById('daily-tbody');
   if (!tbody) return;
+  const cols = dailyVisibleCols();
+  renderDailyHead(cols);
+  const toggle = document.getElementById('daily-detail-toggle');
+  if (toggle) toggle.checked = dailyView.showDetail;
 
   if (!dailyState.days.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="28">BOS 데이터를 업로드하면 현황이 표시됩니다</td></tr>';
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="${cols.length}">BOS 데이터를 업로드하면 현황이 표시됩니다</td></tr>`;
     updateDailySummary(null);
     return;
   }
@@ -1987,18 +2106,15 @@ function renderDailyTable() {
   let totals = { 휘발유L: 0, 경유L: 0, 등유L: 0, 휘발유A: 0, 경유A: 0, 등유A: 0, otherA: 0, carwashA: 0,
                  profit: 0, cardFee: 0, profitFuel: 0, profitEtc: 0 };
 
+  const cell = (c, html) => `<td class="${c.cellCls || c.gcls || ''}${c.cls?.includes('sticky-col') ? ' sticky-col' : ''}">${html}</td>`;
+
   const rows = dailyState.days.map(day => {
     const bos  = day.bos;
     const card = day.card;
     const date = day.date || '';
-    const md   = date.slice(5); // "05-05"
 
-    const gL  = bos?.fuels?.['휘발유']?.qty    || 0;
-    const dL  = bos?.fuels?.['경유']?.qty      || 0;
-    const kL  = bos?.fuels?.['등유']?.qty      || 0;
-    const gA  = bos?.fuels?.['휘발유']?.amount || 0;
-    const dA  = bos?.fuels?.['경유']?.amount   || 0;
-    const kA  = bos?.fuels?.['등유']?.amount   || 0;
+    const q = f => bos?.fuels?.[f]?.qty    || 0;
+    const a = f => bos?.fuels?.[f]?.amount || 0;
     const otA = bos?.others?.amount  || 0;  // 유외상품
     const cwA = bos?.carwash?.amount || 0;  // 세차
     const otC = day.otherCost || 0;
@@ -2006,25 +2122,14 @@ function renderDailyTable() {
     const brk     = calcDailyProfitBreakdown(day);
     const profit  = brk ? brk.total : null;
 
-    totals.휘발유L += gL; totals.경유L += dL; totals.등유L += kL;
-    totals.휘발유A += gA; totals.경유A += dA; totals.등유A += kA;
-    totals.otherA  += otA;
+    DAILY_FUELS.forEach(f => { totals[`${f.name}L`] += q(f.name); totals[`${f.name}A`] += a(f.name); });
+    totals.otherA   += otA;
     totals.carwashA += cwA;
-    totals.cardFee += cardFee;
+    totals.cardFee  += cardFee;
     // 합계는 원값(raw)으로 누적 → 표시할 때 한 번만 반올림 (종합현황 월 영업이익과 정확히 일치)
     totals.profit     += brk?.rawFuel != null ? (brk.rawFuel + brk.rawEtc - brk.rawCardFee) : 0;
     totals.profitFuel += brk?.rawFuel ?? 0;
     totals.profitEtc  += brk?.rawEtc  ?? 0;
-
-    const drum  = v  => v > 0 ? Math.floor(v / 200).toLocaleString() : '-';
-    const litL  = v  => v > 0 ? Math.floor(v).toLocaleString() : '-';
-    const won   = v  => v > 0 ? v.toLocaleString() : '-';
-    const price = (a, q) => q > 0 ? Math.round(a / q).toLocaleString() + '원' : '-';
-    const buyPr = (d, f) => { const p = getPriceForDate(d, f); return p ? p.toLocaleString() + '원' : '-'; };
-    const pf    = profit != null ? `<span class="${profit >= 0 ? 'profit-pos' : 'profit-neg'}">${profit.toLocaleString()}원</span>` : '-';
-    const money = v => v != null ? `<span class="${v >= 0 ? 'profit-pos' : 'profit-neg'}">${v.toLocaleString()}원</span>` : '-';
-    const pfFuel = brk ? money(brk.fuel) : '-';   // 유종(휘발유·경유·등유) 이익만
-    const pfEtc  = brk ? money(brk.etc)  : '-';   // 유외상품 + 세차 이익
 
     const m      = day.matching;
     const bm     = calcBankMatch(day);
@@ -2037,48 +2142,53 @@ function renderDailyTable() {
         cardBadge = `<span class="badge-match-ok">✅</span>`;
       } else {
         const adjs = day.cardAdjustments || [];
-        const adjTotal = adjs.reduce((s, a) => s + (a.amount || 0), 0);
+        const adjTotal = adjs.reduce((s, x) => s + (x.amount || 0), 0);
         const remaining = Math.abs(m.totalDiff) - adjTotal;
         if (remaining <= 0 && adjs.length > 0) {
-          cardBadge = `<button class="btn-match-adj" onclick="showMatchingModal('${date}')">✅ 조정</button>`;
+          cardBadge = `<button class="btn-match-adj" onclick="event.stopPropagation();showMatchingModal('${date}')">✅ 조정</button>`;
         } else {
           const diffStr = m.totalDiff ? ` ${Math.abs(m.totalDiff).toLocaleString()}원` : '';
-          cardBadge = `<button class="btn-match-err" onclick="showMatchingModal('${date}')">⚠${diffStr}</button>`;
+          cardBadge = `<button class="btn-match-err" onclick="event.stopPropagation();showMatchingModal('${date}')">⚠${diffStr}</button>`;
         }
       }
     }
-
     const bankBadge = !hasBankData ? '' :
       (!bm || !bm.hasError)
-        ? `<span class="badge-match-ok">✅</span>`
-        : `<button class="btn-match-err" onclick="showMatchingModal('${date}')">⚠ ${bm.errors.length}건</button>`;
+        ? `<span class="badge-match-ok" title="카드사 입금 일치">🏦✅</span>`
+        : `<button class="btn-match-err" onclick="event.stopPropagation();showMatchingModal('${date}')">🏦 ⚠ ${bm.errors.length}건</button>`;
 
-    const matchBadge = `${cardBadge}${bankBadge ? '<br>' + bankBadge : ''}`;
+    const totalL = q('휘발유') + q('경유') + q('등유');
+    const totalSales = a('휘발유') + a('경유') + a('등유') + otA + cwA;
+    const open = dailyView.expanded.has(date);
 
-    // 합계드럼 = 휘발유+경유+등유 총합
-    const totalL    = gL + dL + kL;
-    const totalDrum = totalL > 0 ? Math.floor(totalL / 200).toLocaleString() : '-';
+    const v = {
+      date: `<button class="daily-expand-btn" onclick="toggleDailyExpand(event, '${date}')" title="유종별 상세">${open ? '▾' : '▸'}</button> ${date.slice(5)}`,
+      sales:  totalSales > 0 ? totalSales.toLocaleString() : '-',
+      drum:   dFmt.drum(totalL),
+      pfFuel: brk ? dFmt.money(brk.fuel) : '-',   // 유종(휘발유·경유·등유) 이익만
+      pfEtc:  brk ? dFmt.money(brk.etc)  : '-',   // 유외상품 + 세차 이익
+      pf:     profit != null ? dFmt.money(profit) : '-',
+      otA: dFmt.won(otA), otAraw: otA,
+      otC: `<input class="input-other-cost" type="number" value="${otC || ''}" placeholder="0"
+             onclick="event.stopPropagation()" onchange="saveOtherCost('${date}', this.value)">`,
+      cwA: dFmt.won(cwA), cwAraw: cwA,
+      fee: cardFee > 0 ? cardFee.toLocaleString() : '-', feeRaw: cardFee,
+      depDate: esc(card?.depositDate || '-'),
+      match: `${cardBadge}${bankBadge ? ' ' + bankBadge : ''}`,
+    };
+    DAILY_FUELS.forEach(f => {
+      const L = q(f.name), A = a(f.name), bp = getPriceForDate(date, f.name);
+      Object.assign(v, {
+        [`${f.name}L`]: dFmt.lit(L), [`${f.name}D`]: dFmt.drum(L), [`${f.name}A`]: dFmt.won(A),
+        [`${f.name}P`]: dFmt.price(A, L), [`${f.name}B`]: bp ? bp.toLocaleString() : '-',
+        [`${f.name}Lraw`]: L, [`${f.name}Araw`]: A,
+      });
+    });
 
-    const totalSales = gA + dA + kA + otA + cwA;
-    return `<tr data-date="${date}" onclick="selectDailyRow(this, '${date}')" style="cursor:pointer;">
-      <td class="daily-col-date">${md}</td>
-      <td class="group-summary-cell">${totalDrum}</td>
-      <td class="group-summary-cell" style="font-weight:600;">${totalSales > 0 ? totalSales.toLocaleString() + '원' : '-'}</td>
-      <td class="group-summary-cell daily-col-profit">${pfFuel}</td>
-      <td class="group-summary-cell daily-col-profit">${pfEtc}</td>
-      <td class="group-summary-cell daily-col-profit" style="font-weight:600;">${pf}</td>
-      <td>${litL(gL)}</td><td>${drum(gL)}</td><td>${won(gA)}</td><td>${price(gA,gL)}</td><td>${buyPr(date,'휘발유')}</td>
-      <td>${litL(dL)}</td><td>${drum(dL)}</td><td>${won(dA)}</td><td>${price(dA,dL)}</td><td>${buyPr(date,'경유')}</td>
-      <td>${litL(kL)}</td><td>${drum(kL)}</td><td>${won(kA)}</td><td>${price(kA,kL)}</td><td>${buyPr(date,'등유')}</td>
-      <td>${won(otA)}</td>
-      <td><input class="input-other-cost" type="number" value="${otC || ''}" placeholder="0"
-           onchange="saveOtherCost('${date}', this.value)"></td>
-      <td>${won(cwA)}</td>
-      <td>${cardFee > 0 ? cardFee.toLocaleString() : '-'}</td>
-      <td>${card?.depositDate || '-'}</td>
-      <td class="daily-col-profit">${pf}</td>
-      <td style="text-align:center;">${matchBadge}</td>
+    const tr = `<tr data-date="${date}" class="${open ? 'row-open' : ''}" onclick="selectDailyRow(this, '${date}')">
+      ${cols.map(c => cell(c, v[c.key])).join('')}
     </tr>`;
+    return open ? tr + dailyExpandRow(day, v, cols.length) : tr;
   });
 
   const hasPriceData = dailyState.purchasePrices.length > 0;
@@ -2086,35 +2196,23 @@ function renderDailyTable() {
   totals.profit     = Math.round(totals.profit);
   totals.profitFuel = Math.round(totals.profitFuel);
   totals.profitEtc  = Math.round(totals.profitEtc);
-  const totalPf    = hasPriceData
-    ? `<span class="${totals.profit >= 0 ? 'profit-pos' : 'profit-neg'}">${totals.profit.toLocaleString()}원</span>`
-    : '단가 미입력';
-
-  const totalAllL    = totals.휘발유L + totals.경유L + totals.등유L;
-  const totalAllDrum = Math.floor(totalAllL / 200).toLocaleString();
-
+  const totalAllL     = totals.휘발유L + totals.경유L + totals.등유L;
   const totalAllSales = totals.휘발유A + totals.경유A + totals.등유A + totals.otherA + totals.carwashA;
-  const totalPfFuel = hasPriceData
-    ? `<span class="${totals.profitFuel >= 0 ? 'profit-pos' : 'profit-neg'}">${totals.profitFuel.toLocaleString()}원</span>` : '-';
-  const totalPfEtc = hasPriceData
-    ? `<span class="${totals.profitEtc >= 0 ? 'profit-pos' : 'profit-neg'}">${totals.profitEtc.toLocaleString()}원</span>` : '-';
 
-  const totalRow = `<tr class="total-row">
-    <td class="daily-col-date">합계</td>
-    <td class="group-summary-cell">${totalAllDrum}</td>
-    <td class="group-summary-cell" style="font-weight:700;">${totalAllSales.toLocaleString()}원</td>
-    <td class="group-summary-cell daily-col-profit">${totalPfFuel}</td>
-    <td class="group-summary-cell daily-col-profit">${totalPfEtc}</td>
-    <td class="group-summary-cell daily-col-profit" style="font-weight:700;">${totalPf}</td>
-    <td>${Math.floor(totals.휘발유L).toLocaleString()}</td><td>${Math.floor(totals.휘발유L/200).toLocaleString()}</td><td>${totals.휘발유A.toLocaleString()}</td><td>-</td><td>-</td>
-    <td>${Math.floor(totals.경유L).toLocaleString()}</td><td>${Math.floor(totals.경유L/200).toLocaleString()}</td><td>${totals.경유A.toLocaleString()}</td><td>-</td><td>-</td>
-    <td>${Math.floor(totals.등유L).toLocaleString()}</td><td>${Math.floor(totals.등유L/200).toLocaleString()}</td><td>${totals.등유A.toLocaleString()}</td><td>-</td><td>-</td>
-    <td>${totals.otherA.toLocaleString()}</td><td>-</td>
-    <td>${totals.carwashA.toLocaleString()}</td>
-    <td>${totals.cardFee.toLocaleString()}</td><td>-</td>
-    <td class="daily-col-profit">${totalPf}</td>
-    <td>-</td>
-  </tr>`;
+  const t = {
+    date: '합계', sales: totalAllSales.toLocaleString(), drum: Math.floor(totalAllL / 200).toLocaleString(),
+    pfFuel: hasPriceData ? dFmt.money(totals.profitFuel) : '-',
+    pfEtc:  hasPriceData ? dFmt.money(totals.profitEtc)  : '-',
+    pf:     hasPriceData ? dFmt.money(totals.profit) : '단가 미입력',
+    otA: totals.otherA.toLocaleString(), otC: '-', cwA: totals.carwashA.toLocaleString(),
+    fee: totals.cardFee.toLocaleString(), depDate: '-', match: '-',
+  };
+  DAILY_FUELS.forEach(f => {
+    const L = totals[`${f.name}L`], A = totals[`${f.name}A`];
+    Object.assign(t, { [`${f.name}L`]: Math.floor(L).toLocaleString(), [`${f.name}D`]: Math.floor(L / 200).toLocaleString(),
+      [`${f.name}A`]: A.toLocaleString(), [`${f.name}P`]: dFmt.price(A, L), [`${f.name}B`]: '-' });
+  });
+  const totalRow = `<tr class="total-row">${cols.map(c => cell(c, t[c.key])).join('')}</tr>`;
 
   tbody.innerHTML = rows.join('') + totalRow;
   updateDailySummary(totals);
@@ -3012,7 +3110,7 @@ function renderDepositTable(rows) {
   const thStyle = `padding:8px 10px;white-space:nowrap;cursor:pointer;user-select:none;`;
   const arrow = c => _depositSort.col === c ? (_depositSort.asc ? ' ▲' : ' ▼') : ' ⇅';
 
-  let html = `<table style="font-size:12px;border-collapse:collapse;min-width:950px;width:100%;">
+  let html = `<table style="font-size:13px;border-collapse:collapse;min-width:950px;width:100%;">
     <thead style="position:sticky;top:0;z-index:1;background:#1e293b;color:#f8fafc;">
       <tr>
         <th style="${thStyle}text-align:center;" onclick="sortDepositBy('상태')">상태${arrow('상태')}</th>
@@ -3189,7 +3287,7 @@ function renderStockVariance(rows, totalAll, byMonth) {
 
   let html = `<div style="padding:8px 16px 4px;font-size:12px;color:#64748b;">📅 기간: ${from} ~ ${to} · ${rows.length}일 · BOS있는날만 집계</div>`;
   html += '<div style="overflow-x:auto;max-height:520px;overflow-y:auto;">';
-  html += '<table style="font-size:11.5px;min-width:900px;border-collapse:collapse;">';
+  html += '<table style="font-size:13px;min-width:900px;border-collapse:collapse;">';
 
   // 헤더
   html += '<thead style="position:sticky;top:0;z-index:1;">';
@@ -3600,7 +3698,7 @@ function renderAnnualReport({ year, months, hasPrices }) {
   const colspan = validMonths.length + 2; // 구분 + 월들 + 합계
 
   let html = `
-  <table id="annual-report-table" style="font-size:12px;border-collapse:collapse;min-width:600px;width:100%;">
+  <table id="annual-report-table" style="font-size:13px;border-collapse:collapse;min-width:600px;width:100%;">
     <colgroup>
       <col style="width:110px;">
       ${validMonths.map(()=>'<col style="min-width:80px;">').join('')}
@@ -4069,7 +4167,7 @@ function renderOilbankSupports(list) {
   const totAmt = list.reduce((s, x) => s + (x.amount || 0), 0);
 
   box.innerHTML = `
-    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+    <table style="width:100%;font-size:13px;border-collapse:collapse;">
       <thead>
         <tr style="background:#f1f5f9;">
           <th style="padding:6px;text-align:center;">지원기간</th>
@@ -4169,7 +4267,14 @@ const arState = {
   cardCandidates: [], cardMatched: [], cardMin: 300000,
   expandedVendor: null, splitFormFor: null,
   sortField: 'remaining', sortDir: 'desc',
+  showAllMonths: false,   // false = 최근 AR_RECENT_MONTHS개월만 펼치고 이전 달은 "이전" 한 칸으로
 };
+const AR_RECENT_MONTHS = 6;
+
+function toggleArAllMonths() {
+  arState.showAllMonths = !arState.showAllMonths;
+  renderArVendorTable();
+}
 
 function setArSort(field) {
   if (arState.sortField === field) {
@@ -4283,7 +4388,16 @@ function renderArVendorTable() {
     return;
   }
 
-  const months = arState.months;
+  // 최근 6개월만 펼치고 그 이전은 "이전 N개월" 한 칸(매출·미수 합계)으로 접음 — 좌우 스크롤 줄이기
+  const allMonths = arState.months;
+  const months = arState.showAllMonths ? allMonths : allMonths.slice(-AR_RECENT_MONTHS);
+  const olderMonths = allMonths.slice(0, allMonths.length - months.length);
+  const olderSum = v => {
+    const list = v.months.filter(m => olderMonths.includes(m.month));
+    return { charge: list.reduce((s, m) => s + (m.charge || 0), 0),
+             due: list.reduce((s, m) => s + Math.max(0, m.remaining || 0), 0),
+             dueCount: list.filter(m => m.remaining > 0).length };
+  };
   const dir = arState.sortDir === 'asc' ? 1 : -1;
   const sorted = arState.vendors.slice().sort((a, b) => {
     if (arState.sortField === 'name') return a.name.localeCompare(b.name, 'ko') * dir;
@@ -4311,12 +4425,15 @@ function renderArVendorTable() {
       <span><b style="color:#b45309;">유외 미수</b> 유류는 입금, 유외상품만 남음</span>
       <span>· 칸을 누르면 입금 상세·확인 처리, 거래처명을 누르면 업체 정보</span>
       ${arState.cardAutoLoading ? '<span style="color:#94a3b8;">카드결제 대조 중…</span>' : ''}
+      ${allMonths.length > AR_RECENT_MONTHS ? `<button class="btn-sm" style="margin-left:auto;" onclick="toggleArAllMonths()">${arState.showAllMonths ? `최근 ${AR_RECENT_MONTHS}개월만 보기` : `전체 ${allMonths.length}개월 펼치기`}</button>` : ''}
     </div>
-    <table style="width:100%;font-size:12px;border-collapse:collapse;white-space:nowrap;">
+    <table style="width:100%;font-size:13px;border-collapse:collapse;white-space:nowrap;">
       <thead>
         <tr style="background:#f1f5f9;position:sticky;top:0;z-index:2;">
           <th style="padding:8px 6px;text-align:left;position:sticky;left:0;background:#f1f5f9;z-index:3;cursor:pointer;user-select:none;"
               onclick="setArSort('name')" title="클릭하여 정렬">거래처명${arrow('name')}</th>
+          ${olderMonths.length ? `<th style="padding:8px 6px;text-align:center;${cellBorder}cursor:pointer;background:#e2e8f0;" onclick="toggleArAllMonths()"
+              title="${olderMonths.map(monthLabel).join(', ')} 합계 — 클릭하면 펼침">이전 ${olderMonths.length}개월 ▸</th>` : ''}
           ${months.map(m => `<th style="padding:8px 6px;text-align:center;${cellBorder}" title="${m}">${monthLabel(m)}</th>`).join('')}
           <th style="padding:8px 6px;text-align:right;${cellBorder}cursor:pointer;user-select:none;"
               onclick="setArSort('remaining')" title="클릭하여 정렬(미수 잔액 기준)">미수 잔액${arrow('remaining')}</th>
@@ -4325,6 +4442,13 @@ function renderArVendorTable() {
       <tfoot>
         <tr style="background:#f1f5f9;font-weight:700;border-top:2px solid #94a3b8;position:sticky;bottom:0;">
           <td style="padding:6px;position:sticky;left:0;background:#f1f5f9;">합계</td>
+          ${olderMonths.length ? (() => {
+            const o = arState.vendors.reduce((acc, v) => { const x = olderSum(v); acc.charge += x.charge; acc.due += x.due; return acc; }, { charge: 0, due: 0 });
+            return `<td style="padding:4px 6px;text-align:right;${cellBorder}background:#e2e8f0;">
+              <div>${o.charge.toLocaleString()}</div>
+              <div style="font-size:10px;font-weight:600;color:${o.due > 0 ? '#dc2626' : '#16a34a'};">${o.due > 0 ? '미수 ' + o.due.toLocaleString() : '완료'}</div>
+            </td>`;
+          })() : ''}
           ${months.map(m => `<td style="padding:4px 6px;text-align:right;${cellBorder}">
               <div>${totals[m].charge.toLocaleString()}</div>
               <div style="font-size:10px;font-weight:600;color:${totals[m].due > 0 ? '#dc2626' : '#16a34a'};">${totals[m].due > 0 ? '미수 ' + totals[m].due.toLocaleString() : '완료'}</div>
@@ -4347,6 +4471,15 @@ function renderArVendorTable() {
               ${infoCount ? `<span style="font-size:10px;color:#64748b;background:#f1f5f9;border-radius:8px;padding:0 6px;margin-left:4px;">정보 ${infoCount}</span>` : ''}
               ${v.unresolved?.length ? '<span style="font-size:10px;color:#d97706;margin-left:2px;">⚠</span>' : ''}
             </td>
+            ${olderMonths.length ? (() => {
+              const o = olderSum(v);
+              if (!o.charge && !o.due) return `<td style="text-align:center;color:#cbd5e1;${cellBorder}background:#f8fafc;">-</td>`;
+              return `<td style="padding:4px 6px;text-align:right;${cellBorder}cursor:pointer;background:${o.due > 0 ? '#fef2f2' : '#f8fafc'};"
+                          title="이전 달 합계 — 클릭하면 달별로 펼침" onclick="toggleArAllMonths()">
+                  <div>${o.charge.toLocaleString()}</div>
+                  <div style="font-size:10px;font-weight:700;color:${o.due > 0 ? '#dc2626' : '#16a34a'};">${o.due > 0 ? `미수 ${o.dueCount}개월` : '완료'}</div>
+                </td>`;
+            })() : ''}
             ${months.map(m => {
               const d = byMonth[m];
               const st = arCellState(v.name, d);
@@ -4494,7 +4627,7 @@ function renderArVendorDetail() {
       </div>
 
       <div style="font-size:11px;color:#64748b;margin:6px 0 2px;">월별 미수 현황</div>
-      <table style="width:100%;font-size:11px;border-collapse:collapse;margin-bottom:8px;">
+      <table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:8px;">
         <thead><tr style="color:#64748b;">
           <th style="padding:4px 6px;text-align:left;">월</th>
           <th style="padding:4px 6px;text-align:right;">거래대금</th>
@@ -4506,7 +4639,7 @@ function renderArVendorDetail() {
       </table>
 
       <div style="font-size:11px;color:#64748b;margin:6px 0 2px;">입금 → 충당 내역 (몇월 거래대금이 들어왔는지)</div>
-      <table style="width:100%;font-size:11px;border-collapse:collapse;">
+      <table style="width:100%;font-size:13px;border-collapse:collapse;">
         <thead><tr style="color:#64748b;">
           <th style="padding:4px 6px;text-align:left;">입금일</th>
           <th style="padding:4px 6px;text-align:right;">입금액</th>
@@ -4561,7 +4694,7 @@ function showArDepositModal(vendorName, month) {
     </div>
     ${arMonthActionHtml(v, m, month)}
     ${rows.length ? `
-    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+    <table style="width:100%;font-size:13px;border-collapse:collapse;">
       <thead><tr style="background:#f1f5f9;">
         <th style="padding:6px;text-align:left;">입금일</th>
         <th style="padding:6px;text-align:left;">입금자명 (통장 적요)</th>
@@ -4597,7 +4730,7 @@ function arMonthActionHtml(v, m, month) {
       <div style="font-weight:700;margin-bottom:4px;">${t.status === 'match' ? '💳 카드결제 금액 일치' : '💳 비슷한 금액 카드결제 (확인 필요)'}
         <span style="font-weight:400;color:#64748b;">— ${esc(t.label)} ${arNum(t.amount)}</span></div>
       ${t.parts.length > 1 ? `<div style="font-size:11px;color:#64748b;margin-bottom:4px;">${t.parts.map(p => `${esc(p.vendorName)} ${arNum(p.assign.reduce((s, x) => s + x.amount, 0))}`).join(' + ')}</div>` : ''}
-      <table style="width:100%;font-size:12px;border-collapse:collapse;">
+      <table style="width:100%;font-size:13px;border-collapse:collapse;">
         ${t.options.map((o, i) => `<tr style="border-top:1px solid #f1f5f9;">
           <td style="padding:4px;white-space:nowrap;">${o.date}</td>
           <td style="padding:4px;">${o.cards.map(c => `${esc(c.source || '')} ${esc(c.cardCompany)} <code style="font-size:10px;">${esc(c.cardNo)}</code> ${arNum(c.amount)}`).join('<br>')}</td>
@@ -4696,7 +4829,7 @@ function renderArCardModalBody() {
     </div>
     <p style="font-weight:700;margin:8px 0 4px;">매칭 대기 ${arState.cardCandidates.length}건</p>
     ${arState.cardCandidates.length ? `
-    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+    <table style="width:100%;font-size:13px;border-collapse:collapse;">
       <thead><tr style="background:#f1f5f9;">
         <th style="padding:6px;text-align:left;">결제일</th><th style="padding:6px;text-align:left;">카드</th>
         <th style="padding:6px;text-align:right;">금액</th><th style="padding:6px;text-align:left;">추천</th>
@@ -4706,7 +4839,7 @@ function renderArCardModalBody() {
     </table>` : '<div style="padding:12px;color:#94a3b8;">매칭할 카드결제가 없습니다.</div>'}
     <p style="font-weight:700;margin:16px 0 4px;">매칭 완료 ${arState.cardMatched.length}건</p>
     ${arState.cardMatched.length ? `
-    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+    <table style="width:100%;font-size:13px;border-collapse:collapse;">
       <thead><tr style="background:#f1f5f9;">
         <th style="padding:6px;text-align:left;">결제일</th><th style="padding:6px;text-align:left;">카드</th>
         <th style="padding:6px;text-align:right;">금액</th><th style="padding:6px;text-align:left;">업체 · 월</th><th></th>
@@ -4779,7 +4912,7 @@ function renderArUnmatchedModalBody() {
   }
 
   body.innerHTML = `
-    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+    <table style="width:100%;font-size:13px;border-collapse:collapse;">
       <thead>
         <tr style="background:#f1f5f9;">
           <th style="padding:6px;text-align:left;">입금일</th>
@@ -5137,7 +5270,7 @@ function renderVat(d) {
     </tbody></table>
 
     <div style="margin-top:14px;font-weight:600;font-size:13px;">월별 판매 (BOS)</div>
-    <table style="width:100%;font-size:12px;border-collapse:collapse;margin-top:6px;">
+    <table style="width:100%;font-size:13px;border-collapse:collapse;margin-top:6px;">
       <thead><tr>${['월', '자료일수', '유류', '세차', '유외상품', '합계', '신용카드', '현금', '외상', '기타 결제']
         .map((h, i) => `<th style="${th}${i > 0 ? r : ''}">${h}</th>`).join('')}</tr></thead><tbody>
       ${d.sales.byMonth.map(m => `<tr>${[m.month, m.days, m.fuel, m.carwash, m.others, m.total, m.card, m.cash, m.credit, m.gift]
@@ -5146,7 +5279,7 @@ function renderVat(d) {
 
     <details style="margin-top:12px;"><summary style="cursor:pointer;font-size:13px;font-weight:600;">
       세금계산서 발급 대상 ${d.sales.invoiceCustomers.length}곳 · 사업자번호 미등록 ${d.sales.noBizCustomers.length}곳 (홈택스 발급 목록과 대조용)</summary>
-      <table style="width:100%;font-size:12px;border-collapse:collapse;margin-top:6px;">
+      <table style="width:100%;font-size:13px;border-collapse:collapse;margin-top:6px;">
         <thead><tr><th style="${th}text-align:left;">거래처</th><th style="${th}">사업자번호</th><th style="${th}${r}">외상 판매(부가세 포함)</th>
           <th style="${th}${r}">공급가액</th><th style="${th}${r}">세액</th></tr></thead><tbody>
         ${d.sales.invoiceCustomers.concat(d.sales.noBizCustomers).map(c => {
@@ -5398,6 +5531,7 @@ async function resolveUploadCard(idx, cardSource) {
 // 올린 뒤: 자료 현황 + 지금 보고 있는 화면 새로고침 (기존 로드 함수 그대로 사용)
 async function afterAutoUpload() {
   loadUploadStatus();
+  if (document.querySelector('.main-tab.active')?.dataset.group === 'today') loadToday();
   const group = document.querySelector('.main-tab.active')?.dataset.group;
   try {
     await loadBankDeposits();
@@ -5416,8 +5550,8 @@ async function afterAutoUpload() {
   } catch (e) { console.error('[afterAutoUpload]', e); }
 }
 
-async function loadUploadStatus() {
-  const el = document.getElementById('upload-status');
+async function loadUploadStatus(elId = 'upload-status') {
+  const el = document.getElementById(elId);
   if (!el) return;
   const res = await api('GET', '/api/upload/status');
   if (!res.ok) { el.innerHTML = `<div class="muted">자료 현황을 불러오지 못했습니다: ${esc(res.error || '')}</div>`; return; }
@@ -5440,8 +5574,8 @@ async function loadUploadStatus() {
 // ══════════════════════════════════════════════════════════════
 const CHECK_LEVEL_LABEL = { error: '확인 필요', warn: '주의', ok: '정상', info: '참고' };
 
-async function loadConsistency(ym) {
-  const el = document.getElementById('consistency-card');
+async function loadConsistency(ym, elId = 'consistency-card') {
+  const el = document.getElementById(elId);
   if (!el) return;
   el.innerHTML = `<div class="check-head"><h2>🔎 ${esc(ym)} 데이터 점검</h2><span class="muted">확인 중…</span></div>`;
   const res = await api('GET', `/api/consistency?month=${ym}`);
@@ -5481,4 +5615,17 @@ async function loadStaleStatements() {
   state.staleStatements = {};
   if (res.ok) res.stale.forEach(s => { state.staleStatements[s.name] = s; });
   renderVendors();
+}
+
+// ══════════════════════════════════════════════════════════════
+// 오늘 할 일 (첫 화면) — 자료 현황 + 이번 달·지난달 점검
+// ══════════════════════════════════════════════════════════════
+function loadToday() {
+  const now = new Date();
+  const ym = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  loadUploadStatus('today-status');
+  loadConsistency(ym(now), 'today-check-current');
+  // 지난달은 월마감(거래명세서·세금계산서·미수) 확인용
+  loadConsistency(ym(prev), 'today-check-prev');
 }

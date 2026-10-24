@@ -12,6 +12,7 @@
   <div class="header-inner">
     <div class="logo">⛽ 미소주유소 자동화 <span id="app-version" class="version-badge"></span></div>
     <nav class="nav-main">
+      <button class="main-tab" data-group="today">오늘 할 일</button>
       <button class="main-tab" data-group="usage">사용방법</button>
       <button class="main-tab" data-group="summary">종합</button>
       <button class="main-tab" data-group="daily">일마감</button>
@@ -217,7 +218,7 @@
           </div>
           <div style="background:#fdf4ff;border-radius:6px;padding:10px;">
             <strong style="color:#7e22ce;">정산단가 기간 구분</strong>
-            <table style="width:100%;margin-top:6px;font-size:11px;">
+            <table style="width:100%;margin-top:6px;font-size:13px;">
               <tr><td>~3/12</td><td>휘발유 1,754 / 경유 1,742</td></tr>
               <tr><td>3/13~3/26</td><td>휘발유 1,724 / 경유 1,713</td></tr>
               <tr><td>3/27~</td><td>휘발유 1,934 / 경유 1,923</td></tr>
@@ -244,6 +245,32 @@
   </section>
 
   <!-- ───── 대분류: 종합 ───── -->
+  <!-- ───── 대분류: 오늘 할 일 (첫 화면) ───── -->
+  <section id="group-today" class="group-content">
+    <div class="today-grid">
+      <div class="card today-card">
+        <div class="today-head">
+          <h2>📥 올릴 자료</h2>
+          <span class="muted">노란 줄 = 2일 넘게 안 올라온 자료</span>
+          <button class="btn-upload-all" onclick="openUploadModal()">📥 자료 올리기</button>
+        </div>
+        <div id="today-status"></div>
+      </div>
+      <div class="card today-card">
+        <div class="today-head"><h2>바로가기</h2></div>
+        <div class="today-links">
+          <button onclick="switchGroup('daily')"><b>일마감</b><span>일별 판매·카드 대사·탱크</span></button>
+          <button onclick="goToCheckTab('statements')"><b>거래명세서 발행</b><span>월마감 → 명세서·메일</span></button>
+          <button onclick="goToCheckTab('archeck')"><b>미수확인</b><span>외상 입금 확인</span></button>
+          <button onclick="switchGroup('summary')"><b>종합</b><span>월 매출·이익·재고 오차</span></button>
+          <button onclick="switchGroup('vat')"><b>부가세 신고</b><span>분기 예상 세액</span></button>
+        </div>
+      </div>
+    </div>
+    <div id="today-check-current" class="card check-card"></div>
+    <div id="today-check-prev" class="card check-card"></div>
+  </section><!-- /group-today -->
+
   <section id="group-summary" class="group-content">
 
   <div id="tab-summary-main" class="tab-content">
@@ -626,6 +653,10 @@
       <div class="card-header">
         <h2>일별 판매 현황</h2>
         <span id="daily-summary-label" style="font-size:13px; color:#64748b;"></span>
+        <label class="toggle-detail" title="드럼·매출·매입가·카드수수료·입금예정일 등 모든 열 보기">
+          <input type="checkbox" id="daily-detail-toggle" onchange="toggleDailyDetail(this.checked)"> 상세 열 보기
+        </label>
+        <span class="unit-note">금액 단위: 원 · ▸ 누르면 그날 유종별 상세</span>
       </div>
       <details style="padding:0 16px 12px; font-size:12px; color:#64748b;">
         <summary style="cursor:pointer; font-weight:600; color:#475569; user-select:none;">영업이익 계산 방법 보기</summary>
@@ -648,35 +679,7 @@
       </details>
       <div class="daily-table-wrap">
         <table id="daily-table">
-          <thead>
-            <tr>
-              <th rowspan="2" class="daily-col-date">날짜</th>
-              <th rowspan="2" class="group-summary">합계<br>드럼</th>
-              <th rowspan="2" class="group-summary" style="min-width:90px;">판매금액</th>
-              <th rowspan="2" class="daily-col-profit group-summary" style="min-width:80px;"
-                  title="휘발유+경유+등유 판매이익 (매출 − 판매량×FIFO매입단가)">유종<br>이익</th>
-              <th rowspan="2" class="daily-col-profit group-summary" style="min-width:80px;"
-                  title="세차 매출 + (유외상품 매출 − 수기 원가)">유외·세차<br>이익</th>
-              <th rowspan="2" class="daily-col-profit group-summary" style="min-width:90px;"
-                  title="영업이익 = 유종이익 + 유외·세차이익 − 카드수수료">영업이익<br>(합계)</th>
-              <th colspan="5" class="group-gasoline">휘발유</th>
-              <th colspan="5" class="group-diesel">경유</th>
-              <th colspan="5" class="group-kerosene">등유</th>
-              <th colspan="2" class="group-other">유외상품</th>
-              <th colspan="1" class="group-carwash">세차</th>
-              <th colspan="2" class="group-card">카드(이지샵+나이스)</th>
-              <th rowspan="2" class="daily-col-profit">영업이익</th>
-              <th rowspan="2" class="group-match">카드대사</th>
-            </tr>
-            <tr>
-              <th class="group-gasoline">L</th><th class="group-gasoline">드럼</th><th class="group-gasoline">매출</th><th class="group-gasoline">판매가</th><th class="group-gasoline">매입가</th>
-              <th class="group-diesel">L</th><th class="group-diesel">드럼</th><th class="group-diesel">매출</th><th class="group-diesel">판매가</th><th class="group-diesel">매입가</th>
-              <th class="group-kerosene">L</th><th class="group-kerosene">드럼</th><th class="group-kerosene">매출</th><th class="group-kerosene">판매가</th><th class="group-kerosene">매입가</th>
-              <th class="group-other">매출</th><th class="group-other">원가(수기)</th>
-              <th class="group-carwash">매출</th>
-              <th class="group-card">수수료</th><th class="group-card">입금예정일</th>
-            </tr>
-          </thead>
+          <thead id="daily-thead"></thead>
           <tbody id="daily-tbody">
             <tr class="empty-row">
               <td colspan="28">BOS 데이터를 업로드하면 현황이 표시됩니다</td>
@@ -1439,6 +1442,6 @@
 </div>
 
 <div id="toast" class="toast"></div>
-<script src="main.js?v=2.42.0"></script>
+<script src="main.js?v=2.43.0"></script>
 </body>
 </html>

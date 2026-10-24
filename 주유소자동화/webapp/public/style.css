@@ -1093,3 +1093,65 @@ th.sortable.sort-active .sort-icon { color: var(--primary); }
 
 /* 거래명세서 목록: 데이터가 바뀌어 다시 만들어야 하는 명세서 */
 .badge-stale { background: var(--error-bg); color: var(--error-fg); font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 9px; margin-left: 4px; white-space: nowrap; }
+
+/* ══ 3단계 가독성 (PC 1920폭 기준) ══════════════════════════════
+   위쪽 규칙을 덮어쓴다 — 화면 폭을 넓게 쓰고, 표 글자를 키우고, 숫자는 자리 맞춤 */
+:root {
+  --table-font: 13px;
+  --num-font: tabular-nums;
+}
+main { max-width: 1840px; padding: 20px 28px; }
+
+/* 숫자 자리 맞춤 (표 전체) */
+table td, table th { font-variant-numeric: tabular-nums; }
+
+/* 일마감 표: 요약 열 기본 + 머리글·날짜 열 고정 */
+.daily-table-wrap { overflow: auto; max-height: calc(100vh - 230px); padding: 0; }
+#daily-table { min-width: 100%; font-size: var(--table-font); border-collapse: separate; border-spacing: 0; }
+#daily-table th, #daily-table td { padding: 7px 10px; }
+#daily-table th { font-size: 12px; }
+/* 바깥 표 머리글만 고정 (펼친 유종별 표의 머리글은 제외) — 2행 top은 JS가 1행 높이로 맞춤 */
+#daily-table > thead > tr > th { position: sticky; z-index: 2; top: 0; }
+#daily-table > thead > tr:nth-child(2) > th { top: var(--daily-head-row1, 33px); }
+#daily-table .sticky-col { position: sticky; left: 0; z-index: 1; background: #fff; box-shadow: 1px 0 0 var(--border); }
+#daily-table > thead > tr > th.sticky-col { z-index: 3; background: #f8fafc; }
+#daily-table .total-row td { position: sticky; bottom: 0; z-index: 1; }
+#daily-table .total-row td.sticky-col { z-index: 2; }
+#daily-table td.strong { font-weight: 700; }
+#daily-table td.center { text-align: center; }
+#daily-table tbody tr { cursor: pointer; }
+#daily-table tbody tr.row-open td { background: #f0f9ff; }
+.daily-expand-btn { border: none; background: none; padding: 0 4px; font-size: 13px; color: var(--primary); cursor: pointer; }
+.daily-expand-btn:hover { background: var(--info-bg); }
+#daily-table tr.daily-expand-row > td { background: #f8fbff !important; padding: 10px 16px 14px; text-align: left; cursor: default; }
+/* 가로로 스크롤해도 펼친 상세는 화면 왼쪽에 붙어 보이게 */
+.daily-expand { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; position: sticky; left: 44px; width: max-content; max-width: calc(100vw - 140px); }
+.daily-expand-table { width: auto !important; border-collapse: collapse; font-size: 13px; background: #fff; border: 1px solid var(--border); }
+.daily-expand-table th, .daily-expand-table td { padding: 5px 12px; text-align: right; border-bottom: 1px solid #f1f5f9; }
+.daily-expand-table thead th { background: #f8fafc; color: var(--text-muted); font-size: 12px; }
+.daily-expand-table tbody th { text-align: center; font-weight: 700; }
+.daily-expand-side { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.daily-expand-side .muted, .muted { color: var(--text-muted); }
+.toggle-detail { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--text); cursor: pointer;
+                 margin-left: auto; padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; }
+.unit-note { font-size: 12px; color: var(--text-muted); }
+
+/* 넓은 표 카드: 화면 높이 안에서 스크롤 (머리글·첫 열 고정 표와 함께 사용) */
+#ar-monthly-table { max-height: calc(100vh - 250px) !important; }
+#ar-monthly-table table { font-size: var(--table-font) !important; }
+
+/* 오늘 할 일 (첫 화면) */
+.today-grid { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(280px, 1fr); gap: 16px; margin-bottom: 16px; }
+.today-card { padding: 16px 18px; margin: 0; }
+.today-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.today-head h2 { font-size: 16px; }
+.today-head .btn-upload-all { margin-left: auto; }
+.today-links { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.today-links button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left;
+                      padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+.today-links button:hover { background: var(--info-bg); border-color: #93c5fd; }
+.today-links b { font-size: 14px; color: var(--text); }
+.today-links span { font-size: 12px; color: var(--text-muted); }
+
+/* 카드 제목 옆 요약 글자와 간격 */
+.card-header { gap: 12px; flex-wrap: wrap; }
