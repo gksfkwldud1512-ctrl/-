@@ -963,3 +963,133 @@ th.sortable.sort-active .sort-icon { color: var(--primary); }
 .rpt-total  { background: #fef9c3; font-weight: 700; }
 .rpt-sep td { height: 5px; background: #f8fafc; border-left: none; border-right: none; }
 .rpt-expense { color: #ef4444; }
+
+/* ── 자료 올리기 (통합 업로드) ───────────────────────── */
+.btn-upload-all {
+  margin-left: auto;
+  background: #f59e0b;
+  color: #1e293b;
+  border: none;
+  border-radius: var(--radius);
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-upload-all:hover { background: #fbbf24; }
+.btn-upload.btn-ghost { background: #fff; color: var(--primary); border: 1px solid var(--primary); }
+.btn-upload.btn-ghost:hover { background: var(--info-bg); }
+
+.legacy-upload { position: relative; }
+.legacy-upload > summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  white-space: nowrap;
+}
+.legacy-upload > summary::-webkit-details-marker { display: none; }
+.legacy-upload-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+}
+
+.upload-modal-box { width: 92vw; max-width: 980px; max-height: 90vh; display: flex; flex-direction: column; }
+.upload-modal-head { position: relative; padding-right: 56px; }
+.modal-close {
+  position: absolute; right: 18px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; color: #fff; font-size: 18px; cursor: pointer;
+}
+.upload-modal-body { overflow-y: auto; }
+.upload-drop {
+  border: 2px dashed #93c5fd;
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 26px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.upload-drop:hover, .upload-drop.dragover { background: var(--info-bg); border-color: var(--primary); }
+.upload-drop-icon  { font-size: 30px; }
+.upload-drop-title { font-size: 15px; font-weight: 700; margin-top: 6px; }
+.upload-drop-hint  { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+#upload-results { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+.upload-result {
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 14px;
+  background: #fff;
+}
+.upload-result.ok      { border-left-color: #16a34a; }
+.upload-result.warn    { border-left-color: #f59e0b; }
+.upload-result.fail    { border-left-color: var(--error-fg); }
+.upload-result.pending { border-left-color: #93c5fd; color: var(--text-muted); }
+.upload-result-title { font-weight: 700; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.upload-result-title .kind { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; background: var(--info-bg); color: var(--info-fg); }
+.upload-result-title .range { font-size: 13px; font-weight: 400; color: var(--text-muted); }
+.upload-result ul { margin: 6px 0 0 18px; }
+.upload-result li { margin: 2px 0; }
+.upload-result .warn-line { color: var(--warn-fg); }
+.upload-result .err-line  { color: var(--error-fg); }
+.upload-choice { margin-top: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+.upload-status-head { display: flex; align-items: baseline; gap: 10px; margin: 20px 0 8px; }
+.upload-status-head h3 { font-size: 15px; }
+.upload-status-hint { font-size: 12px; color: var(--text-muted); }
+.status-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.status-table th, .status-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.status-table th { background: #f8fafc; font-weight: 600; color: var(--text-muted); }
+.status-table tr.stale td { background: var(--warn-bg); }
+.status-table .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.status-table .muted { color: var(--text-muted); font-size: 12px; }
+
+/* ── 데이터 점검 카드 (종합 탭) ─────────────────────── */
+.check-card { margin-bottom: 16px; }
+.check-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.check-head h2 { font-size: 16px; }
+.check-pills { display: flex; gap: 6px; }
+.check-pill { font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 10px; }
+.check-pill.error { background: var(--error-bg); color: var(--error-fg); }
+.check-pill.warn  { background: var(--warn-bg);  color: var(--warn-fg); }
+.check-pill.ok    { background: var(--success-bg); color: var(--success-fg); }
+.check-list { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+.check-item { border-radius: var(--radius); }
+.check-item > summary {
+  list-style: none; cursor: pointer; display: flex; gap: 10px; align-items: baseline;
+  padding: 7px 10px; border-radius: var(--radius); font-size: 14px;
+}
+.check-item > summary::-webkit-details-marker { display: none; }
+.check-item > summary:hover { background: #f8fafc; }
+.check-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; align-self: center; }
+.check-dot.error { background: var(--error-fg); }
+.check-dot.warn  { background: #f59e0b; }
+.check-dot.ok    { background: #16a34a; }
+.check-dot.info  { background: #94a3b8; }
+.check-title { font-weight: 700; white-space: nowrap; }
+.check-summary { color: var(--text); flex: 1; }
+.check-go { font-size: 12px; color: var(--primary); background: none; border: 1px solid var(--primary); border-radius: 4px; padding: 1px 8px; cursor: pointer; white-space: nowrap; }
+.check-detail { margin: 2px 0 8px 30px; font-size: 13px; color: #334155; max-height: 260px; overflow-y: auto; }
+.check-detail li { margin: 2px 0 2px 16px; }
+.check-ok-fold { font-size: 13px; color: var(--text-muted); margin-top: 6px; }
+
+/* 거래명세서 목록: 데이터가 바뀌어 다시 만들어야 하는 명세서 */
+.badge-stale { background: var(--error-bg); color: var(--error-fg); font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 9px; margin-left: 4px; white-space: nowrap; }

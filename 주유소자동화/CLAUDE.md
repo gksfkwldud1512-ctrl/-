@@ -881,3 +881,40 @@ webapp\시작.bat 더블클릭
   - `/api/parse-excel` 응답에도 annotateNonFuelOnly 적용(업로드 직후 화면에 품목 선택 표시)
   - vendors_2026_09.json은 원본 uploads/upload_1790817471172.xlsx로 재생성 (cardTxs 외 기존과 완전 동일 확인)
   - 9월: 한누리관광 카드 2건 1,099,869 / 한누리투어 외상 3,576,372 + 카드 371,931 = 3,948,303
+
+## 완료된 작업 (2026-10-24) — 📥 자료 올리기(통합 업로드) + 🔎 데이터 점검 (전반 점검 1~2단계)
+- 배경: 같은 BOS 판매전표를 일마감(`/api/daily/upload-bos` → daily·customer_sales)과 월마감(`/api/parse-excel` → vendors)에
+  따로 올려야 했고, 한 곳만 다시 올리면 화면마다 금액이 달라짐 (9월 한누리투어: 거래명세서 4,182,765 / 고객판매현황 3,948,303).
+  통장 카드사 입금(`bank_deposits.json`)은 업로드 버튼이 없어 **5/29 이후 갱신이 멈춰 있었음**
+- `lib/uploadDetector.js` `detectUploadType(path)`: 헤더로 판별 — bos-sales(판매전표 상세조회, r2[8]=결제구분) / bos-integrated(r2[6]) /
+  card-sales(매출자료 27컬럼) / card-integrated(나이스 통합거래조회) / bank(거래일자+적요1) / tank / orders / deposit-bos / deposit-easy /
+  management(자동 반영 안 함 — 입고이력 전체 교체라서) / customers / unknown. uploads 폴더 실제 파일 전부로 판별 확인 (고객등록 양식 외 알 수 없음 0건)
+  - 카드 매출자료는 이지샵·나이스 양식이 같아 **단말기번호**로 구분: 2781381=이지샵, 8405124=나이스(기본), 처음 보는 단말기는 화면에서 고르면 `data/card_terminals.json`에 기억
+- server.js: 라우트 안 로직을 함수로 분리, 기존 라우트·새 라우트가 같은 함수 호출 (응답 형식 유지)
+  - `ingestBosDaily` / `ingestBosVendors` / `ingestCard(file, 'easyshop'|'nice')` / `ingestBank`(지출+미수 입금+**카드사 입금**) /
+    `ingestBankCardDeposits` / `ingestTank` / `ingestOrders` / `ingestDepositBos` / `ingestDepositEasy`
+  - `/api/upload-bank-expenses`(지출목록 업로드)도 이제 카드사 입금 대사까지 같이 반영
+  - `POST /api/upload/auto`(files[] 최대 20, BOS→카드→그 밖 순서), `POST /api/upload/auto/resolve {saved, file, cardSource}`, `GET /api/upload/status`
+  - `data/upload_log.json`(최근 500건, `logUpload`) — 자료 현황·점검에 사용
+  - **부분 기간·옛 파일 가드** `data/bos_coverage.json {ym: {vendors, customerSales}}` (`storedBosCoverage`, 기록 없으면 monthly_fuel 마지막 날짜로 추정):
+    그 달 1일이 없는 달, 또는 저장된 자료보다 앞에서 끝나는 달은 거래명세서·고객판매현황을 덮어쓰지 않고 경고. 월마감 개별 업로드에도 적용
+    (전엔 8/20~9/13 파일이 9월 vendors를 9/13까지로 덮어썼음). 일마감 daily는 날짜별 교체라 그대로
+  - multer 파일명 `nextUploadStamp()` — 여러 파일 동시 업로드 시 같은 ms라 파일이 서로 덮어써지던 문제 수정
+  - `readExcelRowsAuto`(excelParser) — 월마감 BOS도 암호 파일 지원
+  - `PORT`, `NO_SCHEDULE=1`(오피넷·카카오 스케줄 끔) 환경변수 — 테스트 서버용
+- `lib/consistencyCheck.js` `runConsistency(ctx, ym)` → `GET /api/consistency?month=` : ① 거래명세서↔고객판매현황 업체별 금액
+  ② 일마감↔고객판매현황 합계 ③ 거래명세서 데이터 없는 달 ④ 날짜별 누락(BOS·나이스) ⑤ **거래명세서 파일 총합계 ≠ 지금 데이터**
+  (`findStaleStatements`, `expectedStatementTotals`가 /api/generate와 같은 경로로 계산) ⑥ 외상 업체 사업자번호·이메일 ⑦ 카드 대사·밀린 미수(두 달 전까지)
+  ⑧ 입고 기록 공백(휘발유 14·경유 7·등유 45일). `GET /api/statements/stale?year&month` = ⑤만
+- 화면: 헤더 오른쪽 [📥 자료 올리기] 모달(드래그&드롭 여러 파일, 결과·경고, 카드 단말기 선택, 자료 현황 표), 종합 탭 맨 위 🔎 데이터 점검 카드,
+  거래명세서 목록 "⚠ 다시 생성" 배지, 일마감 개별 업로드는 "개별 업로드 ▾"로 접음, 🔌 DB 연결 테스트 → 설정 탭, 사용방법 탭 안내 추가
+- 검증(scratchpad 복사본 3999 서버): 10월 BOS·이지샵·나이스·통장 4개를 기존 개별 라우트 vs 통합 업로드로 올린 결과 data 364개 파일 **바이트 동일**.
+  옛 9월 BOS → 한누리투어 "다시 생성" 표시 / 최신 9월 → 고객판매현황 한누리투어 4,182,765 일치. 부분기간 파일 → 8·9월 vendors·customer_sales 해시 불변.
+  puppeteer로 모달·점검 카드·배지 화면 확인
+- **사용자 할 일**: 3000 서버 재시작(시작.bat) → 9월·10월 BOS 판매전표(1일부터)와 9·10월 통장 파일을 [📥 자료 올리기]로 한 번 올리기
+  (지금 실제 데이터: 9월 고객판매현황이 10/1 옛 파일 기준, 10월 거래명세서 데이터 없음, 카드사 입금 5/29에서 멈춤, 탱크 실재고 8/14에서 멈춤)
+
+### 다음 차례 (계획만, 2026-10-24 사용자 결정: 1~2단계 먼저) — 계획 파일 ~/.claude/plans/structured-prancing-candle.md
+- 3단계 화면 가독성(PC 1920폭): main max-width 1400→1840, 본문 13px·숫자 tabular-nums, 일마감 표 31칸→요약 10칸+행 펼침, 넓은 표 첫 열·머리글 고정,
+  미수확인 최근 6개월만 펼침, 툴바 "⋯ 더보기", 첫 화면 "오늘 할 일"
+- 4단계: 고객별 차량·주유내역 조회+엑셀(아워홈 사은품 목록처럼), 명세서·메일 발송 이력, BOS DB 연결 시 ingest 함수 재사용

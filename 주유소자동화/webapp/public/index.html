@@ -19,6 +19,7 @@
       <button class="main-tab" data-group="vat">부가세 신고</button>
       <button class="main-tab" data-group="price">단가</button>
     </nav>
+    <button class="btn-upload-all" onclick="openUploadModal()" title="BOS·카드·통장 등 받은 파일을 한꺼번에 올리면 종류를 알아서 판별해 관련 화면 전부에 반영합니다">📥 자료 올리기</button>
   </div>
   <!-- subnav: 종합/일마감/월마감 groups all use this -->
   <div class="subnav" id="subnav">
@@ -51,6 +52,22 @@
 
   <!-- ───── 대분류: 사용방법 ───── -->
   <section id="group-usage" class="group-content">
+
+    <!-- 자료 올리기 -->
+    <div class="card" style="margin-bottom:16px;border:2px solid #f59e0b;">
+      <div class="card-header"><h2>📥 자료는 한 곳에서 올리기</h2></div>
+      <div style="padding:4px 16px 16px;font-size:14px;line-height:1.9;">
+        화면 오른쪽 위 <strong>[📥 자료 올리기]</strong>를 누르고 받은 파일을 <strong>한꺼번에</strong> 끌어다 놓으면, 파일 종류를 알아서 판별해 관련 화면 전부에 반영합니다.
+        <ul style="margin:6px 0 0 20px;">
+          <li><strong>BOS 판매전표 상세조회</strong> → 일마감 + 고객판매현황 + 거래명세서·미수 (예전엔 일마감·월마감에 따로 올렸던 것)</li>
+          <li><strong>통장 입출금</strong> → 지출목록 + 미수 입금 매칭 + 카드사 입금 대사</li>
+          <li><strong>이지샵·나이스 카드</strong> → 일마감 카드 대사 (단말기번호로 구분, 처음 보는 단말기는 한 번만 골라 주면 기억)</li>
+          <li>탱크 실재고 · 정유사 주문목록 · BOS 시재현황 · 이지샵 입금내역도 자동 판별</li>
+        </ul>
+        <div style="margin-top:6px;color:#92400e;">⚠ BOS는 <strong>그 달 1일부터</strong> 조회해서 받으세요. 1일이 없는 파일이나, 이미 저장된 것보다 앞에서 끝나는 옛 파일은 고객판매현황·거래명세서를 바꾸지 않고 경고만 띄웁니다.</div>
+        <div style="color:#475569;">종합 탭 맨 위 <strong>🔎 데이터 점검</strong>에서 화면마다 금액이 다른 곳, 빠진 날짜, 다시 만들어야 할 거래명세서 등을 확인하세요.</div>
+      </div>
+    </div>
 
     <!-- 전체 흐름 -->
     <div class="card" style="margin-bottom:16px;">
@@ -241,6 +258,9 @@
         <span>월</span>
       </div>
     </div>
+
+    <!-- 데이터 점검 (같은 BOS가 화면마다 다른지, 빠진 자료, 다시 만들 명세서 등) -->
+    <div id="consistency-card" class="card check-card"></div>
 
     <!-- 월별 종합 요약 카드 -->
     <div id="summary-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;">
@@ -479,22 +499,24 @@
         <button class="btn-upload btn-purple" onclick="showMobileShare()" style="background:#7c3aed;border-color:#7c3aed;">
           📱 모바일 공유
         </button>
-        <button class="btn-upload" style="background:#0369a1;border-color:#0369a1;"
-                id="btn-test-bos-db" onclick="testBosDb()">
-          🔌 DB 연결 테스트
-        </button>
-        <input type="file" id="bos-file-input" accept=".xlsx,.xls" hidden>
-        <button class="btn-upload" onclick="document.getElementById('bos-file-input').click()">
-          📂 BOS 데이터 업로드
-        </button>
-        <input type="file" id="card-file-input" accept=".xlsx,.xls" hidden>
-        <button class="btn-upload btn-teal" onclick="document.getElementById('card-file-input').click()">
-          💳 이지샵 카드내역 (세차·유외)
-        </button>
-        <input type="file" id="nice-file-input" accept=".xlsx,.xls" hidden>
-        <button class="btn-upload btn-teal" style="background:#4f46e5;border-color:#4f46e5;" onclick="document.getElementById('nice-file-input').click()">
-          💳 나이스 카드내역 (유류)
-        </button>
+        <button class="btn-upload" onclick="openUploadModal()">📥 자료 올리기</button>
+        <details class="legacy-upload">
+          <summary title="한 종류만 골라서 올릴 때. 보통은 📥 자료 올리기를 쓰세요">개별 업로드 ▾</summary>
+          <div class="legacy-upload-menu">
+            <input type="file" id="bos-file-input" accept=".xlsx,.xls" hidden>
+            <button class="btn-upload" onclick="document.getElementById('bos-file-input').click()">
+              📂 BOS 데이터 (일마감만)
+            </button>
+            <input type="file" id="card-file-input" accept=".xlsx,.xls" hidden>
+            <button class="btn-upload btn-teal" onclick="document.getElementById('card-file-input').click()">
+              💳 이지샵 카드내역 (세차·유외)
+            </button>
+            <input type="file" id="nice-file-input" accept=".xlsx,.xls" hidden>
+            <button class="btn-upload btn-teal" style="background:#4f46e5;border-color:#4f46e5;" onclick="document.getElementById('nice-file-input').click()">
+              💳 나이스 카드내역 (유류)
+            </button>
+          </div>
+        </details>
       </div>
     </div>
 
@@ -863,11 +885,12 @@
         <input type="date" id="issue-date">
       </div>
       <div class="toolbar-group upload-group">
+        <button class="btn-upload" onclick="openUploadModal()" title="일마감·고객판매현황까지 함께 반영">📥 자료 올리기</button>
         <input type="file" id="file-input" accept=".xlsx,.xls" hidden>
-        <button class="btn-upload" onclick="document.getElementById('file-input').click()">
-          📂 BOS Excel 업로드
+        <button class="btn-upload btn-ghost" onclick="document.getElementById('file-input').click()" title="거래명세서·미수 데이터에만 반영 (일마감·고객판매현황은 그대로)">
+          📂 BOS Excel (월마감만)
         </button>
-        <span id="file-label" class="file-label">파일을 선택하세요</span>
+        <span id="file-label" class="file-label"></span>
       </div>
       <div class="toolbar-group upload-group">
         <input type="file" id="delivery-file-input" accept=".xlsx,.xls" hidden>
@@ -1212,6 +1235,14 @@
   <!-- ───── Tab 5: 설정 ───── -->
   <section id="tab-settings" class="tab-content">
     <div class="card settings-card">
+      <div class="card-header"><h2>BOS DB 직접 연결 (준비 중)</h2></div>
+      <p style="font-size:13px;color:var(--text-muted);margin:0 0 10px;">BOS PostgreSQL(192.168.0.11:5432) 접속 계정을 납품업체에서 받으면 엑셀 없이 자동으로 가져올 예정입니다.</p>
+      <button class="btn-upload" style="background:#0369a1;border-color:#0369a1;"
+              id="btn-test-bos-db" onclick="testBosDb()">
+        🔌 DB 연결 테스트
+      </button>
+    </div>
+    <div class="card settings-card">
       <div class="card-header"><h2>네이버 메일 SMTP 설정</h2></div>
       <div class="settings-guide">
         <p>📌 네이버 메일 SMTP 활성화 방법:</p>
@@ -1382,7 +1413,32 @@
 
 </main>
 
+<!-- 자료 올리기 (통합 업로드) -->
+<div id="upload-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeUploadModal()">
+  <div class="modal-box upload-modal-box">
+    <div class="modal-head upload-modal-head">
+      📥 자료 올리기 <span>받은 파일을 한꺼번에 올리면 종류를 알아서 판별해 관련 화면 전부에 반영합니다</span>
+      <button class="modal-close" onclick="closeUploadModal()" aria-label="닫기">✕</button>
+    </div>
+    <div class="modal-body upload-modal-body">
+      <input type="file" id="upload-auto-input" accept=".xlsx,.xls" multiple hidden>
+      <div id="upload-drop" class="upload-drop" onclick="document.getElementById('upload-auto-input').click()">
+        <div class="upload-drop-icon">📂</div>
+        <div class="upload-drop-title">파일을 여기로 끌어다 놓거나 눌러서 고르세요 (여러 개 가능)</div>
+        <div class="upload-drop-hint">BOS 판매전표 상세조회 · 이지샵/나이스 카드 · 통장 입출금 · 탱크 실재고 · 정유사 주문목록 · 시재현황</div>
+      </div>
+      <div id="upload-results"></div>
+
+      <div class="upload-status-head">
+        <h3>자료 현황</h3>
+        <span class="upload-status-hint">데이터가 며칠까지 들어 있는지 — 노란색은 2일 넘게 안 올라온 자료</span>
+      </div>
+      <div id="upload-status"></div>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
-<script src="main.js?v=2.41.0"></script>
+<script src="main.js?v=2.42.0"></script>
 </body>
 </html>

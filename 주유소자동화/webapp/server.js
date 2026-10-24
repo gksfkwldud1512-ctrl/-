@@ -10,7 +10,8 @@ const { version } = require('./package.json');
 const TANK_DESKTOP_FILE = path.join(os.homedir(), 'Desktop', '탱크 실재고량.xlsx');
 
 const app  = express();
-const PORT = 3000;
+// PORT 환경변수로 테스트 서버를 다른 포트에 띄울 수 있음 (기본 3000)
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json());
 // 정적 파일 캐시 완전 방지 (HTML 포함 — 코드 업데이트 즉시 반영)
@@ -36,13 +37,39 @@ const OUTPUT_DIR  = path.join(__dirname, 'output');
   if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
 });
 
+// 여러 파일을 한 번에 올리면 같은 밀리초에 저장돼 이름이 겹쳐 덮어써짐 → 1씩 늘려 항상 다른 이름
+let lastUploadStamp = 0;
+function nextUploadStamp() {
+  lastUploadStamp = Math.max(Date.now(), lastUploadStamp + 1);
+  return lastUploadStamp;
+}
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: UPLOADS_DIR,
-    filename: (req, file, cb) => cb(null, `upload_${Date.now()}.xlsx`),
+    filename: (req, file, cb) => cb(null, `upload_${nextUploadStamp()}.xlsx`),
   }),
   fileFilter: (req, file, cb) => cb(null, /\.(xlsx|xls)$/i.test(file.originalname)),
 });
+
+// ── 업로드 기록 (자료 현황·정합성 점검용) ─────────────────────
+// data/upload_log.json = [{ at, file, saved, type, range, targets[], warnings[] }] 최근 500건
+const UPLOAD_LOG_FILE = path.join(DATA_DIR, 'upload_log.json');
+const UPLOAD_LOG_MAX  = 500;
+
+// multer는 한글 파일명을 latin1로 넘겨줌 → utf8로 복원
+function uploadOriginalName(file) {
+  try { return Buffer.from(file.originalname, 'latin1').toString('utf8'); } catch (_) { return file.originalname; }
+}
+
+function logUpload(file, type, targets, warnings = [], range = null) {
+  try {
+    const list = readJSON(UPLOAD_LOG_FILE, []);
+    list.push({ at: new Date().toISOString(), file: file ? uploadOriginalName(file) : '',
+                saved: file ? path.basename(file.path) : '', type, range, targets, warnings });
+    writeJSON(UPLOAD_LOG_FILE, list.slice(-UPLOAD_LOG_MAX));
+  } catch (e) { console.error('[upload-log]', e.message); }
+}
 
 const CUSTOMERS_FILE       = path.join(DATA_DIR, 'customers.json');
 const SETTINGS_FILE        = path.join(DATA_DIR, 'settings.json');
@@ -282,54 +309,99 @@ function writeJSON(file, data) {
   }
 }
 
+// ── BOS 월 자료 범위 ─────────────────────────────────────────────
+// data/bos_coverage.json = { 'YYYY-MM': { vendors: 'YYYY-MM-DD', customerSales: 'YYYY-MM-DD' } }
+// 그 달 자료가 며칠까지 저장돼 있는지. 8/20~9/13 같은 파일이 이미 9/30까지 있는 9월을
+// 9/13까지로 덮어쓰지 않도록, 저장된 자료보다 앞에서 끝나는 파일은 그 달을 건너뛴다.
+const BOS_COVERAGE_FILE = path.join(DATA_DIR, 'bos_coverage.json');
+
+function storedBosCoverage(ym, kind) {
+  const saved = readJSON(BOS_COVERAGE_FILE, {})[ym]?.[kind];
+  if (saved) return saved;
+  // 기록 전부터 있던 달: 거래명세서 저장 때 같이 만든 월 판매집계(monthly_fuel)의 마지막 날짜로 추정
+  const [y, m] = ym.split('-');
+  const keys = Object.keys(readJSON(fuelSummaryFile(y, m), {})).sort();
+  return keys.length ? keys[keys.length - 1].replace(/\//g, '-') : '';
+}
+
+function setBosCoverage(ym, kind, to) {
+  const all = readJSON(BOS_COVERAGE_FILE, {});
+  all[ym] = { ...(all[ym] || {}), [kind]: to };
+  writeJSON(BOS_COVERAGE_FILE, all);
+}
+
 // ── Excel 업로드 & 파싱 ────────────────────────────────────────
-app.post('/api/parse-excel', upload.single('file'), (req, res) => {
+// BOS 판매전표 상세조회 → 월별 업체 집계(vendors_YYYY_MM.json, 거래명세서·미수용)
+// 업로드 파일이 여러 달치를 한꺼번에 담고 있을 수 있음(예: "1월~7월 통합 세부거래내역").
+// 실제 판매일자(r[1]) 기준으로 달마다 나눠서 각자 올바른 월 파일에 저장한다.
+// 화면에서 선택한 연/월을 무조건 믿고 통째로 덮어쓰면, 여러 달 데이터가 섞여 있을 때
+// 다른 달 기존 자료까지 통째로 잘못 덮어써버리는 사고가 난다 (실제 발생했던 사고).
+// 그 달 1일 자료가 없는 달은 부분 기간 조회 파일로 보고 저장하지 않는다
+// (parseCustomerSales와 같은 가드 — 8/20~9/13 파일이 8월 전체를 덮어쓰던 사고 방지).
+// 이미 저장된 자료보다 앞에서 끝나는 달도 건너뛴다 (storedBosCoverage 참고).
+// → { savedMonths, skippedMonths, olderMonths, byMonthVendors: Map(ym → vendors), range, warnings }
+async function ingestBosVendors(file, year, month) {
+  const { readExcelRowsAuto, buildVendorsFromRows } = require('./lib/excelParser');
+  const rows = await readExcelRowsAuto(file.path);
+  const byMonth = new Map();   // 'YYYY-MM' -> rows[]
+  const hasDay1 = new Set();
+  const fallback = [];         // 판매일자를 못 읽은 행 → 화면에서 선택한 연/월로 처리
+  rows.forEach(r => {
+    const d = String(r[1] || '').replace(/\//g, '-');
+    const ym = /^\d{4}-\d{2}/.test(d) ? d.slice(0, 7) : null;
+    if (ym) {
+      if (!byMonth.has(ym)) byMonth.set(ym, []);
+      byMonth.get(ym).push(r);
+      if (d.slice(0, 10) === `${ym}-01`) hasDay1.add(ym);
+    } else fallback.push(r);
+  });
+  if (fallback.length && year && month) {
+    const ym = `${year}-${String(month).padStart(2, '0')}`;
+    if (!byMonth.has(ym)) { byMonth.set(ym, []); hasDay1.add(ym); }
+    byMonth.get(ym).push(...fallback);
+  }
+
+  const savedMonths = [], skippedMonths = [], olderMonths = [];
+  const byMonthVendors = new Map();
+  const dates = rows.map(r => String(r[1] || '').replace(/\//g, '-').slice(0, 10)).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+  const range = dates.length ? { from: dates[0], to: dates[dates.length - 1] } : null;
+  for (const [ym, ymRows] of byMonth) {
+    if (!hasDay1.has(ym)) { skippedMonths.push(ym); continue; }
+    const monthTo = ymRows.map(r => String(r[1] || '').replace(/\//g, '-').slice(0, 10)).sort().pop() || '';
+    const stored  = storedBosCoverage(ym, 'vendors');
+    if (stored && monthTo && stored > monthTo) { olderMonths.push(`${ym}(저장 ${stored.slice(5)}까지 / 파일 ${monthTo.slice(5)}까지)`); continue; }
+    const [y, mo] = ym.split('-');
+    const { vendors, fuelSummary } = buildVendorsFromRows(ymRows, { keepCardTxsFor: statementCardVendors() });
+    writeJSON(vendorFile(y, mo), vendors);
+    writeJSON(fuelSummaryFile(y, mo), fuelSummary);
+    savedMonths.push(ym);
+    byMonthVendors.set(ym, vendors);
+    if (monthTo) setBosCoverage(ym, 'vendors', monthTo);
+  }
+  savedMonths.sort(); skippedMonths.sort();
+  const warnings = [];
+  if (skippedMonths.length) warnings.push(`1일 자료가 없는 부분 기간이라 거래명세서 데이터에서 제외: ${skippedMonths.join(', ')}`);
+  if (olderMonths.length)   warnings.push(`이미 더 최근까지 저장돼 있어 거래명세서 데이터를 바꾸지 않음: ${olderMonths.join(', ')}`);
+  if (savedMonths.length) logUpload(file, 'bos-vendors', savedMonths.map(ym => `거래명세서 ${ym}`), warnings, range);
+  return { savedMonths, skippedMonths, olderMonths, byMonthVendors, range, warnings };
+}
+
+app.post('/api/parse-excel', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ ok: false, error: '파일이 없습니다.' });
     const year  = req.body.year  || new Date().getFullYear();
     const month = req.body.month || new Date().getMonth() + 1;
-    const { readExcelRows, buildVendorsFromRows } = require('./lib/excelParser');
-
-    // 업로드 파일이 여러 달치를 한꺼번에 담고 있을 수 있음(예: "1월~7월 통합 세부거래내역").
-    // 실제 판매일자(r[1]) 기준으로 달마다 나눠서 각자 올바른 월 파일에 저장한다.
-    // 화면에서 선택한 연/월을 무조건 믿고 통째로 덮어쓰면, 여러 달 데이터가 섞여 있을 때
-    // 다른 달 기존 자료까지 통째로 잘못 덮어써버리는 사고가 난다 (실제 발생했던 사고).
-    const rows = readExcelRows(req.file.path);
-    const byMonth = new Map();   // 'YYYY-MM' -> rows[]
-    const fallback = [];         // 판매일자를 못 읽은 행 → 화면에서 선택한 연/월로 처리
-    rows.forEach(r => {
-      const d = String(r[1] || '').replace(/\//g, '-');
-      const ym = /^\d{4}-\d{2}/.test(d) ? d.slice(0, 7) : null;
-      if (ym) { if (!byMonth.has(ym)) byMonth.set(ym, []); byMonth.get(ym).push(r); }
-      else fallback.push(r);
-    });
-    if (fallback.length) {
-      const ym = `${year}-${String(month).padStart(2, '0')}`;
-      if (!byMonth.has(ym)) byMonth.set(ym, []);
-      byMonth.get(ym).push(...fallback);
-    }
-
-    const savedMonths = [];
-    let primaryVendors = null;
-    const selectedYm = `${year}-${String(month).padStart(2, '0')}`;
-
-    for (const [ym, ymRows] of byMonth) {
-      const [y, mo] = ym.split('-');
-      const { vendors, fuelSummary } = buildVendorsFromRows(ymRows, { keepCardTxsFor: statementCardVendors() });
-      writeJSON(vendorFile(y, mo), vendors);
-      writeJSON(fuelSummaryFile(y, mo), fuelSummary);
-      savedMonths.push(ym);
-      if (ym === selectedYm) primaryVendors = vendors;
+    const { savedMonths, skippedMonths, byMonthVendors, warnings } = await ingestBosVendors(req.file, year, month);
+    if (!savedMonths.length) {
+      return res.status(400).json({ ok: false, error: `반영하지 않았습니다 — ${warnings.join(' / ')}. 그 달 1일부터 오늘까지 조회해서 다시 받아 주세요.` });
     }
 
     // 선택한 연/월에 해당하는 데이터가 파일에 없었으면(예: 다른 달 파일만 있는 경우)
     // 화면에는 빈 배열 대신 방금 처리된 것 중 하나를 대표로 보여준다.
-    if (primaryVendors === null) {
-      const first = byMonth.values().next().value;
-      primaryVendors = first ? buildVendorsFromRows(first, { keepCardTxsFor: statementCardVendors() }).vendors : [];
-    }
+    const selectedYm = `${year}-${String(month).padStart(2, '0')}`;
+    const primaryVendors = byMonthVendors.get(selectedYm) || byMonthVendors.values().next().value || [];
 
-    res.json({ ok: true, vendors: annotateNonFuelOnly(annotateStatementMerges(primaryVendors, year, month)), savedMonths });
+    res.json({ ok: true, vendors: annotateNonFuelOnly(annotateStatementMerges(primaryVendors, year, month)), savedMonths, skippedMonths, warnings });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -1040,24 +1112,53 @@ function saveCustomerSales(monthMap) {
 }
 
 // BOS 업로드 (단일 날짜 또는 월별 파일 모두 처리)
+// BOS 판매전표 → 일마감(data/daily) + 고객판매현황(customer_sales_*)
+// → { count, date(마지막 날짜), range, customerMonths, warnings }
+async function ingestBosDaily(file) {
+  const days = await parseBosDaily(file.path);
+  let lastDate = '';
+  for (const parsed of days) {
+    const existing = readJSON(dailyFile(parsed.date), { date: parsed.date });
+    existing.bos   = parsed;
+    runMatching(existing);
+    writeJSON(dailyFile(parsed.date), existing);
+    lastDate = parsed.date;
+  }
+  const dates = days.map(d => d.date).sort();
+  const range = dates.length ? { from: dates[0], to: dates[dates.length - 1] } : null;
+  const warnings = [];
+  // 고객별 판매 집계도 함께 저장 (그 달 1일이 없는 부분 기간 달은 parseCustomerSales가 제외)
+  let customerMonths = [];
+  try {
+    const monthMap = await parseCustomerSales(file.path);
+    const fileMonths = [...new Set(dates.map(d => d.slice(0, 7)))];
+    const skipped = fileMonths.filter(ym => !monthMap[ym]);
+    // 이미 저장된 자료보다 앞에서 끝나는 달은 덮어쓰지 않음
+    const older = [];
+    for (const ym of Object.keys(monthMap)) {
+      const monthTo = dates.filter(d => d.startsWith(ym)).pop() || '';
+      const stored  = storedBosCoverage(ym, 'customerSales');
+      if (stored && monthTo && stored > monthTo) { older.push(`${ym}(저장 ${stored.slice(5)}까지 / 파일 ${monthTo.slice(5)}까지)`); delete monthMap[ym]; }
+    }
+    saveCustomerSales(monthMap);
+    customerMonths = Object.keys(monthMap).sort();
+    customerMonths.forEach(ym => { const to = dates.filter(d => d.startsWith(ym)).pop(); if (to) setBosCoverage(ym, 'customerSales', to); });
+    if (skipped.length) {
+      warnings.push(`고객판매현황 미반영: ${skipped.join(', ')} (그 달 1일 자료가 없는 부분 기간이거나 판매전표 상세조회 형식이 아님)`);
+    }
+    if (older.length) warnings.push(`이미 더 최근까지 저장돼 있어 고객판매현황을 바꾸지 않음: ${older.join(', ')}`);
+  } catch (e) { warnings.push(`고객판매현황 집계 실패: ${e.message}`); }
+  if (days.length) {
+    logUpload(file, 'bos-daily', [`일마감 ${days.length}일`, ...customerMonths.map(ym => `고객판매현황 ${ym}`)], warnings, range);
+  }
+  return { count: days.length, date: lastDate, range, customerMonths, warnings };
+}
+
 app.post('/api/daily/upload-bos', upload.single('file'), async (req, res) => {
   if (!req.file) return res.json({ ok: false, error: '파일 없음' });
   try {
-    const days = await parseBosDaily(req.file.path);
-    let lastDate = '';
-    for (const parsed of days) {
-      const existing = readJSON(dailyFile(parsed.date), { date: parsed.date });
-      existing.bos   = parsed;
-      runMatching(existing);
-      writeJSON(dailyFile(parsed.date), existing);
-      lastDate = parsed.date;
-    }
-    // 고객별 판매 집계도 함께 저장
-    try {
-      const monthMap = await parseCustomerSales(req.file.path);
-      saveCustomerSales(monthMap);
-    } catch(_) {}
-    res.json({ ok: true, count: days.length, date: lastDate });
+    const { count, date, warnings } = await ingestBosDaily(req.file);
+    res.json({ ok: true, count, date, warnings });
   } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
@@ -1078,6 +1179,9 @@ app.post('/api/daily/rebuild-customer-sales', async (req, res) => {
   // 기존 customer_sales_*.json 초기화 (깨끗하게 재구축)
   fs.readdirSync(DATA_DIR).filter(f => f.startsWith('customer_sales_') && f.endsWith('.json'))
     .forEach(f => fs.unlinkSync(path.join(DATA_DIR, f)));
+  const coverage = readJSON(BOS_COVERAGE_FILE, {});
+  Object.values(coverage).forEach(c => delete c.customerSales);
+  writeJSON(BOS_COVERAGE_FILE, coverage);
 
   const files = fs.readdirSync(UPLOADS_DIR).filter(f => f.endsWith('.xlsx'));
   const processedMonths = new Set();
@@ -1129,22 +1233,31 @@ function mergeCardSources(sources) {
   return merged;
 }
 
+// 카드 매출 → 일마감 day.cardSources[sourceKey] ('easyshop' | 'nice') → { count, date, range }
+async function ingestCard(file, sourceKey) {
+  const days = await parseEasyshop(file.path);
+  let lastDate = '';
+  for (const parsed of days) {
+    const existing = readJSON(dailyFile(parsed.date), { date: parsed.date });
+    // 출처 구분 없이 저장된 예전 card는 어느 VAN 파일인지 알 수 없으므로 이번 업로드로 교체
+    if (!existing.cardSources) existing.cardSources = {};
+    existing.cardSources[sourceKey] = parsed;
+    existing.card = mergeCardSources(existing.cardSources);
+    runMatching(existing);
+    writeJSON(dailyFile(parsed.date), existing);
+    lastDate = parsed.date;
+  }
+  const dates = days.map(d => d.date).sort();
+  const range = dates.length ? { from: dates[0], to: dates[dates.length - 1] } : null;
+  if (days.length) logUpload(file, `card-${sourceKey}`, [`일마감 카드(${CARD_SOURCE_LABEL[sourceKey] || sourceKey}) ${days.length}일`], [], range);
+  return { count: days.length, date: lastDate, range };
+}
+
 async function saveCardUpload(req, res, sourceKey) {
   if (!req.file) return res.json({ ok: false, error: '파일 없음' });
   try {
-    const days = await parseEasyshop(req.file.path);
-    let lastDate = '';
-    for (const parsed of days) {
-      const existing = readJSON(dailyFile(parsed.date), { date: parsed.date });
-      // 출처 구분 없이 저장된 예전 card는 어느 VAN 파일인지 알 수 없으므로 이번 업로드로 교체
-      if (!existing.cardSources) existing.cardSources = {};
-      existing.cardSources[sourceKey] = parsed;
-      existing.card = mergeCardSources(existing.cardSources);
-      runMatching(existing);
-      writeJSON(dailyFile(parsed.date), existing);
-      lastDate = parsed.date;
-    }
-    res.json({ ok: true, count: days.length, date: lastDate });
+    const { count, date } = await ingestCard(req.file, sourceKey);
+    res.json({ ok: true, count, date });
   } catch (e) { res.json({ ok: false, error: e.message }); }
 }
 
@@ -1183,16 +1296,22 @@ app.get('/api/daily/fifo-prices', (req, res) => {
 });
 
 // ── 탱크 실재고 업로드 (오차 계산용, 영업이익 무관) ──────────────
+// 탱크 실재고량.xlsx → tank_actuals.json (파일이 누적형이라 전체 교체) → { count, from, to }
+function ingestTank(file) {
+  const { parseTankStock } = require('./lib/tankStockParser');
+  const data = parseTankStock(file.path);
+  if (!data.length) throw new Error('파싱 결과가 없습니다. 파일 형식을 확인하세요.');
+  writeJSON(TANK_ACTUALS_FILE, data);
+  const from = data[0].date;
+  const to   = data[data.length - 1].date;
+  logUpload(file, 'tank', [`탱크 실재고 ${data.length}일`], [], { from, to });
+  return { count: data.length, from, to };
+}
+
 app.post('/api/upload-tank-actuals', upload.single('file'), (req, res) => {
   try {
     if (!req.file) return res.json({ ok: false, error: '파일이 없습니다.' });
-    const { parseTankStock } = require('./lib/tankStockParser');
-    const data = parseTankStock(req.file.path);
-    if (!data.length) return res.json({ ok: false, error: '파싱 결과가 없습니다. 파일 형식을 확인하세요.' });
-    writeJSON(TANK_ACTUALS_FILE, data);
-    const from = data[0].date;
-    const to   = data[data.length - 1].date;
-    res.json({ ok: true, count: data.length, from, to });
+    res.json({ ok: true, ...ingestTank(req.file) });
   } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
@@ -1747,30 +1866,39 @@ app.delete('/api/daily/lots', (req, res) => {
 // 출하일자 기준 배차완료 항목만 반영. 이미 입고 이력이 있는 날짜+유종은 건드리지 않고
 // (마감자료 임포트·수동 입력·정산단가 수정 등으로 이미 확정된 값을 보존),
 // 아직 등록되지 않은 날짜+유종만 신규로 추가한다 — 재업로드해도 중복 없음.
+// 정유사 주문목록 → purchase_lots.json 신규 입고만 추가 (같은 날짜·유종은 건너뜀)
+// → { count, skipped, lots, prices?, message? }
+function ingestOrders(file) {
+  const { parseOrderLots } = require('./lib/orderListParser');
+  const parsed = parseOrderLots(file.path);
+  if (!parsed.length) throw new Error('배차 완료된 유류 항목을 찾을 수 없습니다.');
+
+  const lots = readJSON(PURCHASE_LOTS_FILE, []);
+  const existingKeys = new Set(
+    lots.filter(l => l.type !== 'stock' && l.stock == null).map(l => `${l.date}|${l.fuel}`)
+  );
+
+  const newLots = parsed.filter(l => !existingKeys.has(`${l.date}|${l.fuel}`));
+  const skipped = parsed.length - newLots.length;
+  const dates = parsed.map(l => l.date).sort();
+  const range = { from: dates[0], to: dates[dates.length - 1] };
+
+  if (!newLots.length) {
+    logUpload(file, 'orders', ['입고이력 신규 0건'], [], range);
+    return { count: 0, skipped, lots, message: '이미 등록된 입고 내역뿐입니다 (신규 항목 없음).' };
+  }
+
+  const merged = lots.concat(newLots).sort((a, b) => a.date.localeCompare(b.date) || a.fuel.localeCompare(b.fuel));
+  writeJSON(PURCHASE_LOTS_FILE, merged);
+  try { recomputeFifoPrices(); } catch (e2) { console.error('[recomputeFifoPrices]', e2.message); }
+  logUpload(file, 'orders', [`입고이력 신규 ${newLots.length}건`], [], range);
+  return { count: newLots.length, skipped, lots: merged, prices: readJSON(PURCHASE_PRICES_FILE, []) };
+}
+
 app.post('/api/daily/lots/upload-orders', upload.single('file'), (req, res) => {
   try {
     if (!req.file) return res.json({ ok: false, error: '파일이 없습니다.' });
-    const { parseOrderLots } = require('./lib/orderListParser');
-    const parsed = parseOrderLots(req.file.path);
-    if (!parsed.length) return res.json({ ok: false, error: '배차 완료된 유류 항목을 찾을 수 없습니다.' });
-
-    const lots = readJSON(PURCHASE_LOTS_FILE, []);
-    const existingKeys = new Set(
-      lots.filter(l => l.type !== 'stock' && l.stock == null).map(l => `${l.date}|${l.fuel}`)
-    );
-
-    const newLots = parsed.filter(l => !existingKeys.has(`${l.date}|${l.fuel}`));
-    const skipped = parsed.length - newLots.length;
-
-    if (!newLots.length) {
-      return res.json({ ok: true, count: 0, skipped, lots, message: '이미 등록된 입고 내역뿐입니다 (신규 항목 없음).' });
-    }
-
-    const merged = lots.concat(newLots).sort((a, b) => a.date.localeCompare(b.date) || a.fuel.localeCompare(b.fuel));
-    writeJSON(PURCHASE_LOTS_FILE, merged);
-    try { recomputeFifoPrices(); } catch (e2) { console.error('[recomputeFifoPrices]', e2.message); }
-
-    res.json({ ok: true, count: newLots.length, skipped, lots: merged, prices: readJSON(PURCHASE_PRICES_FILE, []) });
+    res.json({ ok: true, ...ingestOrders(req.file) });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -1892,30 +2020,66 @@ function mergeArDeposits(rawDeposits) {
   return { affectedMonths, count: fresh.length };
 }
 
+// 카드사 입금(통장 적요 "삼성13929395" 등) → bank_deposits.json (일마감 카드 입금 대사)
+// 날짜별 카드사별 병합, 재업로드 시 최신값으로 덮어씀 → { dateCount, range }
+function ingestBankCardDeposits(filePath) {
+  const newDeposits = parseBankDeposits(filePath);
+  const existing    = readJSON(BANK_DEPOSITS_FILE, {});
+  for (const [date, cards] of Object.entries(newDeposits)) {
+    if (!existing[date]) existing[date] = {};
+    for (const [card, amt] of Object.entries(cards)) existing[date][card] = amt;
+  }
+  writeJSON(BANK_DEPOSITS_FILE, existing);
+  const dates = Object.keys(newDeposits).sort();
+  return { dateCount: dates.length, range: dates.length ? { from: dates[0], to: dates[dates.length - 1] } : null };
+}
+
+// 통장 수시입출 파일 1개 → 지출목록 + 외상 미수 입금 매칭 + 카드사 입금 대사 (한 번에)
+// → { count, months, ar, cardDeposits, warnings }
+function ingestBank(file) {
+  const { parseBankExpenses, parseBankIncoming } = require('./lib/bankExpenseParser');
+  // 기존 지출목록(이미 계정과목이 확정된 항목들)을 참조로 넘겨 자동 매칭
+  const history = readJSON(EXPENSES_FILE, []);
+  const newItems = parseBankExpenses(file.path, history);
+
+  // 영향을 받는 월 목록
+  const affectedMonths = [...new Set(newItems.map(e => e.month))];
+
+  // expenses.json 에서 source==='bank' 이고 해당 월인 것 제거 후 새 항목 추가
+  let list = history.filter(e => !(e.source === 'bank' && affectedMonths.includes(e.month)));
+  list = list.concat(newItems);
+  writeJSON(EXPENSES_FILE, list);
+
+  const warnings = [];
+  // 같은 파일의 "입금" 쪽 → 외상 미수금 회수 매칭 (월마감 → 미수확인에 반영)
+  let arResult = { affectedMonths: [], count: 0 };
+  try {
+    const incoming = parseBankIncoming(file.path);
+    if (incoming.length) arResult = mergeArDeposits(incoming);
+  } catch (e) {
+    console.error('[ingestBank] AR 입금 매칭 실패:', e.message);
+    warnings.push(`미수 입금 매칭 실패: ${e.message}`);
+  }
+
+  // 같은 파일의 카드사 입금 → 일마감 카드 입금 대사
+  let cardDeposits = { dateCount: 0, range: null };
+  try { cardDeposits = ingestBankCardDeposits(file.path); }
+  catch (e) { warnings.push(`카드사 입금 반영 실패: ${e.message}`); }
+
+  const dates = newItems.map(e => e.date).filter(Boolean).sort();
+  const range = dates.length ? { from: dates[0], to: dates[dates.length - 1] } : cardDeposits.range;
+  logUpload(file, 'bank', [
+    `지출목록 ${newItems.length}건 (${affectedMonths.join(', ')})`,
+    `미수 입금 ${arResult.count}건`,
+    `카드사 입금 ${cardDeposits.dateCount}일`,
+  ], warnings, range);
+  return { count: newItems.length, months: affectedMonths, ar: arResult, cardDeposits, warnings };
+}
+
 app.post('/api/upload-bank-expenses', upload.single('file'), (req, res) => {
   try {
     if (!req.file) return res.json({ ok: false, error: '파일이 없습니다.' });
-    const { parseBankExpenses, parseBankIncoming } = require('./lib/bankExpenseParser');
-    // 기존 지출목록(이미 계정과목이 확정된 항목들)을 참조로 넘겨 자동 매칭
-    const history = readJSON(EXPENSES_FILE, []);
-    const newItems = parseBankExpenses(req.file.path, history);
-
-    // 영향을 받는 월 목록
-    const affectedMonths = [...new Set(newItems.map(e => e.month))];
-
-    // expenses.json 에서 source==='bank' 이고 해당 월인 것 제거 후 새 항목 추가
-    let list = history.filter(e => !(e.source === 'bank' && affectedMonths.includes(e.month)));
-    list = list.concat(newItems);
-    writeJSON(EXPENSES_FILE, list);
-
-    // 같은 파일의 "입금" 쪽 → 외상 미수금 회수 매칭 (월마감 → 설정 탭에 반영)
-    let arResult = { affectedMonths: [], count: 0 };
-    try {
-      const incoming = parseBankIncoming(req.file.path);
-      if (incoming.length) arResult = mergeArDeposits(incoming);
-    } catch (e) { console.error('[upload-bank-expenses] AR 입금 매칭 실패:', e.message); }
-
-    res.json({ ok: true, count: newItems.length, months: affectedMonths, ar: arResult });
+    res.json({ ok: true, ...ingestBank(req.file) });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -3442,17 +3606,8 @@ app.get('/api/daily/:date', (req, res) => {
 app.post('/api/daily/upload-bank', upload.single('file'), (req, res) => {
   if (!req.file) return res.json({ ok: false, error: '파일 없음' });
   try {
-    const newDeposits = parseBankDeposits(req.file.path);
-    const existing    = readJSON(BANK_DEPOSITS_FILE, {});
-    // 날짜별 카드사별 병합
-    for (const [date, cards] of Object.entries(newDeposits)) {
-      if (!existing[date]) existing[date] = {};
-      for (const [card, amt] of Object.entries(cards)) {
-        existing[date][card] = amt; // 덮어쓰기 (재업로드 시 최신값 적용)
-      }
-    }
-    writeJSON(BANK_DEPOSITS_FILE, existing);
-    const dateCount = Object.keys(newDeposits).length;
+    const { dateCount, range } = ingestBankCardDeposits(req.file.path);
+    logUpload(req.file, 'bank-card', [`카드사 입금 ${dateCount}일`], [], range);
     res.json({ ok: true, dateCount });
   } catch (e) { res.json({ ok: false, error: e.message }); }
 });
@@ -4012,6 +4167,227 @@ app.post('/api/completion', (req, res) => {
 });
 
 // ── 전역 에러 핸들러 (try-catch 없는 핸들러 오류 포착) ────────
+// ══════════════════════════════════════════════════════════════
+// 자료 올리기 (통합 업로드) — 파일 종류를 자동 판별해 관련 화면 전부에 반영
+// ══════════════════════════════════════════════════════════════
+const { detectUploadType, DEFAULT_CARD_TERMINALS } = require('./lib/uploadDetector');
+const CARD_TERMINALS_FILE = path.join(DATA_DIR, 'card_terminals.json');   // { 단말기번호: 'easyshop'|'nice' }
+
+function cardTerminalMap() { return { ...DEFAULT_CARD_TERMINALS, ...readJSON(CARD_TERMINALS_FILE, {}) }; }
+
+function rememberTerminals(terminals, source) {
+  if (!terminals?.length) return;
+  const saved = readJSON(CARD_TERMINALS_FILE, {});
+  terminals.forEach(t => { if (!DEFAULT_CARD_TERMINALS[t]) saved[t] = source; });
+  writeJSON(CARD_TERMINALS_FILE, saved);
+}
+
+// 카드 파일 출처 결정: 통합거래조회 = 나이스 양식, 매출자료 = 단말기번호로 구분
+// → 'easyshop' | 'nice' | null(사용자 선택 필요)
+function resolveCardSource(det) {
+  if (det.type === 'card-integrated') return 'nice';
+  const map = cardTerminalMap();
+  const srcs = new Set((det.terminals || []).map(t => map[t]).filter(Boolean));
+  const unknown = (det.terminals || []).filter(t => !map[t]);
+  if (srcs.size === 1 && !unknown.length) return [...srcs][0];
+  if (!srcs.size && det.range?.to && det.range.to < NICE_START_DATE) return 'easyshop';   // 나이스 사용 전
+  return null;
+}
+
+const CARD_SOURCE_NAME = { easyshop: '이지샵 (세차·유외)', nice: '나이스 (유류)' };
+
+// 판별된 파일 1개 처리 → { ok, targets[], warnings[], months?, dates? , error?, needsChoice? }
+async function ingestDetected(file, det, opts = {}) {
+  const r = { ok: true, targets: [], warnings: [], months: [], dates: [] };
+  const addMonths = range => { if (range) r.dates.push(range.from, range.to); };
+  switch (det.type) {
+    case 'bos-sales': {
+      const d = await ingestBosDaily(file);
+      r.targets.push(`일마감 ${d.count}일`);
+      d.customerMonths.forEach(ym => r.targets.push(`고객판매현황 ${ym}`));
+      r.warnings.push(...d.warnings);
+      const v = await ingestBosVendors(file);
+      v.savedMonths.forEach(ym => r.targets.push(`거래명세서·미수 ${ym}`));
+      r.warnings.push(...v.warnings);
+      r.months = [...new Set([...d.customerMonths, ...v.savedMonths])];
+      addMonths(d.range);
+      break;
+    }
+    case 'bos-integrated': {
+      const d = await ingestBosDaily(file);
+      r.targets.push(`일마감 ${d.count}일`);
+      d.customerMonths.forEach(ym => r.targets.push(`고객판매현황 ${ym}`));
+      r.warnings.push(...d.warnings, '이 형식(거래내역)은 업체명 칸이 달라 거래명세서·미수에는 반영되지 않습니다. 거래명세서용은 "판매전표 상세조회"로 받아 주세요.');
+      addMonths(d.range);
+      break;
+    }
+    case 'card-sales':
+    case 'card-integrated': {
+      const source = opts.cardSource || resolveCardSource(det);
+      if (!source) {
+        return { ok: false, needsChoice: 'card-source', terminals: det.terminals,
+                 targets: [], warnings: [`처음 보는 단말기(${(det.terminals || []).join(', ') || '번호 없음'})입니다. 이지샵/나이스 중 골라 주세요.`] };
+      }
+      if (opts.cardSource) rememberTerminals(det.terminals, source);
+      const c = await ingestCard(file, source);
+      r.targets.push(`일마감 카드 ${CARD_SOURCE_NAME[source]} ${c.count}일`);
+      r.cardSource = source;
+      addMonths(c.range);
+      break;
+    }
+    case 'bank': {
+      const b = ingestBank(file);
+      r.targets.push(`지출목록 ${b.count}건`, `미수 입금 ${b.ar.count}건`, `카드사 입금 대사 ${b.cardDeposits.dateCount}일`);
+      r.warnings.push(...b.warnings);
+      r.months = b.months;
+      break;
+    }
+    case 'tank': {
+      const t = ingestTank(file);
+      r.targets.push(`탱크 실재고 ${t.count}일 (${t.from} ~ ${t.to})`);
+      break;
+    }
+    case 'orders': {
+      const o = ingestOrders(file);
+      r.targets.push(`입고이력 신규 ${o.count}건${o.skipped ? ` (이미 있는 ${o.skipped}건 제외)` : ''}`);
+      break;
+    }
+    case 'deposit-bos': {
+      const x = ingestDepositBos(file);
+      r.targets.push(`입금검증 BOS 시재 ${x.count}건`);
+      break;
+    }
+    case 'deposit-easy': {
+      const x = ingestDepositEasy(file);
+      r.targets.push(`입금검증 이지샵 입금 ${x.count}건`);
+      break;
+    }
+    case 'management':
+      return { ok: false, skipped: true, targets: [], warnings: ['마감자료는 입고이력·FIFO 단가 전체를 교체하므로 자동 반영하지 않습니다. 일마감 → 입고이력의 "마감자료 업로드"를 쓰세요.'] };
+    case 'customers':
+      return { ok: false, skipped: true, targets: [], warnings: ['고객등록 양식은 월마감 → 고객 관리 탭의 "Excel 가져오기"로 올려 주세요.'] };
+    default:
+      return { ok: false, skipped: true, targets: [], warnings: ['어떤 자료인지 알 수 없는 파일입니다. 해당 탭의 개별 업로드 버튼을 쓰세요.'] };
+  }
+  return r;
+}
+
+// POST /api/upload/auto  files[] — 여러 파일 한꺼번에
+app.post('/api/upload/auto', upload.array('files', 20), async (req, res) => {
+  const files = req.files || [];
+  if (!files.length) return res.json({ ok: false, error: '파일이 없습니다. (엑셀 .xlsx/.xls만 받습니다)' });
+  // BOS → 카드 → 그 밖 순서로 처리 (카드 대사가 BOS를 먼저 보도록)
+  const rank = { 'bos-sales': 0, 'bos-integrated': 0, 'card-sales': 1, 'card-integrated': 1 };
+  const detected = [];
+  for (const f of files) {
+    try { detected.push({ f, det: await detectUploadType(f.path) }); }
+    catch (e) { detected.push({ f, det: { type: 'error', label: '파일 열기 실패' }, error: e.message }); }
+  }
+  detected.sort((a, b) => (rank[a.det.type] ?? 2) - (rank[b.det.type] ?? 2));
+
+  const results = [];
+  for (const { f, det, error } of detected) {
+    const base = { file: uploadOriginalName(f), saved: path.basename(f.path), type: det.type, label: det.label, range: det.range || null };
+    if (error) { results.push({ ...base, ok: false, error }); continue; }
+    try { results.push({ ...base, ...(await ingestDetected(f, det)) }); }
+    catch (e) { results.push({ ...base, ok: false, error: e.message, targets: [], warnings: [] }); }
+  }
+  res.json({ ok: true, results });
+});
+
+// POST /api/upload/auto/resolve { saved, cardSource } — 단말기 선택이 필요했던 카드 파일 마저 처리
+app.post('/api/upload/auto/resolve', async (req, res) => {
+  const { saved, cardSource } = req.body || {};
+  if (!/^upload_\d+\.xlsx$/.test(saved || '') || !['easyshop', 'nice'].includes(cardSource)) {
+    return res.status(400).json({ ok: false, error: '잘못된 요청입니다.' });
+  }
+  const filePath = path.join(UPLOADS_DIR, saved);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ ok: false, error: '업로드 파일을 찾을 수 없습니다. 다시 올려 주세요.' });
+  try {
+    const det  = await detectUploadType(filePath);
+    const file = { path: filePath, originalname: Buffer.from(req.body.file || saved, 'utf8').toString('latin1') };
+    const r = await ingestDetected(file, det, { cardSource });
+    res.json({ ok: true, result: { file: req.body.file || saved, saved, type: det.type, label: det.label, range: det.range || null, ...r } });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
+// GET /api/upload/status — 자료별 최신 기간 + 마지막 업로드
+app.get('/api/upload/status', (req, res) => {
+  try {
+    const { getDataStatus } = require('./lib/consistencyCheck');
+    res.json({ ok: true, ...getDataStatus({ dataDir: DATA_DIR }), recent: readJSON(UPLOAD_LOG_FILE, []).slice(-15).reverse() });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ── 정합성 점검 ───────────────────────────────────────────────
+// 지금 데이터로 거래명세서를 만들면 나올 업체별 총합계 (/api/generate와 같은 경로)
+function expectedStatementTotals(ym) {
+  const [year, month] = ym.split('-');
+  const vendors   = getVendors(year, month);
+  const customers = readJSON(CUSTOMERS_FILE, []);
+  const merges    = getStatementMerges(year, month);
+  const out = new Map();
+  for (const raw of vendors) {
+    if (merges[raw.name]) continue;   // 다른 업체 명세서에 합산되는 업체
+    const v0 = withStatementCard(raw);
+    if (!v0?.hasCredit) continue;
+    let v = buildStatementVendor(v0, vendors, merges);
+    if (isStatementNonFuelOnly(v.name)) v = filterStatementScope(v, statementScopeOf(v.name, customers));
+    if (!v.hasCredit) continue;
+    out.set(v.name, { total: (v.txs || []).reduce((s, t) => s + (Number(t.amount) || 0), 0) });
+  }
+  return out;
+}
+
+// 생성된 거래명세서 첫 시트의 "총합계" 판매금액(P열)
+async function readStatementTotal(filePath) {
+  try {
+    const ExcelJS = require('exceljs');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(filePath);
+    const ws = wb.worksheets[0];
+    let total = null;
+    ws.eachRow(row => { if (String(row.getCell(1).value || '').trim() === '총합계') total = Number(row.getCell(16).value) || 0; });
+    return total;
+  } catch (_) { return null; }
+}
+
+function arAllocationSummary() {
+  const { buildArMatrix, allocateArDeposits } = require('./lib/arLedger');
+  const arMatrix = buildArMatrix(DATA_DIR);
+  const alloc    = allocateArDeposits(arMatrix, loadArDepositsWithCards(), loadArManualPaidSet(), loadArDiscountVendors());
+  return [...arMatrix.byVendor.keys()].map(name => ({ name, months: alloc[name]?.months || [] }));
+}
+
+// GET /api/statements/stale?year=&month= — 지금 데이터와 다른 거래명세서 파일 (발행 목록 배지용)
+app.get('/api/statements/stale', async (req, res) => {
+  try {
+    const ym = `${req.query.year}-${String(req.query.month).padStart(2, '0')}`;
+    if (!/^\d{4}-\d{2}$/.test(ym)) return res.status(400).json({ ok: false, error: 'year, month 필요' });
+    const { findStaleStatements } = require('./lib/consistencyCheck');
+    const { stale } = await findStaleStatements({ outputDir: OUTPUT_DIR, expectedStatements: expectedStatementTotals, readStatementTotal }, ym);
+    res.json({ ok: true, stale });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// GET /api/consistency?month=YYYY-MM (없으면 이번 달)
+app.get('/api/consistency', async (req, res) => {
+  try {
+    const now = new Date();
+    const ym = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month
+      : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const { runConsistency } = require('./lib/consistencyCheck');
+    const result = await runConsistency({
+      dataDir: DATA_DIR, outputDir: OUTPUT_DIR,
+      expectedStatements: expectedStatementTotals, readStatementTotal, arSummary: arAllocationSummary,
+    }, ym);
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    console.error('[consistency]', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 app.use((err, req, res, next) => {
   console.error('[Express Error]', req.method, req.path, err.message);
   res.status(500).json({ ok: false, error: '서버 오류: ' + err.message });
@@ -4027,37 +4403,50 @@ const DEPOSIT_BOS_FILE  = path.join(DATA_DIR, 'deposit_bos.json');
 const DEPOSIT_EASY_FILE = path.join(DATA_DIR, 'deposit_easy.json');
 
 // BOS 시재현황 업로드
+// BOS 시재현황 → deposit_bos.json (입금검증 탭, 전체 교체) → { count, cards, from, to }
+function ingestDepositBos(file) {
+  const { parseBosDeposit } = require('./lib/depositVerifyParser');
+  const data = parseBosDeposit(file.path);
+  if (!data.length) throw new Error('BOS 시재현황 파싱 실패. 파일 형식 확인 요망.');
+  writeJSON(DEPOSIT_BOS_FILE, data);
+  const cards = [...new Set(data.map(r => r.card))];
+  const allDates = data.map(r => r.date).filter(Boolean).sort();
+  const from = allDates[0], to = allDates[allDates.length - 1];
+  logUpload(file, 'deposit-bos', [`입금검증 BOS 시재 ${data.length}건`], [], { from, to });
+  return { count: data.length, cards, from, to };
+}
+
 app.post('/api/deposit/upload-bos', upload.single('file'), (req, res) => {
   try {
     if (!req.file) return res.json({ ok: false, error: '파일이 없습니다.' });
-    const { parseBosDeposit } = require('./lib/depositVerifyParser');
-    const data = parseBosDeposit(req.file.path);
-    if (!data.length) return res.json({ ok: false, error: 'BOS 시재현황 파싱 실패. 파일 형식 확인 요망.' });
-    writeJSON(DEPOSIT_BOS_FILE, data);
-    const cards = [...new Set(data.map(r => r.card))];
-    const allDates = data.map(r => r.date).filter(Boolean).sort();
-    const dates = [allDates[0], allDates[allDates.length - 1]];
-    res.json({ ok: true, count: data.length, cards, from: dates[0], to: dates[1] });
+    res.json({ ok: true, ...ingestDepositBos(req.file) });
   } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
 // 이지샵 입금내역 업로드 (여러 파일 → 누적 저장)
+// 이지샵 입금내역 → deposit_easy.json 누적 (날짜+카드 기준 교체) → { count, total }
+function ingestDepositEasy(file) {
+  const { parseEasyshopDeposit } = require('./lib/depositVerifyParser');
+  const newData = parseEasyshopDeposit(file.path);
+  if (!newData.length) throw new Error('이지샵 입금내역 파싱 실패.');
+  // 기존 데이터와 병합 (날짜+카드 기준 중복 제거)
+  const existing = readJSON(DEPOSIT_EASY_FILE, []);
+  const merged = [...existing];
+  for (const row of newData) {
+    const idx = merged.findIndex(r => r.date === row.date && r.card === row.card);
+    if (idx >= 0) merged[idx] = row; else merged.push(row);
+  }
+  merged.sort((a, b) => a.date.localeCompare(b.date) || a.card.localeCompare(b.card));
+  writeJSON(DEPOSIT_EASY_FILE, merged);
+  const dates = newData.map(r => r.date).sort();
+  logUpload(file, 'deposit-easy', [`입금검증 이지샵 ${newData.length}건`], [], { from: dates[0], to: dates[dates.length - 1] });
+  return { count: newData.length, total: merged.length };
+}
+
 app.post('/api/deposit/upload-easy', upload.single('file'), (req, res) => {
   try {
     if (!req.file) return res.json({ ok: false, error: '파일이 없습니다.' });
-    const { parseEasyshopDeposit } = require('./lib/depositVerifyParser');
-    const newData = parseEasyshopDeposit(req.file.path);
-    if (!newData.length) return res.json({ ok: false, error: '이지샵 입금내역 파싱 실패.' });
-    // 기존 데이터와 병합 (날짜+카드 기준 중복 제거)
-    const existing = readJSON(DEPOSIT_EASY_FILE, []);
-    const merged = [...existing];
-    for (const row of newData) {
-      const idx = merged.findIndex(r => r.date === row.date && r.card === row.card);
-      if (idx >= 0) merged[idx] = row; else merged.push(row);
-    }
-    merged.sort((a, b) => a.date.localeCompare(b.date) || a.card.localeCompare(b.card));
-    writeJSON(DEPOSIT_EASY_FILE, merged);
-    res.json({ ok: true, count: newData.length, total: merged.length });
+    res.json({ ok: true, ...ingestDepositEasy(req.file) });
   } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
@@ -4107,5 +4496,6 @@ app.delete('/api/deposit/reset', (req, res) => {
 app.listen(PORT, () => {
   console.log('\n✅  주유소 자동화 웹앱 실행 중');
   console.log(`    브라우저에서 열기 → http://localhost:${PORT}\n`);
-  opinet.scheduleDaily(DATA_DIR, kakaoDaily);
+  // NO_SCHEDULE=1: 테스트 서버에서 오피넷 조회·카카오톡 발송 안 함
+  if (!process.env.NO_SCHEDULE) opinet.scheduleDaily(DATA_DIR, kakaoDaily);
 });

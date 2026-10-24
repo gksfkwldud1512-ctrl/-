@@ -22,6 +22,16 @@ function readExcelRows(filePath) {
     .filter(r => r[0] != null);
 }
 
+// readExcelRows와 같지만 암호 걸린 파일도 자동 해제 (통합 업로드·월마감 업로드용)
+async function readExcelRowsAuto(filePath) {
+  const { readWorkbookAuto } = require('./xlsxReader');
+  const wb = await readWorkbookAuto(filePath);
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws, { header: 1 })
+    .slice(3)
+    .filter(r => r[0] != null);
+}
+
 // rows(위 readExcelRows 결과)로부터 업체별 집계 생성.
 // 여러 달이 섞인 파일에서 특정 월만 뽑아 재구성할 때 등 rows를 미리 필터링해서 넘길 수 있음.
 // opts.keepCardTxsFor: 외상 아닌(카드 등) 거래도 cardTxs에 보관할 업체명 Set — 거래명세서용
@@ -212,4 +222,4 @@ function parseExcelRows(filePath, sheetName) {
   return XLSX.utils.sheet_to_json(ws, { defval: '' });
 }
 
-module.exports = { parseExcel, parseDeliveryExcel, parseExcelRows, readExcelRows, buildVendorsFromRows };
+module.exports = { parseExcel, parseDeliveryExcel, parseExcelRows, readExcelRows, readExcelRowsAuto, buildVendorsFromRows };

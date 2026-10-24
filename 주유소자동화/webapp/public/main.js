@@ -52,6 +52,7 @@ window.addEventListener('DOMContentLoaded', () => {
   switchGroup(startGroup);
   initFileUpload();
   initDailyUpload();
+  initUploadModal();
   initEmailPreview();
   loadAll();
   loadDailyPurchasePrices();
@@ -281,6 +282,7 @@ async function loadAll() {
   }
 
   renderAll();
+  loadStaleStatements();
 }
 
 async function loadForMonth() {
@@ -297,6 +299,7 @@ async function loadForMonth() {
   if (compRes.ok) state.completion    = compRes.completion;
   if (profRes.ok) state.monthlyProfit = profRes;
   renderAll();
+  loadStaleStatements();
 }
 
 // ── 렌더링 ──────────────────────────────────────────────────
@@ -543,6 +546,9 @@ function renderVendors() {
           ? (stmtDone
               ? '<span class="badge badge-done">완료</span>'
               : '<span class="badge badge-ok">생성됨</span>')
+            + (state.staleStatements?.[v.name]
+              ? `<span class="badge-stale" title="명세서 파일 ${state.staleStatements[v.name].fileTotal.toLocaleString()}원 / 지금 데이터 ${state.staleStatements[v.name].dataTotal.toLocaleString()}원 — BOS 자료가 바뀌었습니다">⚠ 다시 생성</span>`
+              : '')
           : '<span class="badge badge-no">미생성</span>')
       : '<span class="badge" style="background:#f1f5f9;color:#94a3b8">해당없음</span>';
 
@@ -881,6 +887,7 @@ async function generateSelected() {
     if (fRes.ok)    state.files      = fRes.files;
     if (compRes.ok) state.completion = compRes.completion;
     renderAll();
+    loadStaleStatements();
   } else {
     toast(`오류: ${res.error}`, 'error');
   }
@@ -1117,6 +1124,8 @@ async function uploadExcel(file) {
       if (data.savedMonths && data.savedMonths.length > 1) {
         setTimeout(() => toast(`📅 파일에 여러 달 데이터가 있어 ${data.savedMonths.join(', ')} 각각에 자동 반영했습니다.`, 'success'), 1800);
       }
+      // 부분 기간·옛 파일이라 건너뛴 달
+      (data.warnings || []).forEach((w, i) => setTimeout(() => toast(`⚠ ${w}`, 'warn'), 2600 + i * 1500));
 
       const [mRes, fRes, profRes] = await Promise.all([
         api('GET', `/api/monthly-status?year=${state.year}`),
@@ -1329,6 +1338,7 @@ async function uploadBos(file) {
     if (data.ok) {
       const label = data.count > 1 ? `${data.count}일치` : data.date;
       toast(`✅ BOS 데이터 업로드 완료 (${label})`, 'success');
+      (data.warnings || []).forEach((w, i) => setTimeout(() => toast(`⚠ ${w}`, 'warn'), 1500 + i * 1500));
       switchToUploadedMonth(data.date);
       await loadDailyMonth();
     } else {
@@ -2825,6 +2835,7 @@ async function rebuildCustomerSales() {
 
 async function loadSummary() {
   const ym = `${summaryState.year}-${String(summaryState.month).padStart(2,'0')}`;
+  loadConsistency(ym);
   const res = await api('GET', `/api/summary/${ym}`);
   if (res.ok) renderSummary(res);
   loadStockVariance();
@@ -3522,8 +3533,9 @@ async function uploadBankExpenses(file) {
     const data = await res.json();
     if (data.ok) {
       label.textContent = `✅ ${data.count}건 (${(data.months || []).join(', ')})`;
-      toast(`✅ 수시입출예금 ${data.count}건 지출 임포트 완료`, 'success');
+      toast(`✅ 지출 ${data.count}건 · 미수 입금 ${data.ar?.count || 0}건 · 카드사 입금 ${data.cardDeposits?.dateCount || 0}일 반영`, 'success');
       loadAllExpenses();
+      loadBankDeposits();
     } else {
       label.textContent = '업로드 실패';
       toast(`오류: ${data.error}`, 'error');
@@ -5279,4 +5291,194 @@ async function vatSetEFiling(on) {
   const res = await api('POST', '/api/vat/settings', { eFilingCredit: on });
   if (!res.ok) { toast(res.error || '저장 실패', 'error'); return; }
   loadVat();
+}
+
+// ══════════════════════════════════════════════════════════════
+// 📥 자료 올리기 (통합 업로드) — /api/upload/auto
+// ══════════════════════════════════════════════════════════════
+const UPLOAD_KIND_LABEL = {
+  'bos-sales': 'BOS 판매전표', 'bos-integrated': 'BOS 거래내역', 'card-sales': '카드 매출자료',
+  'card-integrated': '나이스 통합거래조회', bank: '통장', tank: '탱크 실재고', orders: '주문목록',
+  'deposit-bos': 'BOS 시재현황', 'deposit-easy': '이지샵 입금내역', management: '마감자료',
+  customers: '고객등록 양식', unknown: '알 수 없음', error: '열기 실패',
+};
+
+function initUploadModal() {
+  const input = document.getElementById('upload-auto-input');
+  const drop  = document.getElementById('upload-drop');
+  if (!input || !drop) return;
+  input.addEventListener('change', e => {
+    if (e.target.files.length) uploadAutoFiles([...e.target.files]);
+    e.target.value = '';
+  });
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => {
+    e.preventDefault(); drop.classList.add('dragover');
+  }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => {
+    e.preventDefault(); drop.classList.remove('dragover');
+  }));
+  drop.addEventListener('drop', e => {
+    const files = [...(e.dataTransfer?.files || [])].filter(f => /\.(xlsx|xls)$/i.test(f.name));
+    if (files.length) uploadAutoFiles(files);
+    else toast('엑셀 파일(.xlsx, .xls)만 올릴 수 있습니다.', 'warn');
+  });
+}
+
+function openUploadModal() {
+  document.getElementById('upload-modal').style.display = 'flex';
+  loadUploadStatus();
+}
+
+function closeUploadModal() {
+  document.getElementById('upload-modal').style.display = 'none';
+}
+
+const fmtRange = r => r ? (r.from === r.to ? r.from : `${r.from} ~ ${r.to}`) : '';
+
+function uploadResultHtml(r, idx) {
+  const cls = r.pending ? 'pending' : r.needsChoice ? 'warn' : !r.ok ? 'fail' : (r.warnings || []).length ? 'warn' : 'ok';
+  const icon = r.pending ? '⏳' : r.needsChoice ? '❓' : !r.ok ? (r.skipped ? '⏭' : '❌') : (r.warnings || []).length ? '⚠️' : '✅';
+  const lines = [
+    ...(r.targets || []).map(t => `<li>${esc(t)} 반영</li>`),
+    ...(r.warnings || []).map(w => `<li class="warn-line">⚠ ${esc(w)}</li>`),
+    ...(r.error ? [`<li class="err-line">${esc(r.error)}</li>`] : []),
+  ];
+  const choice = r.needsChoice === 'card-source' ? `
+    <div class="upload-choice">이 카드 파일은 어느 단말기 자료인가요? (한 번 고르면 다음부터 자동)
+      <button class="btn-upload btn-teal" onclick="resolveUploadCard(${idx}, 'easyshop')">이지샵 (세차·유외)</button>
+      <button class="btn-upload" style="background:#4f46e5;border-color:#4f46e5;" onclick="resolveUploadCard(${idx}, 'nice')">나이스 (유류)</button>
+    </div>` : '';
+  return `<div class="upload-result ${cls}">
+    <div class="upload-result-title">${icon} ${esc(r.file)}
+      ${r.type ? `<span class="kind">${esc(UPLOAD_KIND_LABEL[r.type] || r.label || r.type)}</span>` : ''}
+      ${r.range ? `<span class="range">${esc(fmtRange(r.range))}</span>` : ''}
+    </div>
+    ${lines.length ? `<ul>${lines.join('')}</ul>` : ''}${choice}
+  </div>`;
+}
+
+let uploadResults = [];
+function renderUploadResults() {
+  document.getElementById('upload-results').innerHTML = uploadResults.map(uploadResultHtml).join('');
+}
+
+async function uploadAutoFiles(files) {
+  uploadResults = files.map(f => ({ file: f.name, pending: true, targets: ['판별·반영 중…'] }));
+  renderUploadResults();
+  const form = new FormData();
+  files.forEach(f => form.append('files', f));
+  try {
+    const res  = await fetch('/api/upload/auto', { method: 'POST', body: form });
+    const data = await res.json();
+    if (!data.ok) {
+      uploadResults = [{ file: files.map(f => f.name).join(', '), ok: false, error: data.error }];
+    } else {
+      uploadResults = data.results;
+    }
+  } catch (e) {
+    uploadResults = [{ file: files.map(f => f.name).join(', '), ok: false, error: `서버 연결 오류: ${e.message}` }];
+  }
+  renderUploadResults();
+  const okCount = uploadResults.filter(r => r.ok).length;
+  if (okCount) toast(`✅ ${okCount}개 파일 반영 완료`, 'success');
+  await afterAutoUpload();
+}
+
+async function resolveUploadCard(idx, cardSource) {
+  const r = uploadResults[idx];
+  if (!r) return;
+  uploadResults[idx] = { ...r, pending: true, needsChoice: null, warnings: [], targets: ['반영 중…'] };
+  renderUploadResults();
+  const res = await api('POST', '/api/upload/auto/resolve', { saved: r.saved, file: r.file, cardSource });
+  uploadResults[idx] = res.ok ? res.result : { ...r, ok: false, pending: false, error: res.error };
+  renderUploadResults();
+  await afterAutoUpload();
+}
+
+// 올린 뒤: 자료 현황 + 지금 보고 있는 화면 새로고침 (기존 로드 함수 그대로 사용)
+async function afterAutoUpload() {
+  loadUploadStatus();
+  const group = document.querySelector('.main-tab.active')?.dataset.group;
+  try {
+    await loadBankDeposits();
+    if (group === 'daily') {
+      const lastDate = uploadResults.flatMap(r => r.dates || []).filter(Boolean).sort().pop();
+      if (lastDate) switchToUploadedMonth(lastDate);
+      await loadDailyMonth();
+      const tab = document.querySelector('#subnav-daily .tab-btn.active')?.dataset.tab;
+      if (tab === 'daily-expense') loadAllExpenses();
+    } else if (group === 'monthly') {
+      await loadForMonth();
+      loadStaleStatements();
+    } else if (group === 'summary') {
+      loadSummary();
+    }
+  } catch (e) { console.error('[afterAutoUpload]', e); }
+}
+
+async function loadUploadStatus() {
+  const el = document.getElementById('upload-status');
+  if (!el) return;
+  const res = await api('GET', '/api/upload/status');
+  if (!res.ok) { el.innerHTML = `<div class="muted">자료 현황을 불러오지 못했습니다: ${esc(res.error || '')}</div>`; return; }
+  const fmtAt = iso => iso ? new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
+  const rows = res.items.map(it => `
+    <tr class="${it.stale ? 'stale' : ''}">
+      <td><strong>${esc(it.label)}</strong><div class="muted">${esc(it.where)}</div></td>
+      <td class="num">${it.dataTo ? `${esc(it.dataTo)}까지` : (it.note ? esc(it.note) : '<span class="muted">없음</span>')}
+        ${it.dataTo && it.lagDays > 0 ? `<div class="muted">${it.lagDays}일 전</div>` : ''}</td>
+      <td class="num">${fmtAt(it.uploadedAt)}${it.uploadedFile ? `<div class="muted">${esc(it.uploadedFile)}</div>` : ''}</td>
+      <td class="muted">${it.dataTo && it.note ? esc(it.note) : ''}</td>
+    </tr>`).join('');
+  el.innerHTML = `<table class="status-table">
+    <thead><tr><th>자료</th><th>데이터 기간</th><th>마지막 업로드</th><th>참고</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// 데이터 점검 (종합 탭) — /api/consistency
+// ══════════════════════════════════════════════════════════════
+const CHECK_LEVEL_LABEL = { error: '확인 필요', warn: '주의', ok: '정상', info: '참고' };
+
+async function loadConsistency(ym) {
+  const el = document.getElementById('consistency-card');
+  if (!el) return;
+  el.innerHTML = `<div class="check-head"><h2>🔎 ${esc(ym)} 데이터 점검</h2><span class="muted">확인 중…</span></div>`;
+  const res = await api('GET', `/api/consistency?month=${ym}`);
+  if (!res.ok) { el.innerHTML = `<div class="check-head"><h2>🔎 데이터 점검</h2><span class="err-line">${esc(res.error || '실패')}</span></div>`; return; }
+  const pills = ['error', 'warn', 'ok'].filter(l => res.counts[l])
+    .map(l => `<span class="check-pill ${l}">${CHECK_LEVEL_LABEL[l]} ${res.counts[l]}</span>`).join('');
+  const item = c => `
+    <details class="check-item"${c.level === 'error' ? ' open' : ''}>
+      <summary>
+        <span class="check-dot ${c.level}"></span>
+        <span class="check-title">${esc(c.title)}</span>
+        <span class="check-summary">${esc(c.summary)}</span>
+        ${c.level !== 'ok' && c.tab ? `<button class="check-go" onclick="event.preventDefault();goToCheckTab('${c.tab}')">바로가기</button>` : ''}
+      </summary>
+      ${c.items?.length ? `<ul class="check-detail">${c.items.map(i => `<li>${esc(i.text)}</li>`).join('')}</ul>` : ''}
+    </details>`;
+  const problems = res.checks.filter(c => c.level !== 'ok');
+  const oks      = res.checks.filter(c => c.level === 'ok');
+  el.innerHTML = `
+    <div class="check-head">
+      <h2>🔎 ${esc(ym)} 데이터 점검</h2>
+      <div class="check-pills">${pills}</div>
+      <button class="check-go" style="margin-left:auto" onclick="openUploadModal()">📥 자료 올리기 · 자료 현황</button>
+    </div>
+    <div class="check-list">${problems.map(item).join('')}</div>
+    ${oks.length ? `<details class="check-ok-fold"><summary>정상 항목 ${oks.length}개 보기</summary><div class="check-list">${oks.map(item).join('')}</div></details>` : ''}`;
+}
+
+function goToCheckTab(tab) {
+  if (tab.startsWith('daily-')) { switchGroup('daily'); switchDailySubTab(tab); }
+  else { switchGroup('monthly'); switchSubTab(tab); }
+}
+
+// ── 거래명세서 목록: 지금 데이터와 금액이 다른(다시 만들어야 하는) 명세서 ──
+async function loadStaleStatements() {
+  const res = await api('GET', `/api/statements/stale?year=${state.year}&month=${state.month}`);
+  state.staleStatements = {};
+  if (res.ok) res.stale.forEach(s => { state.staleStatements[s.name] = s; });
+  renderVendors();
 }
