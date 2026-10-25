@@ -4383,6 +4383,23 @@ const AR_STATUS_STYLE = {
   'card-wait':    { text: '☐ 받음 체크', color: '#be185d', bg: '#fdf2f8' },
 };
 
+// 마감일 업체: "6/26~7/25" 기간 표시, 입금 예정일·실제 입금일
+const arMd = ymd => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}`;
+function arPeriodLabel(m) { return m?.period ? `${arMd(m.period.from)}~${arMd(m.period.to)}` : ''; }
+function arPaidDates(allocations, month) {
+  return [...new Set((allocations || []).filter(a => (a.appliedTo || []).some(t => t.month === month)).map(a => a.date))].sort();
+}
+function arDueLine(m, allocations) {
+  if (!m?.dueDate) return '';
+  const paid = arPaidDates(allocations, m.month);
+  if (paid.length) {
+    // 입금일이 주말·공휴일이면 며칠 늦게 들어옴 — 4일 넘게 늦을 때만 표시
+    const lateDays = Math.round((new Date(paid[paid.length - 1]) - new Date(m.dueDate)) / 86400000);
+    return `${paid.map(arMd).join('·')} 입금${lateDays > 4 ? ` ⚠ 예정(${arMd(m.dueDate)})보다 ${lateDays}일 늦음` : ''}`;
+  }
+  return `${arMd(m.dueDate)} 입금 예정`;
+}
+
 function arCellState(vendorName, m) {
   if (!m || !(m.charge > 0)) return null;
   if (m.remaining <= 0 || m.status === 'done' || m.status === 'discount') {
@@ -4506,6 +4523,7 @@ function renderArVendorTable() {
             <td style="padding:6px;position:sticky;left:0;background:#fff;cursor:pointer;" onclick="openArReview('${vName}')" title="클릭: 업체별 점검 (결제 특징·월별 대조)">
               ${v.payType === 'card' ? '<span class="ar-pay-tag card">카드</span>' : v.payType === 'other' ? '<span class="ar-pay-tag other">기타</span>' : !v.payType ? '<span class="ar-pay-tag none">미정</span>' : ''}
               <span style="text-decoration:underline dotted;">${esc(v.name)}</span>
+              ${v.cutoffDay ? `<span class="ar-pay-tag other" title="거래 기간 ${v.cutoffDay + 1}일~다음달 ${v.cutoffDay}일${v.payDay ? ', 다음달 ' + v.payDay + '일 입금' : ''}">${v.cutoffDay}일 마감</span>` : ''}
               ${v.profileConfirmed ? '<span class="ar-confirmed" title="업체별 점검에서 확정">✓</span>' : ''}
               ${infoCount ? `<span style="font-size:10px;color:#64748b;background:#f1f5f9;border-radius:8px;padding:0 6px;margin-left:4px;">정보 ${infoCount}</span>` : ''}
               ${v.unresolved?.length ? '<span style="font-size:10px;color:#d97706;margin-left:2px;">⚠</span>' : ''}
@@ -4526,8 +4544,10 @@ function renderArVendorTable() {
               return `<td style="padding:4px 6px;text-align:right;${cellBorder}cursor:pointer;background:${st.bg};"
                           title="${v.payType === 'card' ? '클릭: 카드 받음 체크/해제' : '클릭: 입금 상세·확인 처리'}"
                           onclick="${v.payType === 'card' ? `toggleArCardReceived('${vName}','${m}')` : `showArDepositModal('${vName}','${m}')`}">
+                  ${d.period ? `<div style="font-size:10px;color:#64748b;" title="마감 기간">${arPeriodLabel(d)}</div>` : ''}
                   <div>${d.charge.toLocaleString()}</div>
                   <div style="font-size:10px;font-weight:700;color:${st.color};">${st.text}</div>
+                  ${d.dueDate ? `<div style="font-size:10px;color:#64748b;">${arDueLine(d, v.allocations)}</div>` : ''}
                 </td>`;
             }).join('')}
             <td style="padding:4px 6px;text-align:right;${cellBorder}">
@@ -5779,11 +5799,12 @@ function renderArReviewDetail() {
     const deps = (byMonth[m.month] || []).map(a => depById[a.depositId]).filter(Boolean);
     const uniq = [...new Map(deps.map(d => [d.id, d])).values()];
     return `<tr>
-      <td class="c">${Number(m.month.slice(5))}월</td>
+      <td class="c">${Number(m.month.slice(5))}월${m.period ? `<div class="muted" style="font-size:11px;">${arPeriodLabel(m)}</div>` : ''}</td>
       <td class="n">${m.charge.toLocaleString()}</td>
       <td class="n">${m.paid ? m.paid.toLocaleString() : '-'}</td>
       <td class="n ${m.remaining > 100 ? 'neg' : ''}">${m.remaining > 100 ? m.remaining.toLocaleString() : m.remaining < -100 ? '+' + (-m.remaining).toLocaleString() : '0'}</td>
       <td><span class="ar-st" style="color:${s.color};background:${s.bg};">${m.manualPaidCard ? '☑ 받음' : s.text}</span>
+        ${m.dueDate ? `<div class="muted" style="font-size:11px;">${arDueLine(m, r.allocations)}</div>` : ''}
         ${isCard ? `<button class="btn-sm" onclick="toggleArCardReceived('${nameArg}','${m.month}')">${m.manualPaidCard ? '받음 해제' : m.remaining > 0 ? '☐ 받음' : ''}</button>` : ''}</td>
       <td class="deps">${uniq.map(d => `<div>${arDepLine(d, name)}
           ${!d.isCard ? `<button class="btn-sm" onclick="arAssignPrompt('${d.id}')">옮기기</button>` : ''}</div>`).join('') || '<span class="muted">-</span>'}</td>
@@ -5837,6 +5858,11 @@ function renderArReviewDetail() {
         ~ <select id="ar-rv-lag-hi">${[0, 1, 2, 3, 4, 5, 6].map(n => `<option ${(p.lagMonths?.[1] ?? 2) === n ? 'selected' : ''}>${n}</option>`).join('')}</select> 개월 뒤
         <span class="muted">${lagDist ? `(비고 기준 실제: ${lagDist})` : ''}</span>
       </div>
+      <div class="ar-rv-field"><label>마감·입금일</label>
+        거래 기간 <select id="ar-rv-cutoff"><option value="">달력 월 (1일~말일)</option>${[15, 20, 25].map(n => `<option value="${n}" ${p.cutoffDay === n ? 'selected' : ''}>${n + 1}일~다음달 ${n}일</option>`).join('')}</select>
+        · 입금일 다음달 <select id="ar-rv-payday"><option value="">정해지지 않음</option>${[5, 10, 15, 20, 25].map(n => `<option value="${n}" ${p.payDay === n ? 'selected' : ''}>${n}일</option>`).join('')}</select>
+        <span class="muted">입금일이 지나고 4일 안에 안 들어오면 미수</span>
+      </div>
       <div class="ar-rv-field"><label>할인 입금</label>
         <select id="ar-rv-disc-type">
           <option value="" ${!p.discount ? 'selected' : ''}>없음</option>
@@ -5883,7 +5909,8 @@ function arSaveProfileForm() {
   if (hi < lo) { toast('입금 시기: 뒤 숫자가 앞 숫자보다 커야 합니다', 'warn'); return; }
   const dt = v('ar-rv-disc-type'), dv = Number(v('ar-rv-disc-val'));
   const discount = !dt || !(dv > 0) ? null : dt === 'rate' ? { rate: dv / 100 } : { fixed: Math.round(dv) };
-  arSaveProfile({ lagMonths: [lo, hi], discount, payGroup: v('ar-rv-group') || null, memo: v('ar-rv-memo') || '' });
+  arSaveProfile({ lagMonths: [lo, hi], discount, payGroup: v('ar-rv-group') || null, memo: v('ar-rv-memo') || '',
+    cutoffDay: Number(v('ar-rv-cutoff')) || null, payDay: Number(v('ar-rv-payday')) || null });
 }
 
 function arAddPayer() {

@@ -11,7 +11,24 @@ function normalizeForMatch(s) {
 
 // ── 업체×월 외상매출(거래대금) 매트릭스 ──────────────────────────
 // data/vendors_YYYY_MM.json 전체를 순회해 hasCredit 업체만 집계
+// 마감일 업체(프로필 cutoffDay, 예: 일진 25 → 26일~다음달 25일): 달력 월 대신 거래 기간으로 집계.
+//   기간 키 = 기간이 끝나는 달 (2026-08 = 7/26~8/25). 외상 비율(totalCredit/total)은 달력 월 기준으로 적용.
+function cutoffDaysOf(dataDir) {
+  try {
+    const all = JSON.parse(fs.readFileSync(path.join(dataDir, 'ar_vendor_profiles.json'), 'utf8'));
+    return Object.fromEntries(Object.entries(all).filter(([, p]) => p?.cutoffDay > 0 && p.cutoffDay < 28).map(([n, p]) => [n, p]));
+  } catch (_) { return {}; }
+}
+
+function cutoffPeriod(ym, cut) {
+  const [y, m] = ym.split('-').map(Number);
+  const prev = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+  return { from: `${prev}-${String(cut + 1).padStart(2, '0')}`, to: `${ym}-${String(cut).padStart(2, '0')}` };
+}
+
 function buildArMatrix(dataDir) {
+  const cutoffs = cutoffDaysOf(dataDir);
+  const periodCharges = new Map();   // name -> Map(periodYm -> charge)
   const files = fs.readdirSync(dataDir)
     .filter(f => /^vendors_\d{4}_\d{2}\.json$/.test(f))
     .sort();
@@ -26,11 +43,30 @@ function buildArMatrix(dataDir) {
 
     const vendors = JSON.parse(fs.readFileSync(path.join(dataDir, f), 'utf8'));
     vendors.filter(v => v.hasCredit && v.totalCredit > 0).forEach(v => {
+      const cut = cutoffs[v.name]?.cutoffDay;
+      if (cut && (v.txs || []).length) {
+        if (!periodCharges.has(v.name)) periodCharges.set(v.name, new Map());
+        const pc = periodCharges.get(v.name);
+        const txTotal = v.txs.reduce((s, t) => s + (t.amount || 0), 0);
+        const ratio = txTotal > 0 ? v.totalCredit / txTotal : 0;
+        v.txs.forEach(t => {
+          const d = Number(String(t.date).slice(8, 10));
+          const [ty, tm] = String(t.date).split(/[/-]/).map(Number);
+          const key = d > cut ? (tm === 12 ? `${ty + 1}-01` : `${ty}-${String(tm + 1).padStart(2, '0')}`) : ym;
+          pc.set(key, (pc.get(key) || 0) + (t.amount || 0) * ratio);
+        });
+        return;
+      }
       if (!byVendor.has(v.name)) byVendor.set(v.name, []);
       byVendor.get(v.name).push({ month: ym, charge: v.totalCredit });
     });
   });
 
+  for (const [name, pc] of periodCharges) {
+    const cut = cutoffs[name].cutoffDay;
+    byVendor.set(name, [...pc].sort().filter(([, c]) => Math.round(c) > 0)
+      .map(([month, c]) => ({ month, charge: Math.round(c), period: cutoffPeriod(month, cut) })));
+  }
   return { months, byVendor };
 }
 
@@ -197,7 +233,7 @@ function allocateArDeposits(arMatrix, deposits, manualPaid = new Set(), discount
     const months = monthCharges
       .slice()
       .sort((a, b) => a.month.localeCompare(b.month))
-      .map(m => ({ month: m.month, charge: m.charge, paid: 0, remaining: m.charge, lagMonths: null }));
+      .map(m => ({ month: m.month, charge: m.charge, paid: 0, remaining: m.charge, lagMonths: null, ...(m.period ? { period: m.period } : {}) }));
     const monthByYm = new Map(months.map(m => [m.month, m]));
     const trackStart = months.length ? months[0].month : null;
 

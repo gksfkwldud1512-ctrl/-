@@ -123,9 +123,24 @@ function arMonthStatus(m, profile, nowYm) {
   }
   if (profile?.payType === 'card') return 'card-wait';
   const { ymShift } = require('./lib/arLearn');
+  // 마감일 업체(기간 26~25 등) + 정해진 입금일(다음달 10일): 입금일이 주말·공휴일이면 며칠 늦게 들어오므로 여유 AR_PAYDAY_GRACE일
+  if (m.dueDate) {
+    const today = localDateStr(new Date());
+    if (today <= addDaysStr(m.dueDate, AR_PAYDAY_GRACE)) return m.paid > 0 ? 'partial-wait' : 'waiting';
+    return m.paid > 0 ? 'short' : 'overdue';
+  }
   const hi = profile?.lagMonths?.[1] ?? 2;
   if (nowYm <= ymShift(m.month, hi)) return m.paid > 0 ? 'partial-wait' : 'waiting';
   return m.paid > 0 ? 'short' : 'overdue';
+}
+
+const AR_PAYDAY_GRACE = 4;
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function addDaysStr(ymd, n) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return localDateStr(new Date(y, m - 1, d + n));
 }
 
 function currentYm() {
@@ -138,7 +153,10 @@ function currentYm() {
 function annotateArStatus(months, profile, unresolved = [], nowYm = currentYm()) {
   const sum = { overdue: 0, waiting: 0, cardWait: 0, review: 0, overdueMonths: 0 };
   const reviewMonths = new Set(unresolved.flatMap(u => (u.suggestedWindow || []).map(w => w.month)));
+  const { ymShift } = require('./lib/arLearn');
   months.forEach(m => {
+    // 입금일이 정해진 업체: 기간이 끝난 다음 달 payDay일이 입금 예정일
+    if (profile?.payDay > 0) m.dueDate = `${ymShift(m.month, 1)}-${String(Math.min(28, profile.payDay)).padStart(2, '0')}`;
     m.status = arMonthStatus(m, profile, nowYm);
     if ((m.status === 'overdue' || m.status === 'short') && reviewMonths.has(m.month)) m.status = 'review';
     const left = Math.max(0, m.remaining || 0);
@@ -2273,6 +2291,8 @@ app.get('/api/ar/summary', (req, res) => {
         name,
         payType: profile?.payType || null,   // bank 통장 / card 현장카드 / other 기타 / null 미정
         profileConfirmed: !!profile?.confirmed,
+        cutoffDay: profile?.cutoffDay || null,   // 마감일 업체: 거래 기간 (cutoffDay+1)일~다음달 cutoffDay일
+        payDay: profile?.payDay || null,         // 정해진 입금일 (다음달 N일)
         ...statusSum,                        // overdue(기한 지난 미수) · waiting(입금 대기) · cardWait · overdueMonths
         reviewCount: (a.unresolved || []).length,
         aliases: aliasMap[name] || [],   // 등록된 입금계좌명(통장 적요와 업체명이 다를 때)
@@ -4565,7 +4585,7 @@ app.get('/api/consistency', async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // 미수 — 업체별 점검 (결제 특징 확인·수정·확정)
 // ══════════════════════════════════════════════════════════════
-const AR_PROFILE_FIELDS = ['payType', 'payers', 'lagMonths', 'discount', 'payGroup', 'noteKeywords', 'installments', 'memo', 'confirmed'];
+const AR_PROFILE_FIELDS = ['payType', 'payers', 'lagMonths', 'discount', 'payGroup', 'noteKeywords', 'installments', 'memo', 'confirmed', 'cutoffDay', 'payDay'];
 
 app.get('/api/ar/profiles', (req, res) => {
   try { res.json({ ok: true, profiles: loadArProfiles(), ignore: readJSON(AR_IGNORE_FILE, DEFAULT_AR_IGNORE) }); }
@@ -4591,6 +4611,11 @@ app.post('/api/ar/profile', (req, res) => {
     if (!['bank', 'card', 'other', null].includes(cur.payType)) return res.status(400).json({ ok: false, error: '결제방식 값 오류' });
     if (cur.lagMonths && !(Array.isArray(cur.lagMonths) && cur.lagMonths.length === 2 && cur.lagMonths.every(n => Number.isInteger(n) && n >= 0 && n <= 12)))
       return res.status(400).json({ ok: false, error: '입금 시기는 0~12개월' });
+    for (const [k, max, label] of [['cutoffDay', 27, '마감일'], ['payDay', 28, '입금일']]) {
+      if (cur[k] === '' || cur[k] === 0) cur[k] = null;
+      if (cur[k] != null && !(Number.isInteger(cur[k]) && cur[k] >= 1 && cur[k] <= max))
+        return res.status(400).json({ ok: false, error: `${label}은 1~${max}일` });
+    }
     cur.edited = true;
     all[name] = cur;
     writeJSON(AR_PROFILES_FILE, all);
