@@ -2547,6 +2547,16 @@ const AR_CARD_WINDOW_DAYS_CUTOFF = 15;  // 마감일 업체: 기간 마감일(25
 // 26일~다음달 25일 기준으로 결제하는 업체 (기간 M = 전월 26일 ~ M월 25일). 같은 그룹은 한 번에 합쳐 결제하기도 함
 const AR_CUTOFF_VENDORS = { '다올이앤씨': 25, '다올이앤씨(주)보수보강': 25 };
 const AR_PAY_GROUPS     = [['다올이앤씨', '다올이앤씨(주)보수보강']];
+// 마감일 업체 = 위 상수 + 업체별 점검에서 마감일(cutoffDay)을 정한 업체.
+// 프로필에 cutoffDay가 있으면 미수 표도 기간 단위(키 = 기간이 끝나는 달)라 카드 대조도 기간 키로 배분
+function arCutoffVendors() {
+  const out = { ...AR_CUTOFF_VENDORS };
+  for (const [n, p] of Object.entries(loadArProfiles())) if (p?.cutoffDay > 0) out[n] = p.cutoffDay;
+  return out;
+}
+function arPeriodVendors() {
+  return new Set(Object.entries(loadArProfiles()).filter(([, p]) => p?.cutoffDay > 0).map(([n]) => n));
+}
 // 유류는 매달 카드로, 유외상품은 몇 달(약 6개월)치를 모아 따로 결제하는 업체 →
 // 카드 비교 시 유류분과 유외 누적분을 나눠서 비교
 const AR_FUEL_ONLY_CARD_VENDORS = { '풀무원외상6576': { maxNonFuelMonths: 7 } };
@@ -2583,7 +2593,7 @@ function addMonths(ym, n) {
 }
 
 // 마감일 업체의 기간별 외상 매출 { 'YYYY-MM': { amount, from, to, assign:[{month,amount}] } }
-function buildCutoffPeriods(name, cutDay) {
+function buildCutoffPeriods(name, cutDay, byPeriod = false) {
   const periods = {};
   for (const f of fs.readdirSync(DATA_DIR).filter(f => /^vendors_\d{4}_\d{2}\.json$/.test(f))) {
     const v = readJSON(path.join(DATA_DIR, f), []).find(x => x.name === name && x.hasCredit);
@@ -2599,7 +2609,8 @@ function buildCutoffPeriods(name, cutDay) {
     }
   }
   for (const p of Object.values(periods)) {
-    p.assign = Object.entries(p.parts).sort().map(([month, amount]) => ({ month, amount }));
+    p.assign = byPeriod ? [{ month: Object.keys(periods).find(k => periods[k] === p), amount: p.amount }]
+                        : Object.entries(p.parts).sort().map(([month, amount]) => ({ month, amount }));
     delete p.parts;
   }
   return periods;
@@ -2678,9 +2689,10 @@ function buildFuelOnlyTargets(name, a, cfg) {
 
 function buildArCardTargets(alloc) {
   const targets = [];
+  const cutoffs = arCutoffVendors(), periodVendors = arPeriodVendors();
   const remainOf = (name, month) => (alloc[name]?.months || []).find(m => m.month === month)?.remaining || 0;
   for (const [name, a] of Object.entries(alloc)) {
-    if (AR_CUTOFF_VENDORS[name]) continue;
+    if (cutoffs[name]) continue;
     if (AR_FIXED_CARD_VENDORS[name]) {
       const fixed = AR_FIXED_CARD_VENDORS[name].amount;
       for (const m of a.months || []) {
@@ -2705,9 +2717,9 @@ function buildArCardTargets(alloc) {
   // 이미 카드결제로 확인한 마감일 업체 기간 (업체|기간월)
   const covered = new Set(readJSON(AR_CARD_PAYMENTS_FILE, []).flatMap(c => c.coverKeys || []));
   const cutoffPeriods = {};
-  for (const [name, cut] of Object.entries(AR_CUTOFF_VENDORS)) {
+  for (const [name, cut] of Object.entries(cutoffs)) {
     if (!alloc[name]) continue;
-    cutoffPeriods[name] = buildCutoffPeriods(name, cut);
+    cutoffPeriods[name] = buildCutoffPeriods(name, cut, periodVendors.has(name));
     for (const [pm, p] of Object.entries(cutoffPeriods[name])) {
       // 기간에 걸친 달력 월이 아직 미수이고, 그 기간을 카드로 확인한 적 없을 때만 대상
       if (covered.has(`${name}|${pm}`)) continue;
