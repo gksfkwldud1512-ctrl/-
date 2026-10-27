@@ -14,6 +14,39 @@ const app  = express();
 const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json());
+
+// ── 외부 접속 로그인 (lib/auth.js) ─────────────────────────────
+// 이 PC(localhost)는 그대로, 터널(Tailscale Funnel 등)로 들어온 요청은 로그인해야 통과
+const auth = require('./lib/auth').createAuth(path.join(__dirname, 'data'));
+app.use(auth.middleware);
+app.get('/api/auth/status', (req, res) => {
+  const external = auth.isExternal(req);
+  res.json({ ok: true, external, loggedIn: !external || auth.validSession(req), hasPassword: auth.hasPassword() });
+});
+app.post('/api/auth/login', (req, res) => {
+  const r = auth.login(req, req.body?.password);
+  if (!r.ok) return res.status(r.status).json({ ok: false, error: r.error });
+  res.setHeader('Set-Cookie', auth.makeCookie(auth.isExternal(req)));
+  res.json({ ok: true });
+});
+app.post('/api/auth/logout', (req, res) => {
+  res.setHeader('Set-Cookie', `${auth.COOKIE}=; Path=/; HttpOnly; Max-Age=0`);
+  res.json({ ok: true });
+});
+// 비밀번호 정하기·바꾸기 — 이 PC에선 바로, 외부에선 지금 비밀번호 확인 후
+app.post('/api/auth/password', (req, res) => {
+  const { current, password } = req.body || {};
+  if (auth.isExternal(req) && !auth.checkPassword(current)) return res.status(403).json({ ok: false, error: '지금 비밀번호가 다릅니다.' });
+  try { auth.setPassword(password); }
+  catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
+  if (auth.isExternal(req)) res.setHeader('Set-Cookie', auth.makeCookie(true));   // 바꾼 사람은 계속 로그인 상태로
+  res.json({ ok: true });
+});
+// 이 PC에서만 쓰는 기능: 사내 BOS DB 접속, 홈택스 자동입력(PC 화면에서 브라우저를 띄움), 메일·카카오 계정 설정
+app.use(['/api/test-bos-db', '/api/inspect-bos-db', '/api/hometax', '/api/hometax-fill',
+         '/api/kakao/auth', '/api/kakao/callback', '/api/kakao/settings'], auth.localOnly);
+app.post('/api/settings', auth.localOnly);
+
 // 정적 파일 캐시 완전 방지 (HTML 포함 — 코드 업데이트 즉시 반영)
 app.use((req, res, next) => {
   // API 응답도 포함 — 모바일 브라우저가 종합 데이터를 캐시해 옛 값이 보이던 문제 방지
@@ -150,6 +183,18 @@ function bosReceiptDeposits(baseDeposits) {
   const out = [];
   for (const [vendor, list] of byVendor) {
     const bm = new Map((base[vendor]?.months || []).map(m => [m.month, m]));
+    // 잔액 관리 업체: 등록 한 건 = 결제 한 건. 이미 카드·통장으로 잡힌 같은 금액(앞뒤 31일 안)은 같은 돈이라 뺌
+    if (profiles[vendor]?.balanceMode) {
+      const known = baseDeposits.filter(d => d.matchedVendor === vendor).map(d => ({ date: d.date, amount: d.amount, used: false }));
+      for (const r of list.flatMap(g => g.rows)) {
+        const dup = known.find(k => !k.used && k.amount === r.amount && Math.abs(daysBetween(k.date, r.date)) <= 31);
+        if (dup) { dup.used = true; continue; }
+        out.push({ id: `bos_${vendor}|${r.slip || r.date}`, date: r.date, month: r.date.slice(0, 7), amount: r.amount, payer: 'BOS 입금등록',
+          note: noteOf({ rows: [r] }), matchedVendor: vendor, manual: true, isCard: true, isBos: true, splits: [],
+          monthAssign: [{ month: r.date.slice(0, 7), amount: r.amount }] });
+      }
+      continue;
+    }
     // 유외상품 줄: 몇 달치를 모아 낸 돈 → 참고사항의 시작 월("2/1 ~ 6/30")부터 오래된 미수 달 순으로 채움
     if (vendor.endsWith(NONFUEL_SUFFIX)) {
       const rem = new Map([...bm].map(([m, x]) => [m, Math.max(0, x.remaining)]));
@@ -219,10 +264,12 @@ function loadArDiscountVendors() { return readJSON(AR_DISCOUNT_FILE, {}); }
 // 외상 한 달의 상태 — 입금 지연(lagMonths) 기한 전이면 "입금 대기"(정상), 지나면 "미수"
 //   done 완료 | discount 할인 입금으로 완료 | waiting 입금 대기 | partial-wait 일부 입금·기한 전
 //   short 부족(기한 지남) | overdue 미수(기한 지남) | card-wait 현장카드 업체 받음 체크 전
+//   balance 잔액 관리 업체(수시로 아무 금액 결제)의 아직 안 갚은 달
 const AR_DONE_TOL = 100;
 function arMonthStatus(m, profile, nowYm) {
   if (!(m.charge > 0)) return null;
   if (m.remaining <= AR_DONE_TOL) return 'done';
+  if (profile?.balanceMode) return 'balance';
   const disc = profile?.discount;
   if (disc && m.paid > 0) {
     const allow = disc.rate ? m.charge * disc.rate * 1.3 + AR_DONE_TOL : (disc.fixed || 0) + 1000;
@@ -267,7 +314,7 @@ function annotateArStatus(months, profile, unresolved = [], nowYm = currentYm())
     m.status = arMonthStatus(m, profile, nowYm);
     if ((m.status === 'overdue' || m.status === 'short') && reviewMonths.has(m.month)) m.status = 'review';
     const left = Math.max(0, m.remaining || 0);
-    if (m.status === 'overdue' || m.status === 'short') { sum.overdue += left; sum.overdueMonths++; }
+    if (m.status === 'overdue' || m.status === 'short' || m.status === 'balance') { sum.overdue += left; sum.overdueMonths++; }
     else if (m.status === 'waiting' || m.status === 'partial-wait') sum.waiting += left;
     else if (m.status === 'card-wait') sum.cardWait += left;
     else if (m.status === 'review') sum.review += left;
@@ -1068,7 +1115,7 @@ app.get('/api/files', (req, res) => {
 
 // ── 파일 다운로드 ─────────────────────────────────────────────
 app.get('/api/download/:filename', (req, res) => {
-  const fp = path.join(OUTPUT_DIR, req.params.filename);
+  const fp = path.join(OUTPUT_DIR, path.basename(req.params.filename));   // ../ 로 output 밖 파일을 못 받게
   if (!fs.existsSync(fp)) return res.status(404).end('Not found');
   res.download(fp);
 });
@@ -1446,10 +1493,12 @@ async function ingestBosDaily(file) {
     }
     if (older.length) warnings.push(`이미 더 최근까지 저장돼 있어 고객판매현황을 바꾸지 않음: ${older.join(', ')}`);
   } catch (e) { warnings.push(`고객판매현황 집계 실패: ${e.message}`); }
+  // BOS가 나중에 올라와도 카드에만 있는 거래가 확정되므로 외상 카드결제 자동 반영을 다시 돌림
+  const arAuto = days.length ? runArCardAutoSafe() : { applied: [], text: '' };
   if (days.length) {
-    logUpload(file, 'bos-daily', [`일마감 ${days.length}일`, ...customerMonths.map(ym => `고객판매현황 ${ym}`)], warnings, range);
+    logUpload(file, 'bos-daily', [`일마감 ${days.length}일`, ...customerMonths.map(ym => `고객판매현황 ${ym}`), ...(arAuto.text ? [arAuto.text] : [])], warnings, range);
   }
-  return { count: days.length, date: lastDate, range, customerMonths, warnings };
+  return { count: days.length, date: lastDate, range, customerMonths, warnings, arAuto };
 }
 
 app.post('/api/daily/upload-bos', upload.single('file'), async (req, res) => {
@@ -1547,15 +1596,16 @@ async function ingestCard(file, sourceKey) {
   }
   const dates = days.map(d => d.date).sort();
   const range = dates.length ? { from: dates[0], to: dates[dates.length - 1] } : null;
-  if (days.length) logUpload(file, `card-${sourceKey}`, [`일마감 카드(${CARD_SOURCE_LABEL[sourceKey] || sourceKey}) ${days.length}일`], [], range);
-  return { count: days.length, date: lastDate, range };
+  const arAuto = days.length ? runArCardAutoSafe() : { applied: [], text: '' };
+  if (days.length) logUpload(file, `card-${sourceKey}`, [`일마감 카드(${CARD_SOURCE_LABEL[sourceKey] || sourceKey}) ${days.length}일`, ...(arAuto.text ? [arAuto.text] : [])], [], range);
+  return { count: days.length, date: lastDate, range, arAuto };
 }
 
 async function saveCardUpload(req, res, sourceKey) {
   if (!req.file) return res.json({ ok: false, error: '파일 없음' });
   try {
-    const { count, date } = await ingestCard(req.file, sourceKey);
-    res.json({ ok: true, count, date });
+    const { count, date, arAuto } = await ingestCard(req.file, sourceKey);
+    res.json({ ok: true, count, date, arAutoText: arAuto?.text || '' });
   } catch (e) { res.json({ ok: false, error: e.message }); }
 }
 
@@ -1630,13 +1680,16 @@ app.post('/api/sync-tank-actuals', (req, res) => {
 });
 
 // ── BOS PostgreSQL 연결 테스트 ────────────────────────────────────
+// 접속 후보 계정은 data/secrets.json의 bosDb { host, port, users[], passwords[], databases[] } (코드·GitHub에 비밀번호를 두지 않음)
 app.post('/api/test-bos-db', async (req, res) => {
   const { Client } = require('pg');
-  const HOST = '192.168.0.11';
-  const PORT = 5432;
-  const USERS     = ['M3038164391', 'postgres', 'bos', 'hbos'];
-  const PASSWORDS = ['sjj11055*99', 'postgres'];
-  const DATABASES = ['bos', 'hbos', 'hbos320', 'postgres'];
+  const cfg = readJSON(path.join(DATA_DIR, 'secrets.json'), {}).bosDb || {};
+  const HOST = cfg.host || '192.168.0.11';
+  const PORT = cfg.port || 5432;
+  const USERS     = cfg.users || [];
+  const PASSWORDS = cfg.passwords || [];
+  const DATABASES = cfg.databases || ['bos'];
+  if (!USERS.length || !PASSWORDS.length) return res.json({ ok: false, error: 'data/secrets.json에 bosDb 계정이 없습니다.' });
 
   for (const user of USERS) {
     for (const password of PASSWORDS) {
@@ -2420,6 +2473,8 @@ app.get('/api/ar/summary', (req, res) => {
         discountSetting: discounts[name] || null,   // 할인 입금 업체 설정 { maxDiff }
         splitNonFuel: !!profile?.splitNonFuel,   // 이 줄은 유류분만 (매달 카드결제), 유외상품은 아래 별도 줄
         nonFuelOf: profile?.nonFuelOf || null,   // "업체 · 유외상품" 줄 — 몇 달치 모아 결제
+        balanceMode: !!a.balanceMode,            // 잔액 관리: 결제는 이월 잔액 → 오래된 달 순, months에 inMonth·balance
+        openingBalance: a.openingBalance || 0, openingLeft: a.openingLeft || 0,
         remaining:   a.remaining,
         surplus:     a.surplus,
         matched:     a.remaining <= 0,
@@ -2780,7 +2835,7 @@ function buildArCardTargets(alloc) {
   const cutoffs = arCutoffVendors(), periodVendors = arPeriodVendors();
   const remainOf = (name, month) => (alloc[name]?.months || []).find(m => m.month === month)?.remaining || 0;
   for (const [name, a] of Object.entries(alloc)) {
-    if (cutoffs[name]) continue;
+    if (cutoffs[name] || a.balanceMode) continue;   // 잔액 관리 업체는 달별 금액과 맞춰 볼 수 없음
     if (AR_FIXED_CARD_VENDORS[name]) {
       const fixed = AR_FIXED_CARD_VENDORS[name].amount;
       for (const m of a.months || []) {
@@ -2917,60 +2972,181 @@ app.get('/api/ar/card-auto-match', (req, res) => {
 });
 
 // 카드결제로 확인 처리 — 서버에서 다시 계산해 선택한 조합을 업체·월별로 나눠 저장
+// ── 현장 카드결제 → 외상 결제 자동 반영 ─────────────────────────
+// 일마감 카드대사의 "카드에만 있는 거래" 중 확실한 것만 자동으로 외상 결제로 잡음. 나머지는 지금처럼 확인 필요.
+//   exact       미수 달(또는 연속 달·기간·합산) 금액과 원단위까지 일치하고 후보가 하나뿐
+//               (만원 단위로 딱 떨어지는 금액·고정 결제·두 업체 합산은 그 업체가 전에 쓴 카드일 때만)
+//   cutoff-card 마감일 업체(26~25) 기간 금액과 ±15% 이내 + 전에 쓴 카드 (BOS 유외상품 미입력·단가 차이로 조금 다를 수 있음)
+//   balance-card 잔액 관리 업체(수시 결제)가 전에 쓴 카드로 10만원 이상 결제
+const AR_AUTO_CUTOFF_RATE = 0.15;
+const AR_AUTO_BALANCE_MIN = 100000;
+
+// 업체(유외상품 줄은 본 업체로)별 전에 쓴 카드 { 업체명: Set(cardKey) }
+function arKnownCardKeys() {
+  const { NONFUEL_SUFFIX } = require('./lib/arLedger');
+  const known = {};
+  for (const c of readJSON(AR_CARD_PAYMENTS_FILE, [])) {
+    if (!c.cardNo || c.rounding) continue;
+    const v = c.vendorName.endsWith(NONFUEL_SUFFIX) ? c.vendorName.slice(0, -NONFUEL_SUFFIX.length) : c.vendorName;
+    (known[v] = known[v] || new Set()).add(cardKey(c.cardNo));
+  }
+  return known;
+}
+
+// 자동 반영할 것 계산 (저장 안 함) → [{ t, o, rule } | { balance: true, vendorName, card, rule }]
+function planArCardAuto() {
+  const { NONFUEL_SUFFIX } = require('./lib/arLedger');
+  const baseOf = n => n.endsWith(NONFUEL_SUFFIX) ? n.slice(0, -NONFUEL_SUFFIX.length) : n;
+  const known = arKnownCardKeys();
+  const isKnown = (vendors, cards) => cards.every(c => vendors.some(v => known[baseOf(v)]?.has(cardKey(c.cardNo))));
+  const picks = [];
+  for (const t of computeArCardMatches()) {
+    const vendors = t.parts.map(pt => pt.vendorName);
+    if (t.status === 'match' && t.options.length === 1) {
+      const o = t.options[0];
+      const knownCard = isKnown(vendors, o.cards);
+      if ((t.kind === 'fixed' || t.group || o.amount % 10000 === 0) && !knownCard) continue;
+      picks.push({ t, o, rule: knownCard ? 'exact-card' : 'exact' });
+    } else if (t.period && t.status === 'candidate') {
+      const ok = t.options.filter(o => isKnown(vendors, o.cards) && Math.abs(o.diff) <= t.amount * AR_AUTO_CUTOFF_RATE);
+      if (ok.length === 1) picks.push({ t, o: ok[0], rule: 'cutoff-card' });
+    }
+  }
+  // 같은 카드나 같은 칸(업체|월)을 두 곳에서 잡으면 사람이 고르도록 둘 다 뺌
+  const cardUse = {}, cellUse = {};
+  picks.forEach(pk => {
+    pk.o.cards.forEach(c => { cardUse[c.id] = (cardUse[c.id] || 0) + 1; });
+    pk.t.parts.forEach(pt => pt.assign.forEach(a => { const k = `${pt.vendorName}|${a.month}`; cellUse[k] = (cellUse[k] || 0) + 1; }));
+  });
+  const out = picks.filter(pk => pk.o.cards.every(c => cardUse[c.id] === 1)
+    && pk.t.parts.every(pt => pt.assign.every(a => cellUse[`${pt.vendorName}|${a.month}`] === 1)));
+  // 잔액 관리 업체: 전에 쓴 카드로 결제한 것 (카드가 한 업체에만 알려져 있을 때)
+  const used = new Set(out.flatMap(pk => pk.o.cards.map(c => c.id)));
+  const balanceVendors = Object.entries(loadArProfiles()).filter(([, p]) => p?.balanceMode).map(([n]) => n);
+  if (balanceVendors.length) {
+    for (const c of listUnmatchedCardPayments()) {
+      if (used.has(c.id) || c.amount < AR_AUTO_BALANCE_MIN) continue;
+      const owners = Object.keys(known).filter(v => known[v].has(cardKey(c.cardNo)));
+      if (owners.length === 1 && balanceVendors.includes(owners[0])) out.push({ balance: true, vendorName: owners[0], card: c, rule: 'balance-card' });
+    }
+  }
+  return out;
+}
+
+// 계획대로 ar_card_payments에 저장 → { applied: [{ rule, vendors, months, date, amount }] }
+function applyArCardAuto() {
+  const picks = planArCardAuto();
+  if (!picks.length) return { applied: [] };
+  const list = readJSON(AR_CARD_PAYMENTS_FILE, []);
+  const at = new Date().toISOString();
+  const applied = [];
+  for (const pk of picks) {
+    if (pk.balance) {
+      const c = pk.card;
+      list.push({ id: c.id, cardId: c.id, matchKey: `balance|${c.id}`, date: c.date, approvalNo: c.approvalNo, cardCompany: c.cardCompany,
+        cardNo: c.cardNo, amount: c.amount, vendorName: pk.vendorName, month: c.date.slice(0, 7), matchedAt: at,
+        autoApplied: true, autoRule: pk.rule });
+      applied.push({ rule: pk.rule, vendors: [pk.vendorName], months: [], date: c.date, amount: c.amount });
+      continue;
+    }
+    recordArCardMatch(list, pk.t, pk.o, { autoApplied: true, autoRule: pk.rule });
+    applied.push({ rule: pk.rule, vendors: pk.t.parts.map(pt => pt.vendorName), months: pk.t.parts.flatMap(pt => pt.assign.map(a => a.month)),
+                   date: pk.o.date, amount: pk.o.amount, diff: pk.o.diff || 0, label: pk.t.label });
+  }
+  writeJSON(AR_CARD_PAYMENTS_FILE, list);
+  return { applied };
+}
+
+// 자료를 올린 뒤 자동 반영 — 실패해도 업로드는 그대로 (결과 문구만)
+function runArCardAutoSafe() {
+  try {
+    const { applied } = applyArCardAuto();
+    return { applied, text: applied.length ? `외상 카드결제 자동 반영 ${applied.length}건 (${applied.map(a => `${a.vendors.join('+')} ${a.amount.toLocaleString()}`).join(', ')})` : '' };
+  } catch (e) {
+    console.error('[ar card auto]', e);
+    return { applied: [], text: '', error: e.message };
+  }
+}
+
+// POST /api/ar/card-auto/apply — 미수확인 화면을 열 때 등: 확실한 현장 카드결제를 외상 결제로 자동 반영
+app.post('/api/ar/card-auto/apply', (req, res) => {
+  try { res.json({ ok: true, ...applyArCardAuto() }); }
+  catch (e) { console.error('[ar/card-auto/apply]', e); res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// GET /api/ar/card-auto/preview — 자동 반영될 것 미리보기 (저장 안 함)
+app.get('/api/ar/card-auto/preview', (req, res) => {
+  try {
+    const picks = planArCardAuto().map(pk => pk.balance
+      ? { rule: pk.rule, vendors: [pk.vendorName], months: [], date: pk.card.date, amount: pk.card.amount, cards: [pk.card] }
+      : { rule: pk.rule, vendors: pk.t.parts.map(pt => pt.vendorName), months: pk.t.parts.flatMap(pt => pt.assign.map(a => a.month)),
+          label: pk.t.label, target: pk.t.amount, date: pk.o.date, amount: pk.o.amount, diff: pk.o.diff || 0, cards: pk.o.cards });
+    res.json({ ok: true, picks });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// 카드결제 조합(opt)을 대상(t)의 업체·월 칸에 나눠 list(ar_card_payments)에 추가 → matchKey
+//   extra: 자동 반영이면 { autoApplied: true, autoRule }
+function recordArCardMatch(list, t, opt, extra = {}) {
+  // 배분할 칸 목록 (업체·월·금액) — 카드 금액을 앞 칸부터 채움
+  const slots = t.parts.flatMap(pt => pt.assign.map(a => ({ vendorName: pt.vendorName, month: a.month, left: a.amount })));
+  const matchKey = `${t.key}|${Date.now()}`;
+  let si = 0;
+  for (const c of opt.cards) {
+    let left = c.amount;
+    const byVendor = {};
+    while (left > 0 && si < slots.length) {
+      const s = slots[si];
+      const amt = Math.min(left, s.left);
+      (byVendor[s.vendorName] = byVendor[s.vendorName] || []).push({ month: s.month, amount: amt });
+      s.left -= amt; left -= amt;
+      if (s.left <= 0) si++;
+    }
+    // 절사 차액 등 남은 금액은 마지막 칸에 붙임 (고정 결제 업체는 차액을 자체 입금처리하므로 붙이지 않음)
+    let selfHandled = 0;
+    if (t.kind === 'fixed') selfHandled = left;
+    else if (left > 0 && slots.length) {
+      const s = slots[slots.length - 1];
+      const arr = byVendor[s.vendorName] = byVendor[s.vendorName] || [];
+      const last = arr.find(x => x.month === s.month);
+      if (last) last.amount += left; else arr.push({ month: s.month, amount: left });
+    }
+    for (const [vendorName, assign] of Object.entries(byVendor)) {
+      const amount = assign.reduce((s, x) => s + x.amount, 0);
+      list.push({
+        id: `${c.id}#${vendorName}`, cardId: c.id, matchKey, date: c.date, approvalNo: c.approvalNo,
+        cardCompany: c.cardCompany, cardNo: c.cardNo, amount, vendorName,
+        month: assign[assign.length - 1].month, assign, auto: true,
+        coverKeys: t.period ? t.parts.map(pt => `${pt.vendorName}|${t.period}`) : [], matchedAt: new Date().toISOString(),
+        ...(t.kind === 'fixed' ? { cardAmount: c.amount, selfHandled, note: '고정 결제 — 차액 자체 입금처리' } : {}),
+        ...extra,
+      });
+    }
+  }
+  // 카드 금액이 원단위 절사로 몇십원 적으면 그 차액도 같이 채워 미수가 남지 않게 함 (취소 시 함께 삭제)
+  const short = slots.reduce((s, x) => s + Math.max(0, x.left), 0);
+  if (short > 0 && short <= AR_CARD_ROUND_TOL) {
+    const lastCard = opt.cards[opt.cards.length - 1];
+    for (const s of slots.filter(x => x.left > 0)) {
+      list.push({
+        id: `${matchKey}#round#${s.vendorName}#${s.month}`, cardId: null, matchKey, date: lastCard.date,
+        approvalNo: '', cardCompany: '원단위 절사', cardNo: '', amount: s.left, vendorName: s.vendorName,
+        month: s.month, assign: [{ month: s.month, amount: s.left }], auto: true, rounding: true,
+        coverKeys: [], matchedAt: new Date().toISOString(), ...extra,
+      });
+    }
+  }
+  return matchKey;
+}
+
 app.post('/api/ar/card-auto-match/confirm', (req, res) => {
   try {
     const { key, optionIndex = 0 } = req.body;
     const t = computeArCardMatches().find(x => x.key === key);
     const opt = t?.options?.[optionIndex];
     if (!opt) return res.status(400).json({ ok: false, error: '일치하는 카드결제를 다시 찾지 못했습니다. 새로고침 후 다시 시도하세요.' });
-
-    // 배분할 칸 목록 (업체·월·금액) — 카드 금액을 앞 칸부터 채움
-    const slots = t.parts.flatMap(pt => pt.assign.map(a => ({ vendorName: pt.vendorName, month: a.month, left: a.amount })));
     const list = readJSON(AR_CARD_PAYMENTS_FILE, []);
-    const matchKey = `${key}|${Date.now()}`;
-    let si = 0;
-    for (const c of opt.cards) {
-      let left = c.amount;
-      const byVendor = {};
-      while (left > 0 && si < slots.length) {
-        const s = slots[si];
-        const amt = Math.min(left, s.left);
-        (byVendor[s.vendorName] = byVendor[s.vendorName] || []).push({ month: s.month, amount: amt });
-        s.left -= amt; left -= amt;
-        if (s.left <= 0) si++;
-      }
-      // 절사 차액 등 남은 금액은 마지막 칸에 붙임 (고정 결제 업체는 차액을 자체 입금처리하므로 붙이지 않음)
-      if (t.kind === 'fixed') c.selfHandled = left;
-      else if (left > 0 && slots.length) {
-        const s = slots[slots.length - 1];
-        const arr = byVendor[s.vendorName] = byVendor[s.vendorName] || [];
-        const last = arr.find(x => x.month === s.month);
-        if (last) last.amount += left; else arr.push({ month: s.month, amount: left });
-      }
-      for (const [vendorName, assign] of Object.entries(byVendor)) {
-        const amount = assign.reduce((s, x) => s + x.amount, 0);
-        list.push({
-          id: `${c.id}#${vendorName}`, cardId: c.id, matchKey, date: c.date, approvalNo: c.approvalNo,
-          cardCompany: c.cardCompany, cardNo: c.cardNo, amount, vendorName,
-          month: assign[assign.length - 1].month, assign, auto: true,
-          coverKeys: t.period ? t.parts.map(pt => `${pt.vendorName}|${t.period}`) : [], matchedAt: new Date().toISOString(),
-          ...(t.kind === 'fixed' ? { cardAmount: c.amount, selfHandled: c.selfHandled || 0, note: '고정 결제 — 차액 자체 입금처리' } : {}),
-        });
-      }
-    }
-    // 카드 금액이 원단위 절사로 몇십원 적으면 그 차액도 같이 채워 미수가 남지 않게 함 (취소 시 함께 삭제)
-    const short = slots.reduce((s, x) => s + Math.max(0, x.left), 0);
-    if (short > 0 && short <= AR_CARD_ROUND_TOL) {
-      const lastCard = opt.cards[opt.cards.length - 1];
-      for (const s of slots.filter(x => x.left > 0)) {
-        list.push({
-          id: `${matchKey}#round#${s.vendorName}#${s.month}`, cardId: null, matchKey, date: lastCard.date,
-          approvalNo: '', cardCompany: '원단위 절사', cardNo: '', amount: s.left, vendorName: s.vendorName,
-          month: s.month, assign: [{ month: s.month, amount: s.left }], auto: true, rounding: true,
-          coverKeys: [], matchedAt: new Date().toISOString(),
-        });
-      }
-    }
+    const matchKey = recordArCardMatch(list, t, opt);
     writeJSON(AR_CARD_PAYMENTS_FILE, list);
     res.json({ ok: true, matchKey });
   } catch (e) {
@@ -3880,6 +4056,25 @@ app.get('/api/daily/month/:yearMonth', (req, res) => {
     return cache.get(date);
   };
   days.forEach(d => runMatching(d, loadDay));
+  // 카드에만 있는 거래 중 외상 결제로 잡힌 것 표시 (arPayment) + 그날 합계(arCardTotal) — 대사 차이에서 뺌
+  const arByCard = {};
+  for (const c of readJSON(AR_CARD_PAYMENTS_FILE, [])) {
+    const id = c.cardId || (c.rounding ? null : c.id.split('#')[0]);
+    if (!id) continue;
+    const x = arByCard[id] = arByCard[id] || { vendors: [], months: [], auto: !!c.autoApplied };
+    if (!x.vendors.includes(c.vendorName)) x.vendors.push(c.vendorName);
+    (c.assign || [{ month: c.month }]).forEach(a => { if (!x.months.includes(a.month)) x.months.push(a.month); });
+  }
+  days.forEach(d => {
+    if (!d.matching) return;
+    let total = 0;
+    for (const e of d.matching.errors || []) {
+      if (e.type !== 'easy_only') continue;
+      const hit = arByCard[`${d.date}|${e.approvalNo}`];
+      if (hit) { e.arPayment = hit; total += e.easyAmount || 0; }
+    }
+    d.matching.arCardTotal = total;
+  });
   res.json({ ok: true, days });
 });
 
@@ -4497,6 +4692,7 @@ async function ingestDetected(file, det, opts = {}) {
       r.targets.push(`일마감 ${d.count}일`);
       d.customerMonths.forEach(ym => r.targets.push(`고객판매현황 ${ym}`));
       r.warnings.push(...d.warnings);
+      if (d.arAuto?.text) r.targets.push(d.arAuto.text);
       const v = await ingestBosVendors(file);
       v.savedMonths.forEach(ym => r.targets.push(`거래명세서·미수 ${ym}`));
       r.warnings.push(...v.warnings);
@@ -4522,6 +4718,7 @@ async function ingestDetected(file, det, opts = {}) {
       if (opts.cardSource) rememberTerminals(det.terminals, source);
       const c = await ingestCard(file, source);
       r.targets.push(`일마감 카드 ${CARD_SOURCE_NAME[source]} ${c.count}일`);
+      if (c.arAuto?.text) r.targets.push(c.arAuto.text);
       r.cardSource = source;
       addMonths(c.range);
       break;
@@ -4693,7 +4890,7 @@ app.get('/api/consistency', async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // 미수 — 업체별 점검 (결제 특징 확인·수정·확정)
 // ══════════════════════════════════════════════════════════════
-const AR_PROFILE_FIELDS = ['payType', 'payers', 'lagMonths', 'discount', 'payGroup', 'noteKeywords', 'installments', 'memo', 'confirmed', 'cutoffDay', 'payDay', 'splitNonFuel'];
+const AR_PROFILE_FIELDS = ['payType', 'payers', 'lagMonths', 'discount', 'payGroup', 'noteKeywords', 'installments', 'memo', 'confirmed', 'cutoffDay', 'payDay', 'splitNonFuel', 'balanceMode', 'openingBalance'];
 
 app.get('/api/ar/profiles', (req, res) => {
   try { res.json({ ok: true, profiles: loadArProfiles(), ignore: readJSON(AR_IGNORE_FILE, DEFAULT_AR_IGNORE) }); }
@@ -4723,6 +4920,10 @@ app.post('/api/ar/profile', (req, res) => {
       if (cur[k] === '' || cur[k] === 0) cur[k] = null;
       if (cur[k] != null && !(Number.isInteger(cur[k]) && cur[k] >= 1 && cur[k] <= max))
         return res.status(400).json({ ok: false, error: `${label}은 1~${max}일` });
+    }
+    if (cur.openingBalance != null && cur.openingBalance !== '') {
+      cur.openingBalance = Math.round(Number(String(cur.openingBalance).replace(/,/g, '')));
+      if (!Number.isFinite(cur.openingBalance)) return res.status(400).json({ ok: false, error: '이월 잔액은 숫자로' });
     }
     cur.edited = true;
     all[name] = cur;
@@ -4831,7 +5032,12 @@ app.get('/api/ar/vendor-review', (req, res) => {
       .slice(0, 40)
       .map(x => ({ ...x.d, nameScore: x.nameScore, nearMonth: x.near }));
 
+    // 잔액 관리 업체: 아직 어느 업체에도 안 붙은 현장 카드결제(판매와 안 맞는 결제 = 외상 결제) — 이 업체 결제로 기록할 후보
+    const balanceCards = alloc.balanceMode
+      ? listUnmatchedCardPayments().filter(c => c.amount >= 100000 && c.date >= alloc.months[0]?.month).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 40)
+      : [];
     res.json({ ok: true, name, profile, months: alloc.months, allocations: alloc.allocations, unresolved: alloc.unresolved,
+      balanceMode: !!alloc.balanceMode, openingBalance: alloc.openingBalance || 0, openingLeft: alloc.openingLeft || 0, balanceCards,
       deposits: mine, candidates, otherVendors: [...arMatrix.byVendor.keys()].sort((a, b) => a.localeCompare(b, 'ko')) });
   } catch (e) {
     console.error('[ar/vendor-review]', e);

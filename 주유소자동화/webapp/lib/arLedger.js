@@ -31,6 +31,16 @@ function splitNonFuelVendors(dataDir) {
   } catch (_) { return new Set(); }
 }
 
+// 잔액 관리 업체(프로필 balanceMode, 예: 대창폴리마 — 몇 월치가 아니라 아무 금액이나 수시로 결제)
+//   → { 업체명: { opening } }  opening = 추적 시작 전 이월 잔액(openingBalance)
+function balanceVendorsOf(dataDir) {
+  try {
+    const all = JSON.parse(fs.readFileSync(path.join(dataDir, 'ar_vendor_profiles.json'), 'utf8'));
+    return Object.fromEntries(Object.entries(all).filter(([, p]) => p?.balanceMode)
+      .map(([n, p]) => [n, { opening: Number(p.openingBalance) || 0 }]));
+  } catch (_) { return {}; }
+}
+
 function cutoffPeriod(ym, cut) {
   const [y, m] = ym.split('-').map(Number);
   const prev = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
@@ -91,7 +101,7 @@ function buildArMatrix(dataDir) {
     byVendor.set(name, [...pc].sort().filter(([, c]) => Math.round(c) > 0)
       .map(([month, c]) => ({ month, charge: Math.round(c), period: cutoffPeriod(month, cut) })));
   }
-  return { months, byVendor };
+  return { months, byVendor, balanceVendors: balanceVendorsOf(dataDir) };
 }
 
 // 업체명뿐 아니라 대표자명/담당자명, 그리고 사람이 직접 등록한 입금계좌명(aliasMap)도
@@ -239,6 +249,49 @@ function findGreedyWindow(months, amount, forceAccept = false) {
 // discountVendors: { 업체명: { maxDiff } } — 거래명세서에서 직접 할인해 입금하는 업체.
 //   입금이 있는 달의 부족액이 maxDiff 이하면 미수가 아니라 할인(discount)으로 보고 잔액 0 처리.
 // 카드 유닛(isCard): 현장 카드결제를 사람이 업체·월에 매칭한 것 — 월 지정(monthAssign) 필수, 근거 "card".
+// 잔액 관리 업체: 결제는 달과 상관없이 들어온 순서대로 이월 잔액 → 오래된 달부터 채움
+//   달마다 그달 결제(inMonth)와 월말 잔액(balance = 이월 + 누적 외상 − 누적 결제)을 함께 둠
+function applyBalanceMode(months, units, opening, trackStart, unitMeta) {
+  const pays = units.slice().sort((a, b) => a.date.localeCompare(b.date));
+  months.forEach(m => { m.paid = 0; m.remaining = m.charge; m.lagMonths = null; });
+  const openMonth = trackStart ? (() => {
+    const [y, mo] = trackStart.split('-').map(Number);
+    return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, '0')}`;
+  })() : null;
+  let openLeft = opening, surplus = 0;
+  const allocations = pays.map(u => {
+    let left = u.amount;
+    const appliedTo = [];
+    if (openLeft > 0 && left > 0) {
+      const a = Math.min(left, openLeft);
+      openLeft -= a; left -= a;
+      appliedTo.push({ month: openMonth, amount: a, opening: true });
+    }
+    for (const m of months) {
+      if (left <= 0) break;
+      const a = Math.min(left, m.remaining);
+      if (a <= 0) continue;
+      m.paid += a; m.remaining -= a; left -= a;
+      appliedTo.push({ month: m.month, amount: a });
+    }
+    surplus += Math.max(0, left);
+    return { ...unitMeta(u), appliedTo, source: u.isBos ? 'bos' : u.isCard ? 'card' : 'manual' };
+  });
+  let balance = opening;
+  months.forEach(m => {
+    m.inMonth = pays.filter(u => u.date.slice(0, 7) === m.month).reduce((s, u) => s + u.amount, 0);
+    balance += m.charge - m.inMonth;
+    m.balance = balance;
+  });
+  const totalCharge = months.reduce((s, m) => s + m.charge, 0);
+  const totalPaid   = months.reduce((s, m) => s + m.paid, 0);
+  return {
+    months, allocations, totalCharge, totalPaid, totalDiscount: 0,
+    remaining: totalCharge - totalPaid + openLeft, surplus,
+    balanceMode: true, openingBalance: opening, openingLeft: openLeft,
+  };
+}
+
 function allocateArDeposits(arMatrix, deposits, manualPaid = new Set(), discountVendors = {}) {
   const result = {};
   const units = decomposeUnits(deposits);
@@ -353,6 +406,13 @@ function allocateArDeposits(arMatrix, deposits, manualPaid = new Set(), discount
           m.remaining = 0;
         }
       });
+    }
+
+    const bal = arMatrix.balanceVendors?.[vendor];
+    if (bal) {
+      const r = applyBalanceMode(months, vendorUnits, bal.opening, trackStart, unitMeta);
+      result[vendor] = { ...r, unresolved: [], surplus: r.surplus, beforeTrackCount: 0, beforeTrackAmount: 0 };
+      continue;
     }
 
     const totalCharge   = months.reduce((s, m) => s + m.charge, 0);

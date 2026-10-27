@@ -1001,3 +1001,38 @@ webapp\시작.bat 더블클릭
   - 기존 AR_FUEL_ONLY_CARD_VENDORS·vendorMonthSplit·buildFuelOnlyTargets 제거
 - 결과: 유류분 1~5월 완료, 6~10월 받음 체크 전(8월 4,281,055 = 9/22 카드 일치 후보). 유외상품 2~5월 완료(6/30 968,000), 6월 32,000 부족, 1월 230,000·7~10월 남음
   - 1~3월 "확인처리"(ar_manual_paid)는 이제 유류분 줄에만 적용 — 유외상품 1월 230,000은 사용자 확인 필요
+
+## 완료된 작업 (2026-10-27) — 대창폴리마 잔액 관리(수시 결제)
+
+- 대창폴리마는 몇 월치가 아니라 아무 금액이나 수시로 현장 카드결제 → 사용자 정리 엑셀(바탕화면박지영★★★업체별 미수잔액★★★대창폴리마 정리자료_261027.xlsx: 월별 주유금액·결제금액·잔액)과 같은 방식으로 관리
+- 프로필 `balanceMode: true` + `openingBalance`(추적 시작 전 이월 잔액, 대창 = 2025년 말 3,344,034)
+  - `lib/arLedger.js` buildArMatrix가 balanceVendors 반환 → allocateArDeposits가 그 업체는 applyBalanceMode: 결제(통장·카드·BOS)를 날짜순으로 이월 잔액 → 오래된 달 순 FIFO, months에 inMonth(그달 결제)·balance(월말 잔액), 결과에 openingBalance·openingLeft
+  - 상태 `balance`(안 갚은 달, 미수 합계에 포함). 카드 자동 대사 대상에서 제외
+  - BOS 입금등록: 잔액 관리 업체는 등록 한 건 = 결제 한 건, 이미 카드·통장으로 잡힌 같은 금액(±31일)은 중복이라 제외
+  - 화면: 미수 표 칸에 "결제 N · 월말 잔액 N"과 "잔액 관리" 태그, 칸 클릭 → 업체별 점검. 업체별 점검에 [잔액으로 관리] 체크 + 이월 잔액, "잔액 장부"(이월 → 월별 외상·그달 결제·월말 잔액·결제가 갚은 곳) + 업체에 안 붙은 10만원 이상 현장 카드결제 [이 업체 결제로 기록]
+- 실데이터: 카드 결제 3건 기록(6/18 2,500,000, 8/29 3,000,000, 10/22 2,000,000), 3/13 2,000,000은 BOS 등록. 월말 잔액이 엑셀과 1~10월 전부 원 단위 일치, 현재 잔액 5,956,315 (5월 510,935 남음, 6~10월 안 갚음)
+- eval 267 → 266(잘못 확정 0): 이전 코드로도 266 — 오늘 바뀐 vendors_2026_04.json(사용자 데이터) 때문
+
+## 완료된 작업 (2026-10-27) — 현장 카드결제 외상 자동 반영 + 외부 접속 로그인
+
+### ① 현장 카드결제 → 외상 결제 자동 반영
+- 일마감 카드대사의 "카드(VAN)에만 있는 거래"(easy_only) 중 확실한 것만 `ar_card_payments`에 자동 기록(autoApplied, autoRule). 나머지는 확인 필요로 남김
+  - server.js `planArCardAuto()`(computeArCardMatches 결과 재사용) → `applyArCardAuto()`. 확인 로직은 `recordArCardMatch(list, t, opt, extra)`로 분리(수동 확인 API와 공용)
+  - 규칙: exact(원단위 일치·후보 하나. 만원 단위 금액·고정 결제·두 업체 합산은 전에 쓴 카드일 때만) / cutoff-card(마감일 업체 기간 ±15% + 전에 쓴 카드) / balance-card(잔액 관리 업체, 전에 쓴 카드 10만원 이상). 같은 카드·같은 칸을 두 곳에서 잡으면 둘 다 제외
+  - 실행: BOS·카드 업로드 직후(ingestBosDaily·ingestCard → runArCardAutoSafe, 업로드 결과 문구), 미수확인 화면 열 때(POST /api/ar/card-auto/apply). 미리보기 GET /api/ar/card-auto/preview
+  - 채점(scratchpad card-eval.js): 사람이 확인한 15건을 지우고 다시 돌리면 15/15 같은 업체·달, BOS 등록과 15건 일치·1건 불일치(금강 6월 — 카드가 앱 6월 외상과 원 단위 일치, BOS만 5·6월을 다르게 등록)
+  - 실데이터 자동 반영 5건: 금강어린이집 9월 523,000(10/6), 이형찬 9월 497,000(10/7), 한누리투어 8월 2,719,395(9/18), 보수보강 3/26~4/25 743,300(4/30), 다올+보수보강 7/26~8/25 2,620,778(8/25, -42,000 → 보수보강 8월 42,000 남음)
+- 일마감: GET /api/daily/month가 easy_only에 `arPayment`(업체·월·자동 여부), `matching.arCardTotal`을 붙임 → 카드대사 배지·남은 차이에서 뺌("✅ 외상"), 재확인 칸에 "✓ 외상 결제 — 업체 N월분 (자동)", 후보는 [이 업체로 확인]
+- 데이터 점검(consistencyCheck) 카드 대사도 외상 카드결제·사유 등록분을 빼고 남은 차이로 셈
+
+### ② 외부 접속 (무료: Tailscale Funnel 예정) — 로그인·보안 먼저
+- `lib/auth.js`: localhost 직접 요청은 그대로, 프록시 헤더(Tailscale-Funnel-Request·X-Forwarded-For 등)가 있으면 외부 → 로그인 필요(페이지는 /login.html로, API는 401)
+  - 비밀번호 data/auth.json(scrypt 해시, gitignore), 세션 쿠키 HMAC 서명 30일(HttpOnly·Secure·SameSite=Lax), IP별 5회 실패 10분 잠금 + 전체 30회/10분 잠금(IP는 XFF 마지막 값)
+  - 설정 탭 "외부 접속 비밀번호"(이 PC에선 바로 설정, 외부에선 지금 비밀번호 확인), 로그아웃. main.js가 fetch 401이면 로그인 화면으로
+  - 이 PC 전용(외부 403): /api/test-bos-db, /api/inspect-bos-db, /api/hometax, /api/hometax-fill, /api/kakao/auth·callback·settings, POST /api/settings
+- 보안 정리: BOS DB 접속 계정·비밀번호를 코드에서 `data/secrets.json`(gitignore)의 bosDb로 옮김 — **예전 커밋에 비밀번호가 남아 있으니 BOS DB 비밀번호 변경 권장**. /api/download 경로 이동(../) 차단
+- **외부 주소(무료): https://miso.taila524d5.ts.net** — Tailscale 1.104.2(PC 이름 miso, 사장님 계정), `tailscale funnel --bg 3000`(재부팅 후에도 유지, 끄기: `tailscale funnel --https=443 off`)
+  - 외부 접속 비밀번호는 설정 탭에서 지정됨(data/auth.json, 문서·메모리에 적지 않음). 공개 주소로 로그인·조회·이 PC 전용 403 확인
+- 자동 시작: 작업 스케줄러 "MisoWebApp"(로그인 시) → `webapp/autostart.bat`(최소화 창, 서버가 꺼지면 5초 뒤 재시작, 3000 포트 사용 중이면 60초마다 확인). 시작.bat는 수동 재시작용으로 그대로. 절전은 이미 꺼져 있음(AC 0)
+  - 배치 파일 이름이 한글이면 작업 스케줄러·cmd에서 실행 안 됨 → 영문 이름 유지
+- 남은 것: 휴대폰 화면(PC 배치라 좁음) 정리, BOS DB 비밀번호 변경(사용자)

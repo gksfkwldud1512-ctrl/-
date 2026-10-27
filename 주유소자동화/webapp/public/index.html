@@ -1238,6 +1238,27 @@
   <!-- ───── Tab 5: 설정 ───── -->
   <section id="tab-settings" class="tab-content">
     <div class="card settings-card">
+      <div class="card-header"><h2>🌐 외부 접속 비밀번호</h2></div>
+      <div class="settings-guide">
+        <p>📌 다른 컴퓨터·휴대폰에서 인터넷 주소로 열 때 쓰는 비밀번호입니다. 이 PC에서는 로그인 없이 열립니다.</p>
+        <p id="auth-status" style="margin-top:6px;"></p>
+      </div>
+      <div class="form-row vertical">
+        <div class="form-group" id="auth-current-row" style="display:none;">
+          <label>지금 비밀번호</label>
+          <input type="password" id="auth-current" autocomplete="current-password">
+        </div>
+        <div class="form-group">
+          <label>새 비밀번호 (8자 이상)</label>
+          <input type="password" id="auth-new" autocomplete="new-password">
+        </div>
+        <div class="form-group" style="display:flex;gap:8px;">
+          <button class="btn-primary" onclick="saveAuthPassword()">비밀번호 저장</button>
+          <button class="btn-secondary" id="auth-logout" style="display:none;" onclick="authLogout()">로그아웃</button>
+        </div>
+      </div>
+    </div>
+    <div class="card settings-card">
       <div class="card-header"><h2>BOS DB 직접 연결 (준비 중)</h2></div>
       <p style="font-size:13px;color:var(--text-muted);margin:0 0 10px;">BOS PostgreSQL(192.168.0.11:5432) 접속 계정을 납품업체에서 받으면 엑셀 없이 자동으로 가져올 예정입니다.</p>
       <button class="btn-upload" style="background:#0369a1;border-color:#0369a1;"
@@ -1461,6 +1482,6 @@
 </div>
 
 <div id="toast" class="toast"></div>
-<script src="main.js?v=2.48.0"></script>
+<script src="main.js?v=2.51.0"></script>
 </body>
 </html>

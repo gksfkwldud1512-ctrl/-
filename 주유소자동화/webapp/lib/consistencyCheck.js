@@ -259,10 +259,19 @@ async function runConsistency(ctx, ym) {
 
   // 7. 카드 대사 오류 + 미수
   if (days.length) {
-    const bad = days.filter(d => d.matching?.hasError || (d.matching && !d.matching.totalMatch));
+    // 카드에만 있는 거래 중 외상 카드결제로 잡힌 것(ar_card_payments)과 사유 등록(cardAdjustments)은 차이에서 뺌
+    const arCards = new Set(readJSON(path.join(dataDir, 'ar_card_payments.json'), [])
+      .map(c => c.cardId || (c.rounding ? null : c.id.split('#')[0])).filter(Boolean));
+    const leftDiff = d => {
+      const ar = (d.matching.errors || []).filter(e => e.type === 'easy_only' && arCards.has(`${d.date}|${e.approvalNo}`))
+        .reduce((s, e) => s + (e.easyAmount || 0), 0);
+      const adj = (d.cardAdjustments || []).reduce((s, x) => s + (x.amount || 0), 0);
+      return Math.max(0, Math.abs(d.matching.totalDiff + ar) - adj);
+    };
+    const bad = days.filter(d => d.matching && !d.matching.totalMatch && leftDiff(d) > 0);
     add('card-matching', '카드 대사', 'daily-main', bad.length ? 'warn' : 'ok',
-      bad.length ? `${bad.length}일 BOS ↔ 카드 금액이 맞지 않습니다.` : '대사한 날 모두 일치합니다.',
-      bad.map(d => ({ date: d.date, diff: d.matching.totalDiff, text: `${d.date}: 차이 ${won(d.matching.totalDiff)} / 오류 ${(d.matching.errors || []).length}건` })));
+      bad.length ? `${bad.length}일 BOS ↔ 카드 금액이 맞지 않습니다. (외상 카드결제·사유 등록분 제외)` : '대사한 날 모두 일치합니다.',
+      bad.map(d => ({ date: d.date, diff: leftDiff(d), text: `${d.date}: 남은 차이 ${won(leftDiff(d))} / 오류 ${(d.matching.errors || []).length}건` })));
   }
   if (ctx.arSummary) {
     try {
