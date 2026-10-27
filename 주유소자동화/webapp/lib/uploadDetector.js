@@ -40,7 +40,7 @@ function terminalList(rows, col) {
 
 // → { type, label, range?, terminals?, sheetNames }
 //   type: bos-sales | bos-integrated | card-sales | card-integrated | bank | tank | orders |
-//         deposit-bos | deposit-easy | management | customers | unknown
+//         deposit-bos | deposit-easy | ar-bos-receipts | management | customers | unknown
 async function detectUploadType(filePath) {
   const wb   = await readWorkbookAuto(filePath);
   const sheetNames = wb.SheetNames;
@@ -102,6 +102,14 @@ async function detectUploadType(filePath) {
     if (cells.includes('거래일자') && cells.includes('적요1')) {
       return { ...base, type: 'bank', label: '통장 입출금내역',
                range: dateRange(raw.slice(i + 1), cells.indexOf('거래일자')) };
+    }
+  }
+
+  // BOS 유류대 입금현황 (외상 업체 입금 등록 기록)
+  for (let i = 0; i < Math.min(head.length, 10); i++) {
+    if (rowHas(head[i], ['입금일자', '입금고객명', '입금유형'])) {
+      return { ...base, type: 'ar-bos-receipts', label: 'BOS 유류대 입금현황',
+               range: dateRange(raw.slice(i + 1), head[i].map(norm).indexOf('입금일자')) };
     }
   }
 

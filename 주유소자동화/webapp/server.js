@@ -104,7 +104,91 @@ function loadArDepositsWithCards() {
     monthAssign: c.assign || [{ month: c.month, amount: c.amount }],
   }));
   // 통장 입금은 비고·사람 확정·학습 프로필로 업체·월을 정한 뒤 사용 (resolveArDeposits)
-  return resolveArDeposits(readJSON(AR_DEPOSITS_FILE, [])).concat(cards);
+  const base = resolveArDeposits(readJSON(AR_DEPOSITS_FILE, [])).concat(cards);
+  return base.concat(bosReceiptDeposits(base));
+}
+
+// BOS 유류대 입금현황(ar_bos_receipts.json) → 통장으로 확인할 수 없는 받은 돈
+//   현장카드·기타 업체: 등록된 입금 전부 (현금으로 등록돼 있어도 실제로는 현장 카드결제)
+//   통장 업체: 통장으로 안 들어오는 것만 — 입금유형 카드·상품권·조정(할인·별도 결제), 참고사항 카드·화물복지·유가보조
+//   업체·등록월별로 합쳐 그 달(등록일이 속한 달 = 갚은 거래월)에 배정
+//   통장·카드 매칭·확인 처리로 이미 받은 달은 "현금" 등록이 그 돈과 같은 돈이라 빼고, 비현금 등록만 더함
+//   BOS는 달력 월로, 앱은 마감 기간(26~25)으로 나누는 등 경계가 달라 앞뒤 달로 조금씩 넘치므로
+//   남는 돈은 앞서 등록된 달의 부족분부터 채우고, 그래도 남으면 다음 등록 달로 넘김 (마지막 달은 초과로 둠)
+const AR_BOS_RECEIPTS_FILE = path.join(DATA_DIR, 'ar_bos_receipts.json');
+function bosReceiptDeposits(baseDeposits) {
+  const receipts = readJSON(AR_BOS_RECEIPTS_FILE, []);
+  if (!receipts.length) return [];
+  const profiles = readJSON(AR_PROFILES_FILE, {});
+  const groups = new Map();
+  for (const r of receipts) {
+    const pt = profiles[r.vendor]?.payType;
+    const nonCash = r.kind !== '현금' || /카드|화물복지|유가보조/.test(r.note);
+    if ((pt === 'bank' || !pt) && !nonCash) continue;
+    const month = r.date.slice(0, 7);
+    const key = `${r.vendor}|${month}`;
+    if (!groups.has(key)) groups.set(key, { vendor: r.vendor, month, date: r.date, amount: 0, nonCash: 0, rows: [] });
+    const g = groups.get(key);
+    g.amount += r.amount;
+    if (nonCash) g.nonCash += r.amount;
+    g.rows.push(r);
+    if (r.date > g.date) g.date = r.date;
+  }
+  // 통장 입금·카드 매칭·확인 처리로 이미 받은 몫은 BOS 등록과 같은 돈 → 그만큼은 빼고 남은 외상만 채움
+  const { buildArMatrix, allocateArDeposits } = require('./lib/arLedger');
+  const arMatrix = buildArMatrix(DATA_DIR);
+  const base = allocateArDeposits(arMatrix, baseDeposits, loadArManualPaidSet(), loadArDiscountVendors());
+  const byVendor = new Map();
+  [...groups.values()].sort((a, b) => a.month.localeCompare(b.month)).forEach(g => {
+    if (!byVendor.has(g.vendor)) byVendor.set(g.vendor, []);
+    byVendor.get(g.vendor).push(g);
+  });
+  const out = [];
+  for (const [vendor, list] of byVendor) {
+    const bm = new Map((base[vendor]?.months || []).map(m => [m.month, m]));
+    const rem = new Map(list.map(g => [g.month, Math.max(0, bm.get(g.month)?.remaining || 0)]));
+    const paidElsewhere = new Set(list.filter(g => bm.get(g.month)?.paid > 0 || bm.get(g.month)?.manualPaidCard).map(g => g.month));
+    let carry = 0;
+    list.forEach((g, i) => {
+      if (!bm.has(g.month)) return;   // 이 업체 외상이 없는 달 (다른 업체 몫을 합쳐 등록한 것 등) — 넘기지 않음
+      // 그 달을 통장·카드 매칭·확인 처리로 이미 받았으면 현금 등록은 같은 돈 — 비현금 등록(할인·카드 등)으로 그 달 남은 몫만 채움
+      let pool = carry + (paidElsewhere.has(g.month) ? Math.min(Math.max(0, g.nonCash), rem.get(g.month)) : Math.max(0, g.amount));
+      carry = 0;
+      const assign = [];
+      const give = (month, amt) => {
+        if (amt <= 0) return;
+        const same = assign.find(x => x.month === month);
+        if (same) same.amount += amt; else assign.push({ month, amount: amt });
+        rem.set(month, rem.get(month) - amt); pool -= amt;
+      };
+      give(g.month, Math.min(pool, rem.get(g.month)));
+      list.slice(0, i).forEach(p => { if (rem.get(p.month) > AR_DONE_TOL) give(p.month, Math.min(pool, rem.get(p.month))); });
+      if (pool > 0) {
+        if (i < list.length - 1) carry = pool;
+        else if (!paidElsewhere.has(g.month)) give(g.month, pool);
+      }
+      if (!assign.length) return;   // 전부 다음 달로 넘어감
+      out.push({
+        id: `bos_${vendor}|${g.month}`, date: g.date, month: g.month, amount: assign.reduce((s, a) => s + a.amount, 0),
+        payer: 'BOS 입금등록',
+        note: g.rows.map(r => `${r.date.slice(5)} ${r.kind}${r.cardCompany ? '(' + r.cardCompany + ')' : ''} ${r.amount.toLocaleString()}${r.note ? ' ' + r.note : ''}`).join(' / ')
+          + (g.amount !== assign.reduce((s, a) => s + a.amount, 0) || assign.length > 1 ? ' (앞뒤 달과 차액 조정)' : ''),
+        matchedVendor: vendor, manual: true, isCard: true, isBos: true, splits: [],
+        monthAssign: assign,
+      });
+    });
+  }
+  return out;
+}
+
+// BOS 유류대 입금현황 업로드 → 파일 기간 안의 기존 행은 새 파일 내용으로 교체
+async function ingestArBosReceipts(file) {
+  const { parseBosReceipts } = require('./lib/arBosReceiptParser');
+  const { rows, range } = await parseBosReceipts(file.path);
+  if (!rows.length) throw new Error('입금 행이 없습니다.');
+  const kept = readJSON(AR_BOS_RECEIPTS_FILE, []).filter(r => r.date < range.from || r.date > range.to);
+  writeJSON(AR_BOS_RECEIPTS_FILE, kept.concat(rows).sort((a, b) => a.date.localeCompare(b.date) || a.slip.localeCompare(b.slip)));
+  return { count: rows.length, range };
 }
 
 function loadArDiscountVendors() { return readJSON(AR_DISCOUNT_FILE, {}); }
@@ -4455,6 +4539,11 @@ async function ingestDetected(file, det, opts = {}) {
     case 'deposit-bos': {
       const x = ingestDepositBos(file);
       r.targets.push(`입금검증 BOS 시재 ${x.count}건`);
+      break;
+    }
+    case 'ar-bos-receipts': {
+      const x = await ingestArBosReceipts(file);
+      r.targets.push(`미수 BOS 입금등록 ${x.count}건 (${x.range.from} ~ ${x.range.to})`);
       break;
     }
     case 'deposit-easy': {

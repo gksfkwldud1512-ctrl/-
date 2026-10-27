@@ -141,7 +141,7 @@ function decomposeUnits(deposits) {
     if (primaryAmount !== 0) {
       units.push({
         depositId: d.id, vendorName: d.matchedVendor, amount: primaryAmount,
-        date: d.date, note: d.note || '', payer: d.payer || '', isCard: !!d.isCard,
+        date: d.date, note: d.note || '', payer: d.payer || '', isCard: !!d.isCard, isBos: !!d.isBos,
         manualMonthAssign: d.monthAssign || null,
         basis: d.matchBasis || null, needsReview: !!d.needsReview,
         isSplit: false, splitIndex: null, sourceFragment: null,
@@ -267,7 +267,7 @@ function allocateArDeposits(arMatrix, deposits, manualPaid = new Set(), discount
           continue;
         }
         applyToMonths(u.manualMonthAssign, u.date);
-        allocations.push({ ...unitMeta(u), appliedTo: u.manualMonthAssign, source: u.isCard ? 'card' : (u.basis === 'note' || u.basis === 'auto' ? u.basis : 'manual') });
+        allocations.push({ ...unitMeta(u), appliedTo: u.manualMonthAssign, source: u.isBos ? 'bos' : u.isCard ? 'card' : (u.basis === 'note' || u.basis === 'auto' ? u.basis : 'manual') });
         continue;
       }
 

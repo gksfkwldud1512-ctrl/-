@@ -4624,6 +4624,7 @@ function renderArVendorDetail() {
     unresolved: '<span class="badge badge-fail" style="font-size:10px;">미확정</span>',
     'before-track': '<span class="badge" style="font-size:10px;background:#e2e8f0;">추적이전</span>',
     card: '<span class="badge" style="font-size:10px;background:#fce7f3;color:#9d174d;">카드</span>',
+    bos: '<span class="badge" style="font-size:10px;background:#eef2ff;color:#4338ca;">BOS등록</span>',
   };
   const otherVendorOptions = arState.vendors
     .filter(x => x.name !== v.name)
@@ -4632,7 +4633,7 @@ function renderArVendorDetail() {
 
   const allocRows = v.allocations.length
     ? v.allocations.map(a => {
-        const splitBtn = a.source === 'card' ? ''   // 카드결제는 통장 입금이 아니라 분할 대상 아님 (카드 매칭 창에서 취소)
+        const splitBtn = (a.source === 'card' || a.source === 'bos') ? ''   // 카드결제·BOS 등록은 통장 입금이 아니라 분할 대상 아님 (카드 매칭 창에서 취소)
           : !a.isSplit
           ? `<button style="font-size:10px;padding:1px 5px;margin-left:4px;" onclick="toggleArSplitForm('${a.depositId}')">➕분할</button>`
           : `<button style="font-size:10px;padding:1px 5px;margin-left:4px;color:#dc2626;"
@@ -4741,7 +4742,7 @@ async function saveArDiscount(vendorName) {
 
 // ── 월별 입금 내역 모달 (표의 입금 칸 클릭) ────────────────────
 // 그 업체의 그 달 매출에 충당된 입금(통장·카드·분할)을 입금일·입금자명과 함께 표시
-const AR_SOURCE_TEXT = { manual: '수동 지정', note: '비고 월표기', estimate: '금액 추정', card: '현장 카드결제' };
+const AR_SOURCE_TEXT = { manual: '수동 지정', note: '비고 월표기', estimate: '금액 추정', card: '현장 카드결제', bos: 'BOS 입금등록' };
 
 function showArDepositModal(vendorName, month) {
   const v = arState.vendors.find(x => x.name === vendorName);
@@ -5710,7 +5711,7 @@ function loadToday() {
 // 미수 — 업체별 점검 (결제방식·입금자명·입금 시기·할인 확인 → 월별 대조 → 확정)
 // /api/ar/vendor-review, /api/ar/profile, /api/ar/assign, /api/ar/confirm-vendor
 // ══════════════════════════════════════════════════════════════
-const AR_BASIS_LABEL = { manual: '사람 확정', note: '비고', auto: '자동', review: '확인 필요', card: '카드' };
+const AR_BASIS_LABEL = { manual: '사람 확정', note: '비고', auto: '자동', review: '확인 필요', card: '카드', bos: 'BOS 등록' };
 const arReview = { name: null, data: null, search: '' };
 
 function setArPayFilter(k) {
@@ -5783,7 +5784,7 @@ async function loadArReview(name) {
 function arDepLine(d, vendor) {
   const isSplitPart = d.matchedVendor !== vendor;
   const amt = isSplitPart ? (d.splits || []).filter(s => s.vendorName === vendor).reduce((s, x) => s + x.amount, 0) : d.amount;
-  const basis = d.isCard ? 'card' : d.matchBasis;
+  const basis = d.isBos ? 'bos' : d.isCard ? 'card' : d.matchBasis;
   return `<span class="ar-dep">
     <span class="ar-basis ${basis || ''}">${AR_BASIS_LABEL[basis] || basis || ''}</span>
     ${esc(d.date.slice(5))} ${esc(d.payer)} <b>${amt.toLocaleString()}</b>${isSplitPart ? ` <span class="muted">(${esc(d.matchedVendor)} 입금 중)</span>` : ''}
