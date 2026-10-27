@@ -4423,8 +4423,6 @@ function arCellState(vendorName, m) {
   const keys = arState.cardAuto?.byCell?.[`${vendorName}|${m.month}`] || [];
   const ts = keys.map(k => arState.cardAuto.targets.find(t => t.key === k)).filter(Boolean);
   if (ts.some(t => t.status === 'match')) return { key: 'card', text: '카드일치', color: '#be185d', bg: '#fdf2f8' };
-  // 유류만 매달 카드결제하는 업체: 유류는 들어왔고 유외상품(몇 달치 모아 결제)만 남은 달
-  if (m.nonFuel > 0 && m.paid > 0 && m.remaining <= m.nonFuel) return { key: 'nonfuel', text: '유외 미수', color: '#b45309', bg: '#fffbeb' };
   if (ts.length) return { key: 'cand', text: '미수·카드후보', color: '#c2410c', bg: '#fff7ed' };
   return { key: 'due', ...(m.status === 'short' ? AR_STATUS_STYLE.short : AR_STATUS_STYLE.overdue) };
 }
@@ -4458,6 +4456,13 @@ function renderArVendorTable() {
       if (arState.sortField === 'name') return a.name.localeCompare(b.name, 'ko') * dir;
       return ((a.overdue + a.review) - (b.overdue + b.review) || a.remaining - b.remaining) * dir;
     });
+  // "업체 · 유외상품" 줄은 그 업체 줄 바로 아래에
+  sorted.filter(v => v.nonFuelOf).forEach(v => {
+    const base = sorted.findIndex(x => x.name === v.nonFuelOf);
+    if (base < 0) return;
+    sorted.splice(sorted.indexOf(v), 1);
+    sorted.splice(sorted.findIndex(x => x.name === v.nonFuelOf) + 1, 0, v);
+  });
   const pfCount = k => arState.vendors.filter(v => k === 'all' || (k === 'none' ? !v.payType : v.payType === k)).length;
   const pfBtn = (k, label) => `<button class="btn-filter${pf === k ? ' active' : ''}" onclick="setArPayFilter('${k}')">${label} ${pfCount(k)}</button>`;
   const cardTodo = arState.vendors.filter(v => v.payType === 'card' && v.cardWait > 0).length;
@@ -4535,6 +4540,8 @@ function renderArVendorTable() {
             <td style="padding:6px;position:sticky;left:0;background:#fff;cursor:pointer;" onclick="openArReview('${vName}')" title="클릭: 업체별 점검 (결제 특징·월별 대조)">
               ${v.payType === 'card' ? '<span class="ar-pay-tag card">카드</span>' : v.payType === 'other' ? '<span class="ar-pay-tag other">기타</span>' : !v.payType ? '<span class="ar-pay-tag none">미정</span>' : ''}
               <span style="text-decoration:underline dotted;">${esc(v.name)}</span>
+              ${v.splitNonFuel ? '<span class="ar-pay-tag other" title="유외상품은 아래 · 유외상품 줄에서 따로 관리">유류분</span>' : ''}
+              ${v.nonFuelOf ? '<span class="ar-pay-tag other" title="몇 달치 모아 한 번에 결제">모아 결제</span>' : ''}
               ${v.cutoffDay ? `<span class="ar-pay-tag other" title="거래 기간 ${v.cutoffDay + 1}일~다음달 ${v.cutoffDay}일${v.payDay ? ', 다음달 ' + v.payDay + '일 입금' : ''}">${v.cutoffDay}일 마감</span>` : ''}
               ${v.profileConfirmed ? '<span class="ar-confirmed" title="업체별 점검에서 확정">✓</span>' : ''}
               ${infoCount ? `<span style="font-size:10px;color:#64748b;background:#f1f5f9;border-radius:8px;padding:0 6px;margin-left:4px;">정보 ${infoCount}</span>` : ''}
@@ -4764,7 +4771,6 @@ function showArDepositModal(vendorName, month) {
       <div>매출 <strong>${arNum(m.charge)}</strong></div>
       <div>입금 <strong style="color:#0f766e;">${arNum(m.paid)}</strong></div>
       <div>${diffTxt}</div>
-      ${m.nonFuel != null ? `<div style="color:#64748b;">유류 ${arNum(m.fuel)} · 유외상품 ${arNum(m.nonFuel)} <span style="font-size:11px;">(유외는 몇 달치 모아 결제)</span></div>` : ''}
       <div>${m.remaining > 0 ? '<span class="badge badge-fail">미수</span>' : '<span class="badge badge-done">완료</span>'}</div>
       ${m.manualPaidCard ? '<div><span class="badge badge-done">확인 처리됨</span></div>' : ''}
     </div>
@@ -5868,6 +5874,11 @@ function renderArReviewDetail() {
         ${isCard ? '' : `· 입금일 다음달 <select id="ar-rv-payday"><option value="">정해지지 않음</option>${[5, 10, 15, 20, 25].map(n => `<option value="${n}" ${p.payDay === n ? 'selected' : ''}>${n}일</option>`).join('')}</select>
         <span class="muted">입금일이 지나고 4일 안에 안 들어오면 미수</span>`}
       </div>
+      ${isCard && !p.nonFuelOf ? `<div class="ar-rv-field"><label>유외상품</label>
+        <label style="font-weight:normal;"><input type="checkbox" ${p.splitNonFuel ? 'checked' : ''} onchange="arSaveProfile({ splitNonFuel: this.checked })">
+          유외상품(유록스·요소수 등)은 따로 관리 — 유류분만 매달 카드결제와 맞추고, 유외상품은 "${esc(name)} · 유외상품" 줄에서 모아 결제로 확인</label>
+      </div>` : ''}
+      ${p.nonFuelOf ? `<div class="muted">${esc(p.nonFuelOf)}의 유외상품만 모은 줄입니다. 몇 달치를 모아 한 번에 결제하면 오래된 달부터 채워집니다.</div>` : ''}
       ${isCard ? '<div class="muted">현장 카드 업체는 달마다 [☐ 받음]만 체크하면 됩니다. 카드 내역에서 금액이 맞는 결제를 찾으면 💳로 보여 줍니다.</div>' : `
       <div class="ar-rv-field"><label>입금자명</label>
         <div class="ar-chips">

@@ -20,6 +20,17 @@ function cutoffDaysOf(dataDir) {
   } catch (_) { return {}; }
 }
 
+// 유외상품 따로 관리 업체(프로필 splitNonFuel, 예: 풀무원외상6576 — 유류는 매달 카드, 유록스 등은 몇 달치 모아 결제):
+//   외상을 "업체명"(유류분)과 "업체명 · 유외상품"(유외분) 두 줄로 나눠 따로 미수 관리
+const AR_FUEL_PRODUCTS = ['휘발유', '경유', '등유'];
+const NONFUEL_SUFFIX = ' · 유외상품';
+function splitNonFuelVendors(dataDir) {
+  try {
+    const all = JSON.parse(fs.readFileSync(path.join(dataDir, 'ar_vendor_profiles.json'), 'utf8'));
+    return new Set(Object.entries(all).filter(([, p]) => p?.splitNonFuel).map(([n]) => n));
+  } catch (_) { return new Set(); }
+}
+
 function cutoffPeriod(ym, cut) {
   const [y, m] = ym.split('-').map(Number);
   const prev = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
@@ -28,6 +39,7 @@ function cutoffPeriod(ym, cut) {
 
 function buildArMatrix(dataDir) {
   const cutoffs = cutoffDaysOf(dataDir);
+  const splitNF = splitNonFuelVendors(dataDir);
   const periodCharges = new Map();   // name -> Map(periodYm -> charge)
   const files = fs.readdirSync(dataDir)
     .filter(f => /^vendors_\d{4}_\d{2}\.json$/.test(f))
@@ -57,8 +69,20 @@ function buildArMatrix(dataDir) {
         });
         return;
       }
-      if (!byVendor.has(v.name)) byVendor.set(v.name, []);
-      byVendor.get(v.name).push({ month: ym, charge: v.totalCredit });
+      const push = (name, charge) => {
+        if (!(charge > 0)) return;
+        if (!byVendor.has(name)) byVendor.set(name, []);
+        byVendor.get(name).push({ month: ym, charge });
+      };
+      if (splitNF.has(v.name) && (v.txs || []).length) {
+        const txTotal = v.txs.reduce((s, t) => s + (t.amount || 0), 0);
+        const ratio = txTotal > 0 ? v.totalCredit / txTotal : 0;
+        const fuel = Math.round(v.txs.filter(t => AR_FUEL_PRODUCTS.includes(t.product)).reduce((s, t) => s + (t.amount || 0), 0) * ratio);
+        push(v.name, fuel);
+        push(v.name + NONFUEL_SUFFIX, v.totalCredit - fuel);
+        return;
+      }
+      push(v.name, v.totalCredit);
     });
   });
 
@@ -347,6 +371,7 @@ function allocateArDeposits(arMatrix, deposits, manualPaid = new Set(), discount
 }
 
 module.exports = {
+  NONFUEL_SUFFIX, AR_FUEL_PRODUCTS,
   buildArMatrix, buildVendorAliasIndex, matchPayerToVendor,
   decomposeUnits, resolveSplitFragment, findGreedyWindow, allocateArDeposits,
 };

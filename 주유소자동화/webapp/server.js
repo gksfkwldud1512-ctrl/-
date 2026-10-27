@@ -119,15 +119,18 @@ const AR_BOS_RECEIPTS_FILE = path.join(DATA_DIR, 'ar_bos_receipts.json');
 function bosReceiptDeposits(baseDeposits) {
   const receipts = readJSON(AR_BOS_RECEIPTS_FILE, []);
   if (!receipts.length) return [];
-  const profiles = readJSON(AR_PROFILES_FILE, {});
+  const { NONFUEL_SUFFIX } = require('./lib/arLedger');
+  const profiles = loadArProfiles();
   const groups = new Map();
   for (const r of receipts) {
     const pt = profiles[r.vendor]?.payType;
     const nonCash = r.kind !== '현금' || /카드|화물복지|유가보조/.test(r.note);
     if ((pt === 'bank' || !pt) && !nonCash) continue;
+    // 유외상품 따로 관리 업체: 참고사항에 요소수·유록스 등이 적힌 등록은 "업체 · 유외상품" 줄로
+    const vendor = profiles[r.vendor]?.splitNonFuel && /요소수|유록스|유외|워셔/.test(r.note) ? r.vendor + NONFUEL_SUFFIX : r.vendor;
     const month = r.date.slice(0, 7);
-    const key = `${r.vendor}|${month}`;
-    if (!groups.has(key)) groups.set(key, { vendor: r.vendor, month, date: r.date, amount: 0, nonCash: 0, rows: [] });
+    const key = `${vendor}|${month}`;
+    if (!groups.has(key)) groups.set(key, { vendor, month, date: r.date, amount: 0, nonCash: 0, rows: [] });
     const g = groups.get(key);
     g.amount += r.amount;
     if (nonCash) g.nonCash += r.amount;
@@ -137,6 +140,7 @@ function bosReceiptDeposits(baseDeposits) {
   // 통장 입금·카드 매칭·확인 처리로 이미 받은 몫은 BOS 등록과 같은 돈 → 그만큼은 빼고 남은 외상만 채움
   const { buildArMatrix, allocateArDeposits } = require('./lib/arLedger');
   const arMatrix = buildArMatrix(DATA_DIR);
+  const noteOf = g => g.rows.map(r => `${r.date.slice(5)} ${r.kind}${r.cardCompany ? '(' + r.cardCompany + ')' : ''} ${r.amount.toLocaleString()}${r.note ? ' ' + r.note : ''}`).join(' / ');
   const base = allocateArDeposits(arMatrix, baseDeposits, loadArManualPaidSet(), loadArDiscountVendors());
   const byVendor = new Map();
   [...groups.values()].sort((a, b) => a.month.localeCompare(b.month)).forEach(g => {
@@ -146,6 +150,25 @@ function bosReceiptDeposits(baseDeposits) {
   const out = [];
   for (const [vendor, list] of byVendor) {
     const bm = new Map((base[vendor]?.months || []).map(m => [m.month, m]));
+    // 유외상품 줄: 몇 달치를 모아 낸 돈 → 참고사항의 시작 월("2/1 ~ 6/30")부터 오래된 미수 달 순으로 채움
+    if (vendor.endsWith(NONFUEL_SUFFIX)) {
+      const rem = new Map([...bm].map(([m, x]) => [m, Math.max(0, x.remaining)]));
+      for (const g of list) {
+        const st = g.rows.map(r => r.note.match(/(\d{1,2})\s*\/\s*\d{1,2}\s*~/)).find(Boolean);
+        const from = st ? `${g.month.slice(0, 4)}-${st[1].padStart(2, '0')}` : '';
+        let pool = g.amount;
+        const assign = [];
+        for (const [m, left] of [...rem].sort()) {
+          if (pool <= 0 || m < from || m > g.month || left <= 0) continue;
+          const amt = Math.min(pool, left);
+          assign.push({ month: m, amount: amt }); rem.set(m, left - amt); pool -= amt;
+        }
+        if (pool > 0) assign.push({ month: g.month, amount: pool });
+        out.push({ id: `bos_${vendor}|${g.month}`, date: g.date, month: g.month, amount: g.amount, payer: 'BOS 입금등록',
+          note: noteOf(g), matchedVendor: vendor, manual: true, isCard: true, isBos: true, splits: [], monthAssign: assign });
+      }
+      continue;
+    }
     const rem = new Map(list.map(g => [g.month, Math.max(0, bm.get(g.month)?.remaining || 0)]));
     const paidElsewhere = new Set(list.filter(g => bm.get(g.month)?.paid > 0 || bm.get(g.month)?.manualPaidCard).map(g => g.month));
     let carry = 0;
@@ -171,7 +194,7 @@ function bosReceiptDeposits(baseDeposits) {
       out.push({
         id: `bos_${vendor}|${g.month}`, date: g.date, month: g.month, amount: assign.reduce((s, a) => s + a.amount, 0),
         payer: 'BOS 입금등록',
-        note: g.rows.map(r => `${r.date.slice(5)} ${r.kind}${r.cardCompany ? '(' + r.cardCompany + ')' : ''} ${r.amount.toLocaleString()}${r.note ? ' ' + r.note : ''}`).join(' / ')
+        note: noteOf(g)
           + (g.amount !== assign.reduce((s, a) => s + a.amount, 0) || assign.length > 1 ? ' (앞뒤 달과 차액 조정)' : ''),
         matchedVendor: vendor, manual: true, isCard: true, isBos: true, splits: [],
         monthAssign: assign,
@@ -280,7 +303,7 @@ function learnArProfiles() {
   const learned  = learnFromNotes(readJSON(AR_DEPOSITS_FILE, []), arMatrix, arMatchContext(arMatrix));
   const cardVendors = new Set([
     ...readJSON(AR_CARD_PAYMENTS_FILE, []).map(c => c.vendorName),
-    ...Object.keys(AR_FIXED_CARD_VENDORS), ...Object.keys(AR_FUEL_ONLY_CARD_VENDORS),
+    ...Object.keys(AR_FIXED_CARD_VENDORS), ...Object.entries(readJSON(AR_PROFILES_FILE, {})).filter(([, p]) => p?.splitNonFuel).map(([n]) => n),
   ]);
   const drafts = buildProfiles(learned.filter(a => a.vendor && a.months.length), arMatrix, { cardVendors });
   // 사람이 등록해 둔 입금계좌명(ar_vendor_aliases)도 입금자명으로
@@ -300,8 +323,20 @@ function learnArProfiles() {
 }
 
 function loadArProfiles() {
-  if (!fs.existsSync(AR_PROFILES_FILE)) return learnArProfiles().profiles;
-  return readJSON(AR_PROFILES_FILE, {});
+  const all = fs.existsSync(AR_PROFILES_FILE) ? readJSON(AR_PROFILES_FILE, {}) : learnArProfiles().profiles;
+  // 유외상품 따로 관리 업체(splitNonFuel): 미수 표의 "업체 · 유외상품" 줄도 같은 결제방식으로
+  const { NONFUEL_SUFFIX } = require('./lib/arLedger');
+  for (const [n, p] of Object.entries(all)) {
+    if (!p?.splitNonFuel) continue;
+    const k = n + NONFUEL_SUFFIX;
+    all[k] = { payers: [], lagMonths: null, discount: null, payGroup: null, noteKeywords: [], memo: '', ...all[k], payType: p.payType, nonFuelOf: n };
+  }
+  return all;
+}
+
+// 유외상품 따로 관리 업체 { 업체명: true }
+function arSplitNonFuelVendors() {
+  return Object.fromEntries(Object.entries(loadArProfiles()).filter(([, p]) => p?.splitNonFuel).map(([n]) => [n, true]));
 }
 
 // ar_deposits(통장 입금) → 업체·월이 정해진 입금 목록
@@ -2365,10 +2400,6 @@ app.get('/api/ar/summary', (req, res) => {
 
     const vendors = [...arMatrix.byVendor.keys()].sort((a, b) => a.localeCompare(b, 'ko')).map(name => {
       const a = alloc[name];
-      if (AR_FUEL_ONLY_CARD_VENDORS[name]) {
-        const split = vendorMonthSplit(name);
-        a.months.forEach(m => { m.fuel = split[m.month]?.fuel || 0; m.nonFuel = split[m.month]?.nonFuel || 0; });
-      }
       const profile = profiles[name] || null;
       const statusSum = annotateArStatus(a.months, profile, a.unresolved);
       return {
@@ -2387,7 +2418,8 @@ app.get('/api/ar/summary', (req, res) => {
         totalPaid:   a.totalPaid,
         totalDiscount: a.totalDiscount || 0,
         discountSetting: discounts[name] || null,   // 할인 입금 업체 설정 { maxDiff }
-        fuelOnlyCard: !!AR_FUEL_ONLY_CARD_VENDORS[name],   // 유류만 매달 카드결제, 유외상품은 모아서 결제
+        splitNonFuel: !!profile?.splitNonFuel,   // 이 줄은 유류분만 (매달 카드결제), 유외상품은 아래 별도 줄
+        nonFuelOf: profile?.nonFuelOf || null,   // "업체 · 유외상품" 줄 — 몇 달치 모아 결제
         remaining:   a.remaining,
         surplus:     a.surplus,
         matched:     a.remaining <= 0,
@@ -2641,28 +2673,11 @@ function arCutoffVendors() {
 function arPeriodVendors() {
   return new Set(Object.entries(loadArProfiles()).filter(([, p]) => p?.cutoffDay > 0).map(([n]) => n));
 }
-// 유류는 매달 카드로, 유외상품은 몇 달(약 6개월)치를 모아 따로 결제하는 업체 →
-// 카드 비교 시 유류분과 유외 누적분을 나눠서 비교
-const AR_FUEL_ONLY_CARD_VENDORS = { '풀무원외상6576': { maxNonFuelMonths: 7 } };
-const AR_FUEL_PRODUCTS = ['휘발유', '경유', '등유'];
+// 유외상품 따로 관리 업체(프로필 splitNonFuel)의 "업체 · 유외상품" 줄: 몇 달(약 6개월)치를 모아 결제 → 카드는 연속 달 누적과 비교
+const AR_NONFUEL_MAX_MONTHS = 7;
 // 매달 고정 금액을 다음 달 초에 카드로 결제하는 업체 — 매출과 결제액의 차액은 주유소가 자체 입금처리
 // (카드 결제액 = amount 이면 전월 매출 완료로 보고, 차액은 초과입금으로 잡지 않음)
 const AR_FIXED_CARD_VENDORS = { '대소방범대': { amount: 330000 } };
-
-// 업체 월별 외상 매출을 유류/유외로 분리 { 'YYYY-MM': { fuel, nonFuel } }
-function vendorMonthSplit(name) {
-  const out = {};
-  for (const f of fs.readdirSync(DATA_DIR).filter(f => /^vendors_\d{4}_\d{2}\.json$/.test(f))) {
-    const v = readJSON(path.join(DATA_DIR, f), []).find(x => x.name === name && x.hasCredit);
-    if (!v) continue;
-    const ym = f.slice(8, 15).replace('_', '-');
-    const o = out[ym] = { fuel: 0, nonFuel: 0 };
-    for (const t of v.txs || []) {
-      if (AR_FUEL_PRODUCTS.includes(t.product)) o.fuel += t.amount; else o.nonFuel += t.amount;
-    }
-  }
-  return out;
-}
 
 // 카드번호 비교용 (이지샵 9445-2078-****-151*, 나이스 9445-20**-****-1516 처럼 가리는 자리가 달라 앞4+12~14번째 숫자로 비교)
 function cardKey(no) {
@@ -2742,28 +2757,16 @@ function cardCombos(cards) {
 function daysBetween(a, b) { return Math.round((new Date(b) - new Date(a)) / 86400000); }
 
 // 미수 대상 목록: 일반 업체 = 달력 월 남은 금액, 마감일 업체 = 26~25 기간 합계(+그룹 합산)
-// 유류분: 그 달 유류 금액 - 이미 들어온 금액. 유외분: 연속된 미수 달(2~N개월)의 유외 합계
-function buildFuelOnlyTargets(name, a, cfg) {
-  const split = vendorMonthSplit(name);
+// "업체 · 유외상품" 줄: 연속된 미수 달(2~AR_NONFUEL_MAX_MONTHS개월)의 남은 금액 합계와 카드 비교
+function buildNonFuelTargets(name, a) {
   const out = [];
-  const due = (a.months || []).filter(m => m.remaining > 0);
-  for (const m of due) {
-    const sp = split[m.month] || { fuel: 0, nonFuel: 0 };
-    const fuelDue = sp.fuel - Math.max(0, m.paid || 0);
-    if (fuelDue > 0) {
-      out.push({ key: `${name}|${m.month}|fuel`, kind: 'fuel', label: `${Number(m.month.slice(5, 7))}월 유류분`,
-                 from: `${m.month}-01`, amount: fuelDue, parts: [{ vendorName: name, assign: [{ month: m.month, amount: fuelDue }] }] });
-    }
-  }
-  // 유외 누적: 미수 달 중 연속 구간 (그 달 미수 중 유외 몫 = min(남은 금액, 유외 금액))
-  const nf = due.map(m => ({ month: m.month, amount: Math.min(m.remaining, (split[m.month] || {}).nonFuel || 0) }))
-                .filter(x => x.amount > 0);
+  const nf = (a.months || []).filter(m => m.remaining > 0).map(m => ({ month: m.month, amount: m.remaining }));
   for (let i = 0; i < nf.length; i++) {
-    for (let j = i + 1; j < nf.length && j - i < cfg.maxNonFuelMonths; j++) {
+    for (let j = i; j < nf.length && j - i < AR_NONFUEL_MAX_MONTHS; j++) {
       const win = nf.slice(i, j + 1);
-      const ml = `${Number(win[0].month.slice(5, 7))}~${Number(win[win.length - 1].month.slice(5, 7))}월`;
-      out.push({ key: `${name}|${win[0].month}~${win[win.length - 1].month}|nonfuel`, kind: 'nonfuel',
-                 label: `${ml} 유외상품 누적`, from: `${win[win.length - 1].month}-01`,
+      const ml = win.length > 1 ? `${Number(win[0].month.slice(5, 7))}~${Number(win[win.length - 1].month.slice(5, 7))}월` : `${Number(win[0].month.slice(5, 7))}월`;
+      out.push({ key: `${name}|${win[0].month}~${win[win.length - 1].month}`, kind: 'nonfuel',
+                 label: `${ml} 유외상품${win.length > 1 ? ' 누적' : ''}`, from: `${win[win.length - 1].month}-01`,
                  amount: win.reduce((s, x) => s + x.amount, 0),
                  parts: [{ vendorName: name, assign: win.map(x => ({ month: x.month, amount: x.amount })) }] });
     }
@@ -2772,6 +2775,7 @@ function buildFuelOnlyTargets(name, a, cfg) {
 }
 
 function buildArCardTargets(alloc) {
+  const { NONFUEL_SUFFIX } = require('./lib/arLedger');
   const targets = [];
   const cutoffs = arCutoffVendors(), periodVendors = arPeriodVendors();
   const remainOf = (name, month) => (alloc[name]?.months || []).find(m => m.month === month)?.remaining || 0;
@@ -2788,8 +2792,8 @@ function buildArCardTargets(alloc) {
       }
       continue;
     }
-    if (AR_FUEL_ONLY_CARD_VENDORS[name]) {
-      targets.push(...buildFuelOnlyTargets(name, a, AR_FUEL_ONLY_CARD_VENDORS[name]));
+    if (name.endsWith(NONFUEL_SUFFIX)) {
+      targets.push(...buildNonFuelTargets(name, a));
       continue;
     }
     for (const m of a.months || []) {
@@ -2852,13 +2856,16 @@ function computeArCardMatches() {
       t.status  = t.options.length ? 'candidate' : 'none';
     }
   }
-  // 유외 누적 대상: 그 업체가 쓰던 카드일 때만 "일치", 아니면 "후보"
+  // 유외 누적 대상: 그 업체(유류분 줄 포함)가 쓰던 카드일 때만 "일치", 아니면 "후보"
+  const { NONFUEL_SUFFIX } = require('./lib/arLedger');
+  const baseOf = n => n.endsWith(NONFUEL_SUFFIX) ? n.slice(0, -NONFUEL_SUFFIX.length) : n;
   const knownCards = {};
-  readJSON(AR_CARD_PAYMENTS_FILE, []).forEach(c => { if (c.cardNo) (knownCards[c.vendorName] = knownCards[c.vendorName] || new Set()).add(cardKey(c.cardNo)); });
-  targets.filter(t => t.kind === 'fuel' && t.status === 'match').forEach(t =>
-    t.options.forEach(o => o.cards.forEach(c => (knownCards[t.parts[0].vendorName] = knownCards[t.parts[0].vendorName] || new Set()).add(cardKey(c.cardNo)))));
+  const addKnown = (n, no) => (knownCards[baseOf(n)] = knownCards[baseOf(n)] || new Set()).add(cardKey(no));
+  readJSON(AR_CARD_PAYMENTS_FILE, []).forEach(c => { if (c.cardNo) addKnown(c.vendorName, c.cardNo); });
+  targets.filter(t => !t.kind && !t.group && t.status === 'match').forEach(t =>
+    t.options.forEach(o => o.cards.forEach(c => addKnown(t.parts[0].vendorName, c.cardNo))));
   for (const t of targets.filter(x => x.kind === 'nonfuel' && x.status !== 'none')) {
-    const known = knownCards[t.parts[0].vendorName] || new Set();
+    const known = knownCards[baseOf(t.parts[0].vendorName)] || new Set();
     const exact = t.options.filter(o => Math.abs(o.diff) <= AR_CARD_ROUND_TOL);
     const sameCard = exact.filter(o => o.cards.every(c => known.has(cardKey(c.cardNo))));
     if (sameCard.length) { t.options = sameCard; t.status = 'match'; }
@@ -4686,7 +4693,7 @@ app.get('/api/consistency', async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // 미수 — 업체별 점검 (결제 특징 확인·수정·확정)
 // ══════════════════════════════════════════════════════════════
-const AR_PROFILE_FIELDS = ['payType', 'payers', 'lagMonths', 'discount', 'payGroup', 'noteKeywords', 'installments', 'memo', 'confirmed', 'cutoffDay', 'payDay'];
+const AR_PROFILE_FIELDS = ['payType', 'payers', 'lagMonths', 'discount', 'payGroup', 'noteKeywords', 'installments', 'memo', 'confirmed', 'cutoffDay', 'payDay', 'splitNonFuel'];
 
 app.get('/api/ar/profiles', (req, res) => {
   try { res.json({ ok: true, profiles: loadArProfiles(), ignore: readJSON(AR_IGNORE_FILE, DEFAULT_AR_IGNORE) }); }
