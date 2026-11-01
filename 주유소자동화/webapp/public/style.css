@@ -1140,7 +1140,18 @@ table td, table th { font-variant-numeric: tabular-nums; }
 #ar-monthly-table { max-height: calc(100vh - 250px) !important; }
 #ar-monthly-table table { font-size: var(--table-font) !important; }
 
-/* 오늘 할 일 (첫 화면) */
+/* 데이터 점검 (첫 화면) */
+.today-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.today-bar h2 { font-size: 18px; margin: 0; }
+.today-bar .today-other { margin-left: auto; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.today-fold { padding: 12px 16px; margin-bottom: 16px; }
+.today-fold > summary { cursor: pointer; font-size: 15px; list-style: revert; }
+.today-fold[open] > summary { margin-bottom: 6px; }
+.stale-count { color: #b45309; font-weight: 600; }
+.usage-body { margin-top: 12px; }
+.btn-header-icon { margin-left: 8px; font-size: 18px; background: transparent; border: 1px solid rgba(255,255,255,.35);
+                   color: #fff; border-radius: 8px; padding: 4px 10px; cursor: pointer; line-height: 1.2; }
+.btn-header-icon:hover { background: rgba(255,255,255,.15); }
 .today-grid { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(280px, 1fr); gap: 16px; margin-bottom: 16px; }
 .today-card { padding: 16px 18px; margin: 0; }
 .today-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }

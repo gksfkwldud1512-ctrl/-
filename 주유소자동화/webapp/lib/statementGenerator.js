@@ -115,8 +115,24 @@ function organizeTransactions(txs, printMethod) {
 // 출력방법 전체 목록 — 거래명세서 1개 파일에 시트로 모두 수록
 const ALL_PRINT_METHODS = ['판매일자순', '유종별', '차량별-판매일자순', '차량별-유종별'];
 
+// 반월(1~15일 / 16일~말일) 판매일자순 시트를 추가로 넣는 업체 (사용자 요청 2026-11-01)
+const HALF_MONTH_VENDORS = new Set(['신성기업주식회사']);
+
+// 업체별 추가 시트 (맨 앞에 판매일자순으로 넣음) — 기준: 10월 (주)제론텍 예시 거래명세서
+//   match: 이 시트에 넣을 거래, rest: 앞 시트에 안 들어간 나머지 전부
+//   fuelDiscount: 유류 L당 할인 → 총합계 아래 할인금액·할인 후 금액 행
+//   제론텍 "지게차+3592+말통" = BOS 배달 거래 + 차량칸이 비었거나 지게차/말통/3592가 들어간 거래
+const VENDOR_EXTRA_SHEETS = {
+  '(주)제론텍': [
+    { title: '지게차+3592+말통', fuelDiscount: 30,
+      match: t => t.isDelivery || !String(t.vehicle || '').trim() || /지게차|말통|3592/.test(String(t.vehicle)) },
+    { title: '배달 외', fuelDiscount: 30, rest: true },
+  ],
+};
+
 // ─── 시트 1장 작성 (지정한 출력방법으로 정렬) ────────────────────
-function buildStatementSheet(ws, cust, customer, issueDate, printMethod) {
+// opts.fuelDiscount: 유류(휘발유·경유·등유) L당 할인 단가 → 총합계 아래 "할인금액"·"할인 후 금액" 행 추가
+function buildStatementSheet(ws, cust, customer, issueDate, printMethod, opts = {}) {
   // ── 열 너비 ────────────────────────────────────────────────────
   COL_WIDTHS.forEach((w, i) => {
     const col = ws.getColumn(i + 1);
@@ -305,6 +321,67 @@ function buildStatementSheet(ws, cust, customer, issueDate, printMethod) {
   mergeCell(ws, `L${r}:M${r}`, gSup,               { font: fntD(12, true), h: 'right', fmt: '#,##0' });
   mergeCell(ws, `N${r}:O${r}`, gTax,               { font: fntD(12, true), h: 'right', fmt: '#,##0' });
   cell(ws,      `P${r}`,       gAmt,               { font: fntD(12, true), h: 'right', fmt: '#,##0' });
+
+  // ── 유가보조금 카드 결제 업체: 총합계 아래 "유가보조 지원 결제금액"·"세금계산서 발행금액" ─────
+  const subsidyTxs = cust.txs.filter(t => t.subsidyCard);
+  if (subsidyTxs.length) {
+    let sQty = 0, sSup = 0, sTax = 0, sAmt = 0;
+    subsidyTxs.forEach(t => {
+      const { supply, tax } = calcTax(Number(t.amount) || 0, t.taxType);
+      sQty += Math.floor(Number(t.qty) || 0); sSup += supply; sTax += tax; sAmt += Number(t.amount) || 0;
+    });
+    const big = fntD(12, true);
+    const pending = subsidyTxs.some(t => t.subsidyPending);
+    const rowsOut = [
+      [pending ? '유가보조 지원 결제금액 (정산 전·카드승인 기준)' : '유가보조 지원 결제금액 (정산 확인)', sQty, sSup, sTax, sAmt],
+      ['세금계산서 발행금액',          gQty - sQty, gSup - sSup, gTax - sTax, gAmt - sAmt],
+    ];
+    for (const [label, q, sp, tx, am] of rowsOut) {
+      r++;
+      ws.getRow(r).height = 17.25;
+      mergeCell(ws, `A${r}:G${r}`, label, { font: big });
+      cell(ws,      `H${r}`,       q,     { font: big, fmt: '#,##0' });
+      mergeCell(ws, `I${r}:K${r}`, '',    { font: big });
+      mergeCell(ws, `L${r}:M${r}`, sp,    { font: big, h: 'right', fmt: '#,##0' });
+      mergeCell(ws, `N${r}:O${r}`, tx,    { font: big, h: 'right', fmt: '#,##0' });
+      cell(ws,      `P${r}`,       am,    { font: big, h: 'right', fmt: '#,##0' });
+    }
+  }
+
+  // ── 유류 할인 (제론텍 예시 양식: 할인금액 = 유류 수량 × L당 할인단가) ─────
+  const disc = Number(opts.fuelDiscount) || 0;
+  if (disc > 0) {
+    const fuelQty = FUEL_ORDER.reduce((s, f) => s + (fuelTotals[f]?.qty || 0), 0);
+    const dAmt = fuelQty * disc;
+    const dSup = Math.round(dAmt / 1.1);
+    const dTax = dAmt - dSup;
+    // 할인 후 단가: 유종별 판매단가 − 할인단가 (월중 단가가 바뀌었으면 모두 표시)
+    const after = FUEL_ORDER.map(f => {
+      const prices = [...new Set(cust.txs.filter(t => t.product === f).map(t => Number(t.unitPrice) || 0))]
+        .filter(Boolean).sort((a, b) => b - a);
+      if (!prices.length) return '';
+      if (prices.length > 2) return `${f} 단가-${disc}`;   // 월중 단가 변동이 많으면 칸이 넘쳐서 요약
+      return `${f} ${prices.map(x => (x - disc).toLocaleString()).join('/')}`;
+    }).filter(Boolean).join('\n');
+    const big = fntD(12, true);
+    r++;
+    ws.getRow(r).height = 17.25;
+    mergeCell(ws, `A${r}:G${r}`, `할인금액 (유류 L당 ${disc}원)`, { font: big });
+    cell(ws,      `H${r}`,       fuelQty,           { font: big, fmt: '#,##0' });
+    mergeCell(ws, `I${r}:K${r}`, disc,              { font: big, fmt: '#,##0' });
+    mergeCell(ws, `L${r}:M${r}`, dSup,              { font: big, h: 'right', fmt: '#,##0' });
+    mergeCell(ws, `N${r}:O${r}`, dTax,              { font: big, h: 'right', fmt: '#,##0' });
+    cell(ws,      `P${r}`,       dAmt,              { font: big, h: 'right', fmt: '#,##0' });
+    r++;
+    const lines = Math.max(1, after.split('\n').length);
+    ws.getRow(r).height = Math.max(17.25, lines * 12.5);
+    mergeCell(ws, `A${r}:G${r}`, '할인 후 금액',     { font: big });
+    cell(ws,      `H${r}`,       gQty,              { font: big, fmt: '#,##0' });
+    mergeCell(ws, `I${r}:K${r}`, after,             { font: fntD(8, true), wrap: true });
+    mergeCell(ws, `L${r}:M${r}`, gSup - dSup,       { font: big, h: 'right', fmt: '#,##0' });
+    mergeCell(ws, `N${r}:O${r}`, gTax - dTax,       { font: big, h: 'right', fmt: '#,##0' });
+    cell(ws,      `P${r}`,       gAmt - dAmt,       { font: big, h: 'right', fmt: '#,##0' });
+  }
 }
 
 // ─── 거래명세서 생성 (출력방법별 시트 전체 수록) ──────────────────
@@ -315,12 +392,44 @@ async function createStatement(cust, customer, outputDir, issueDate, year, month
   const primary = ALL_PRINT_METHODS.includes(printMethod) ? printMethod : '차량별-유종별';
   const methods = [primary, ...ALL_PRINT_METHODS.filter(m => m !== primary)];
 
+  // 업체별 추가 시트 (맨 앞)
+  const extra = VENDOR_EXTRA_SHEETS[cust.name];
+  if (extra) {
+    const used = new Set();
+    extra.forEach(sh => {
+      const txs = cust.txs.filter(t => !used.has(t) && (sh.rest || sh.match(t)));
+      txs.forEach(t => used.add(t));
+      if (!txs.length) return;
+      const ws = wb.addWorksheet(sh.title, {
+        pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
+      });
+      buildStatementSheet(ws, { ...cust, txs }, customer, issueDate, '판매일자순', { fuelDiscount: sh.fuelDiscount });
+    });
+  }
+
   methods.forEach(m => {
     const ws = wb.addWorksheet(m, {
       pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
     });
     buildStatementSheet(ws, cust, customer, issueDate, m);
   });
+
+  // 반월 나눔 업체: 판매일자순으로 1~15일 / 16일~말일 시트 2장 추가
+  if (HALF_MONTH_VENDORS.has(cust.name)) {
+    const day = t => Number(String(t.date).replace(/-/g, '/').split('/')[2]) || 0;
+    const lastDay = new Date(Number(year || 2026), Number(month || 1), 0).getDate();
+    const halves = [
+      { title: '1~15일',             txs: cust.txs.filter(t => day(t) <= 15) },
+      { title: `16~${lastDay}일`,    txs: cust.txs.filter(t => day(t) >= 16) },
+    ];
+    halves.forEach(h => {
+      if (!h.txs.length) return;
+      const ws = wb.addWorksheet(`판매일자순(${h.title})`, {
+        pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
+      });
+      buildStatementSheet(ws, { ...cust, txs: h.txs }, customer, issueDate, '판매일자순');
+    });
+  }
 
   // ── 저장 ─────────────────────────────────────────────────────
   const safeName = cust.name.replace(/[\\/:*?"<>|]/g, '_');
@@ -354,4 +463,4 @@ async function generateStatements(vendors, customers, outputDir, issueDate, year
   return files;
 }
 
-module.exports = { generateStatements, buildStatementSheet };
+module.exports = { generateStatements, buildStatementSheet, ALL_PRINT_METHODS };

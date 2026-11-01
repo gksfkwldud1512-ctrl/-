@@ -56,6 +56,9 @@ function buildVendorsFromRows(rows, opts = {}) {
     const product   = r[11] || '경유';
     const qty       = r[12] || 0;
     const unitPrice = r[13] || 0;
+    // 카드 승인 정보 (유가보조금 카드 결제 구분용) — 승인번호 없는 거래는 빈 문자열
+    const approvalNo = String(r[21] || '').trim();
+    const cardNo     = String(r[24] || '').trim();
 
     if (!custMap[name]) {
       custMap[name] = {
@@ -79,12 +82,12 @@ function buildVendorsFromRows(rows, opts = {}) {
       custMap[name].totalCredit += amount;
       custMap[name].hasCredit    = true;
       const isDelivery = outType === '배달';
-      custMap[name].txs.push({ date, vehicle, product, qty, unitPrice, amount, taxType: r[17] || '과세', isDelivery });
+      custMap[name].txs.push({ date, vehicle, product, qty, unitPrice, amount, taxType: r[17] || '과세', isDelivery, approvalNo, cardNo });
     } else {
       custMap[name].totalOther += amount;
       if (keepCardFor.has(name)) {
         (custMap[name].cardTxs ||= []).push({ date, vehicle, product, qty, unitPrice, amount,
-          taxType: r[17] || '과세', isDelivery: outType === '배달', payType });
+          taxType: r[17] || '과세', isDelivery: outType === '배달', payType, approvalNo, cardNo });
       }
     }
 

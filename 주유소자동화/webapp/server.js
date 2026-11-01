@@ -537,14 +537,20 @@ function getVendors(year, month) {
 }
 
 // ── 거래명세서 업체 합산 (업체 통합) ─────────────────────────────
-// data/statement_merges.json = { "YYYY-MM": { "합쳐질 업체": "받는 업체" } }
-// 예) 명신이 현대스크랩으로 통합 — BOS는 10월부터 현대스크랩으로 기록하므로 9월만 지정.
+// data/statement_merges.json = { "YYYY-MM": {...}, "YYYY-MM~": {...} }  값 = { "합쳐질 업체": "받는 업체" }
+//   "YYYY-MM" → 그 달만,  "YYYY-MM~" → 그 달부터 계속
+// 예) 명신 → 현대스크랩: 2026-09부터 계속 (BOS엔 10월 이후에도 명신이 따로 기록됨)
 // 거래명세서 생성 시에만 합산한다. vendors_YYYY_MM.json 원본·미수확인·고객판매현황은 그대로.
 const STATEMENT_MERGES_FILE = path.join(DATA_DIR, 'statement_merges.json');
 
 function getStatementMerges(year, month) {
   const ym = `${year}-${String(month).padStart(2, '0')}`;
-  return readJSON(STATEMENT_MERGES_FILE, {})[ym] || {};
+  const out = {};
+  for (const [key, map] of Object.entries(readJSON(STATEMENT_MERGES_FILE, {}))) {
+    const from = key.endsWith('~') ? key.slice(0, -1) : null;
+    if (from ? ym >= from : key === ym) Object.assign(out, map);
+  }
+  return out;
 }
 
 // 업체 목록에 합산 정보 표시용 필드 추가 (금액 필드는 건드리지 않음 → 합계 중복 없음)
@@ -559,7 +565,8 @@ function annotateStatementMerges(vendors, year, month) {
       .map(([src]) => vendors.find(x => x.name === src))
       .filter(Boolean)
       .map(s => ({ name: s.name, credit: s.totalCredit || 0 }));
-    return from.length ? { ...v, statementMergedFrom: from } : v;
+    // taxTxs: 세금계산서도 거래명세서처럼 합산 발행 (명신 → 현대스크랩, 사용자 요청 2026-11-01)
+    return from.length ? { ...v, statementMergedFrom: from, taxTxs: buildStatementVendor(v, vendors, merges).txs } : v;
   });
 }
 
@@ -587,6 +594,125 @@ function isStatementNonFuelOnly(name) {
   return readJSON(STATEMENT_NONFUEL_FILE, []).includes(name);
 }
 
+// 유가보조금 카드 결제 거래 표시 (t.subsidyCard = true) — 세금계산서 발행 대상에서 빠짐
+//   대상: SUBSIDY_CARD_VENDORS 3곳의 2026-09 이후 유류 거래 중 BOS에 카드 승인번호가 있는 것
+//   승인번호 없는 유류(외상 그대로)와 유외상품은 세금계산서 발행 대상
+//   예전 데이터(승인번호 칸 자체가 없음)는 유류 전부를 카드 결제로 봄 (9월~ 실제 데이터 전부 카드 승인 있음)
+const SUBSIDY_CARD_FROM = '2026/09';
+// 버스 유가보조금 카드로 유류를 결제하는 업체 (사용자 지정 2026-11-01)
+const SUBSIDY_CARD_VENDORS = new Set([
+  '(주)하나항공여행사(음성지점)',
+  '(주)하나항공여행사(청주본사)',
+  '하나관광여행사',
+  '한누리투어(주)',      // 9월~ 외상 + 국민 949101 카드 승인 (2026-11-01 추가)
+  // 한누리관광(주)(차량 745941, BC 624404)은 유가보조 정산 내역에 없음 → 세금계산서 발행 대상 (사용자 확인 2026-11-01)
+]);
+function isSubsidyCardTx(t) {
+  if (!STATEMENT_FUELS.has(t.product)) return false;
+  if (String(t.date || '').replace(/-/g, '/').slice(0, 7) < SUBSIDY_CARD_FROM) return false;
+  return t.approvalNo === undefined ? true : !!t.approvalNo;
+}
+
+// ── 유가보조 정산 내역 매칭 (자료 올리기로 매달 업로드) ─────────────
+// data/subsidy_settlements.json = 정산 행 누적 (lib/subsidyMatcher.parseSubsidySettlement)
+// 정산 업체 ↔ 우리 업체: 사업자번호 (customers.json bizNo 또는 아래 기본 표)
+const SUBSIDY_SETTLE_FILE = path.join(DATA_DIR, 'subsidy_settlements.json');
+// 정산 파일 사업자번호 → 우리 업체 (data/subsidy_bizno_map.json, gitignore — 고객 정보라 코드에 두지 않음)
+const SUBSIDY_BIZNO_FILE = path.join(DATA_DIR, 'subsidy_bizno_map.json');
+function subsidyBizNoMap() {
+  const map = { ...readJSON(SUBSIDY_BIZNO_FILE, {}) };
+  for (const c of readJSON(CUSTOMERS_FILE, [])) {
+    const b = String(c.bizNo || '').replace(/\D/g, '');
+    if (b.length === 10 && SUBSIDY_CARD_VENDORS.has(c.name)) map[b] = c.name;
+  }
+  return map;
+}
+// 카드(VAN) 자료: 승인번호 → 거래 (그 달 + 다음 달 일마감)
+function cardByApprovalFor(ym) {
+  const out = new Map();
+  if (!fs.existsSync(DAILY_DIR)) return out;
+  const [y, m] = ym.split('-').map(Number);
+  const nx = new Date(y, m, 1);
+  const nextYm = `${nx.getFullYear()}-${String(nx.getMonth() + 1).padStart(2, '0')}`;
+  for (const f of fs.readdirSync(DAILY_DIR)) {
+    if (!(f.startsWith(ym) || f.startsWith(nextYm)) || !f.endsWith('.json')) continue;
+    for (const t of readJSON(path.join(DAILY_DIR, f), {})?.card?.cardTxs || []) {
+      if (t.approvalNo && !out.has(String(t.approvalNo))) out.set(String(t.approvalNo), t);
+    }
+  }
+  return out;
+}
+// 업체 × 이용월 매칭 결과 (정산 파일·거래 파일이 바뀔 때만 다시 계산)
+const _subsidyCache = new Map();
+function subsidyMonthMatch(name, ym) {
+  const { matchVendorMonth } = require('./lib/subsidyMatcher');
+  const [y, m] = ym.split('-');
+  const mt = f => { try { return fs.statSync(f).mtimeMs; } catch (_) { return 0; } };
+  const stamp = `${mt(SUBSIDY_SETTLE_FILE)}|${mt(vendorFile(y, m))}|${mt(CUSTOMERS_FILE)}`;
+  const key = `${name}|${ym}`;
+  const hit = _subsidyCache.get(key);
+  if (hit && hit.stamp === stamp) return hit.result;
+  const v = getVendors(y, m).find(x => x.name === name);
+  const bizMap = subsidyBizNoMap();
+  const settleRows = readJSON(SUBSIDY_SETTLE_FILE, []).filter(r => bizMap[r.bizNo] === name);
+  const result = matchVendorMonth({ ym, txs: (v?.txs || []).concat(v?.cardTxs || []), settleRows, cardByApproval: cardByApprovalFor(ym) });
+  result.keySet = new Set(result.keys);
+  result.excludedSet = new Set(result.excluded);
+  _subsidyCache.set(key, { stamp, result });
+  return result;
+}
+
+// 유가보조 표시: 정산 확인된 달은 정산에 들어간 거래만 subsidyCard(subsidyConfirmed),
+//   정산에 없는 거래는 subsidyExcluded(세금계산서 대상). 정산 전·불일치 달은 카드 승인 기준(subsidyPending)
+function markSubsidyCard(v) {
+  if (!v || !SUBSIDY_CARD_VENDORS.has(v.name)) return v;
+  const { txKey } = require('./lib/subsidyMatcher');
+  const mark = list => (list || []).map(t => {
+    if (!isSubsidyCardTx(t)) return t;
+    const ym = String(t.date || '').replace(/\//g, '-').slice(0, 7);
+    const r = subsidyMonthMatch(v.name, ym);
+    if (r.status === 'matched') {
+      return r.keySet.has(txKey(t)) ? { ...t, subsidyCard: true, subsidyConfirmed: true } : { ...t, subsidyExcluded: true };
+    }
+    return { ...t, subsidyCard: true, subsidyPending: true };
+  });
+  const out = { ...v, txs: mark(v.txs) };
+  if (v.cardTxs) out.cardTxs = mark(v.cardTxs);
+  return out;
+}
+
+// 업체 목록 표시용 정산 상태 (그 달 기준)
+function subsidyStatusFor(name, year, month) {
+  if (!SUBSIDY_CARD_VENDORS.has(name)) return null;
+  const ym = `${year}-${String(month).padStart(2, '0')}`;
+  if (ym.replace('-', '/') < SUBSIDY_CARD_FROM) return null;
+  const { describeMatch } = require('./lib/subsidyMatcher');
+  const r = subsidyMonthMatch(name, ym);
+  return { status: r.status, text: describeMatch(name, r) };
+}
+
+async function ingestSubsidySettlement(file) {
+  const { parseSubsidySettlement, mergeSettlements, usageMonthOf, describeMatch } = require('./lib/subsidyMatcher');
+  const { rows, range } = await parseSubsidySettlement(file.path);
+  if (!rows.length) throw new Error('정산 행이 없습니다.');
+  const { list, added } = mergeSettlements(readJSON(SUBSIDY_SETTLE_FILE, []), rows);
+  writeJSON(SUBSIDY_SETTLE_FILE, list);
+  // 이번 파일에 들어 있는 우리 업체 이용월 매칭 결과
+  const bizMap = subsidyBizNoMap();
+  const pairs = new Map();
+  for (const r of rows) {
+    const name = bizMap[r.bizNo];
+    if (name) pairs.set(`${name}|${usageMonthOf(r)}`, { name, ym: usageMonthOf(r) });
+  }
+  const results = [...pairs.values()]
+    .filter(p => p.ym.replace('-', '/') >= SUBSIDY_CARD_FROM)
+    .sort((a, b) => a.ym.localeCompare(b.ym) || a.name.localeCompare(b.name))
+    .map(p => ({ ...p, r: subsidyMonthMatch(p.name, p.ym) }));
+  const others = [...new Set(rows.filter(r => !bizMap[r.bizNo]).map(r => r.company))];
+  return { count: rows.length, added, range, results, others,
+           lines: results.map(x => describeMatch(x.name, x.r)) };
+}
+
 // ── 카드 결제분도 거래명세서에 넣는 업체 ──────────────────────
 // data/statement_include_card.json = ["업체명", ...]. BOS에 신용카드(유가보조금 카드)로 찍혀
 // 외상이 없어도 거래명세서는 받아야 하는 업체. 업로드 시 카드 거래를 cardTxs로 따로 보관
@@ -595,6 +721,7 @@ const statementCardVendors = () => new Set(readJSON(STATEMENT_CARD_FILE, []));
 
 // 외상 거래 + 카드 거래를 합친 거래명세서용 업체 (금액 필드도 명세서 기준으로)
 function withStatementCard(v) {
+  v = markSubsidyCard(v);
   if (!v || !(v.cardTxs || []).length || !statementCardVendors().has(v.name)) return v;
   const txs = (v.txs || []).concat(v.cardTxs).sort((a, b) => String(a.date).localeCompare(String(b.date)));
   const amt = txs.reduce((s, t) => s + (Number(t.amount) || 0), 0);
@@ -617,10 +744,17 @@ function statementScopeOf(name, customers, requested) {
   if (STATEMENT_SCOPES.includes(requested)) return requested;
   const saved = (customers.find(c => c.name === name) || {}).statementScope;
   if (STATEMENT_SCOPES.includes(saved)) return saved;
-  return statementCardVendors().has(name) ? 'all' : 'nonfuel';   // 카드분 명세서 업체는 기본 전체
+  // 카드분 명세서 업체·유가보조 카드 업체(하나 3곳)는 기본 전체 — 하나 3곳은 합계 아래 유가보조 결제·세금계산서 발행금액 행 표시
+  return (statementCardVendors().has(name) || SUBSIDY_CARD_VENDORS.has(name)) ? 'all' : 'nonfuel';
 }
 
 // 업체 목록 표시용: 유가보조금 업체에 유외/유류 금액과 선택 범위 표시 (금액 필드는 그대로)
+// 업체 거래 날짜로 그 달 정산 상태
+function subsidyStatusOfVendor(v) {
+  const d = String(((v.txs || [])[0] || (v.cardTxs || [])[0] || {}).date || '').replace(/\//g, '-');
+  return d ? subsidyStatusFor(v.name, d.slice(0, 4), d.slice(5, 7)) : null;
+}
+
 function annotateNonFuelOnly(vendors) {
   const list = readJSON(STATEMENT_NONFUEL_FILE, []);
   const customers = readJSON(CUSTOMERS_FILE, []);
@@ -628,8 +762,11 @@ function annotateNonFuelOnly(vendors) {
     const sv = withStatementCard(v);
     const card = sv !== v ? { statementCardAmount: (v.cardTxs || []).reduce((s, t) => s + (Number(t.amount) || 0), 0),
                               statementAllAmount: sv.totalCredit } : {};
+    const subsidyAmount = (sv.txs || []).filter(t => t.subsidyCard).reduce((s, t) => s + (Number(t.amount) || 0), 0);
     return list.includes(v.name)
-      ? { ...v, ...card, statementNonFuelOnly: true,
+      ? { ...markSubsidyCard(v), ...card, statementNonFuelOnly: true, statementSubsidyAmount: subsidyAmount,
+          subsidyStatus: subsidyStatusOfVendor(v),
+          taxTxs: sv.txs,   // 세금계산서 미리보기용: 카드분 명세서 업체는 카드 거래 포함 (유가보조 카드분은 subsidyCard 표시)
           statementNonFuelAmount: filterStatementScope(sv, 'nonfuel').totalCredit,
           statementFuelAmount: filterStatementScope(sv, 'fuel').totalCredit,
           statementScope: statementScopeOf(v.name, customers) }
@@ -716,7 +853,7 @@ async function ingestBosVendors(file, year, month) {
     const stored  = storedBosCoverage(ym, 'vendors');
     if (stored && monthTo && stored > monthTo) { olderMonths.push(`${ym}(저장 ${stored.slice(5)}까지 / 파일 ${monthTo.slice(5)}까지)`); continue; }
     const [y, mo] = ym.split('-');
-    const { vendors, fuelSummary } = buildVendorsFromRows(ymRows, { keepCardTxsFor: statementCardVendors() });
+    const { vendors, fuelSummary } = buildVendorsFromRows(ymRows, { keepCardTxsFor: new Set([...statementCardVendors(), ...SUBSIDY_CARD_VENDORS]) });
     writeJSON(vendorFile(y, mo), vendors);
     writeJSON(fuelSummaryFile(y, mo), fuelSummary);
     savedMonths.push(ym);
@@ -1121,19 +1258,80 @@ app.get('/api/download/:filename', (req, res) => {
 });
 
 // ── 고객 조회 ────────────────────────────────────────────────
+// ── 거래 업체 → 고객관리 자동 등록 ─────────────────────────────
+// 월마감(vendors_YYYY_MM)·고객판매현황(customer_sales_YYYY_MM)에 한 번이라도 나온 업체를
+// customers.json에 이름만 먼저 추가 → 고객관리 탭에서 바로 [수정]으로 정보 입력.
+// 현금고객·포인트·상품권처럼 실제 업체가 아닌 이름은 제외. 사용자가 삭제한 업체는
+// data/customer_sync_ignore.json에 기록해 다시 추가하지 않음.
+const CUSTOMER_SYNC_IGNORE_FILE = path.join(DATA_DIR, 'customer_sync_ignore.json');
+const NON_CUSTOMER_NAME = /^(현금고객|대표현금고객)$|포인트|상품권|쿠폰|멤버쉽|멤버십/;
+let customerSyncSig = '';
+
+function syncCustomersFromTrades() {
+  const files = fs.readdirSync(DATA_DIR).filter(f => /^(vendors|customer_sales)_\d{4}_\d{2}\.json$/.test(f)).sort();
+  const sig = files.map(f => f + ':' + fs.statSync(path.join(DATA_DIR, f)).mtimeMs).join('|')
+    + '|' + (fs.existsSync(CUSTOMERS_FILE) ? fs.statSync(CUSTOMERS_FILE).mtimeMs : 0);
+  if (sig === customerSyncSig) return 0;
+
+  // 업체별: 고객번호, 결제구분, 처음·마지막 거래월
+  const seen = new Map();
+  for (const f of files) {
+    const [, kind, y, m] = f.match(/^(vendors|customer_sales)_(\d{4})_(\d{2})/);
+    const ym = `${y}-${m}`;
+    for (const v of readJSON(path.join(DATA_DIR, f), [])) {
+      const name = String(v?.name || '').trim();
+      if (!name || NON_CUSTOMER_NAME.test(name)) continue;
+      if (kind === 'vendors' && !(v.total || v.totalCredit || v.totalOther)) continue;
+      if (kind === 'customer_sales' && !v.totalAmount) continue;
+      const s = seen.get(name) || { custNo: '', payTypes: new Set(), first: ym, last: ym };
+      s.custNo = s.custNo || v.custNo || v.no || '';
+      if (kind === 'vendors' && v.hasCredit) s.payTypes.add('외상');
+      if (v.payType) s.payTypes.add(v.payType);
+      if (ym < s.first) s.first = ym;
+      if (ym > s.last)  s.last  = ym;
+      seen.set(name, s);
+    }
+  }
+
+  const customers = readJSON(CUSTOMERS_FILE, []);
+  const ignore = new Set(readJSON(CUSTOMER_SYNC_IGNORE_FILE, []));
+  const today = new Date().toISOString().slice(0, 10);
+  let added = 0, changed = false;
+  for (const [name, s] of seen) {
+    const info = { custNo: s.custNo, tradePayTypes: [...s.payTypes], firstTradeMonth: s.first, lastTradeMonth: s.last };
+    const c = customers.find(x => x.name === name);
+    if (c) {
+      if (JSON.stringify([c.custNo, c.tradePayTypes, c.firstTradeMonth, c.lastTradeMonth]) !==
+          JSON.stringify([c.custNo || info.custNo, info.tradePayTypes, info.firstTradeMonth, info.lastTradeMonth])) {
+        Object.assign(c, { ...info, custNo: c.custNo || info.custNo });
+        changed = true;
+      }
+    } else if (!ignore.has(name)) {
+      customers.push({ name, ...info, autoAdded: today });
+      added++; changed = true;
+    }
+  }
+  if (changed) writeJSON(CUSTOMERS_FILE, customers);
+  customerSyncSig = files.map(f => f + ':' + fs.statSync(path.join(DATA_DIR, f)).mtimeMs).join('|')
+    + '|' + fs.statSync(CUSTOMERS_FILE).mtimeMs;
+  return added;
+}
+
 app.get('/api/customers', (req, res) => {
+  try { syncCustomersFromTrades(); } catch (e) { console.error('[customer-sync]', e.message); }
   res.json({ ok: true, customers: readJSON(CUSTOMERS_FILE, []) });
 });
 
 // ── 고객 저장 ────────────────────────────────────────────────
 app.post('/api/customers', (req, res) => {
-  const { name, bizNo, ceoName, contactName, email, taxEmail, phone, address, bizType, bizItem, printMethod, hometaxMethod, taxIssuance, splitDelivery, mergeGasoline, statementScope } = req.body;
+  const { name, bizNo, ceoName, contactName, email, taxEmail, phone, address, bizType, bizItem, printMethod, hometaxMethod, taxIssuance, splitDelivery, mergeGasoline, mergeFuelAs, statementScope } = req.body;
   if (!name) return res.status(400).json({ ok: false, error: '업체명은 필수입니다.' });
   const customers = readJSON(CUSTOMERS_FILE, []);
   const idx = customers.findIndex(c => c.name === name);
   // 기존 데이터와 병합 — 빈 값으로 기존 데이터를 덮어쓰지 않음
   const existing = idx >= 0 ? customers[idx] : {};
   const customer = {
+    ...existing,          // 거래 정보(custNo·tradePayTypes 등) 보존
     name,
     bizNo:        bizNo        || existing.bizNo        || '',
     ceoName:      ceoName      || existing.ceoName      || '',
@@ -1154,21 +1352,29 @@ app.post('/api/customers', (req, res) => {
     mergeGasoline: mergeGasoline !== undefined
       ? (mergeGasoline === true || mergeGasoline === 'true')
       : (existing.mergeGasoline || false),
+    // 세금계산서 발행 시 모든 유류를 한 유종(등유/경유/휘발유)으로 합산 — '' 이면 미사용
+    mergeFuelAs: mergeFuelAs !== undefined
+      ? (['휘발유', '경유', '등유'].includes(mergeFuelAs) ? mergeFuelAs : '')
+      : (existing.mergeFuelAs || ''),
     // 유가보조금 업체 거래명세서 품목 범위 (nonfuel/fuel/all)
     statementScope: ['nonfuel', 'fuel', 'all'].includes(statementScope) ? statementScope : (existing.statementScope || ''),
   };
   if (idx >= 0) customers[idx] = customer;
   else customers.push(customer);
   writeJSON(CUSTOMERS_FILE, customers);
+  const ign = readJSON(CUSTOMER_SYNC_IGNORE_FILE, []);
+  if (ign.includes(name)) writeJSON(CUSTOMER_SYNC_IGNORE_FILE, ign.filter(n => n !== name));
   res.json({ ok: true });
 });
 
 // ── 고객 삭제 ────────────────────────────────────────────────
 app.delete('/api/customers/:name', (req, res) => {
-  const customers = readJSON(CUSTOMERS_FILE, []).filter(
-    c => c.name !== decodeURIComponent(req.params.name)
-  );
+  const name = decodeURIComponent(req.params.name);
+  const customers = readJSON(CUSTOMERS_FILE, []).filter(c => c.name !== name);
   writeJSON(CUSTOMERS_FILE, customers);
+  // 거래 업체 자동 등록으로 다시 생기지 않게 기록
+  const ign = readJSON(CUSTOMER_SYNC_IGNORE_FILE, []);
+  if (!ign.includes(name)) writeJSON(CUSTOMER_SYNC_IGNORE_FILE, ign.concat(name));
   res.json({ ok: true });
 });
 
@@ -1299,7 +1505,15 @@ app.post('/api/generate-tax-excel', (req, res) => {
     if (!vendors.length) return res.status(400).json({ ok: false, error: 'Excel 파일을 먼저 업로드하세요.' });
 
     const { generateTaxInvoiceExcel } = require('./lib/taxInvoiceGenerator');
-    const result = generateTaxInvoiceExcel(vendors, customers, issueDate, taxMethods || {}, OUTPUT_DIR);
+    // 유가보조금 카드 결제 유류는 표시만 하고 calcProducts가 제외 (세금계산서 발행 안 함)
+    // 카드분 명세서 업체(한누리 등)는 BOS "신용카드" 거래도 포함 — 유가보조 카드분만 빠짐
+    // 거래명세서 업체 합산(명신 → 현대스크랩)도 같게: 받는 업체 1장에 합쳐 발행, 합쳐질 업체는 따로 발행 안 함
+    const merges   = getStatementMerges(year, month);
+    const hasName  = new Set(vendors.map(v => v.name));
+    const taxVendors = vendors
+      .filter(v => !(merges[v.name] && hasName.has(merges[v.name])))
+      .map(v => buildStatementVendor(withStatementCard(v), vendors, merges));
+    const result = generateTaxInvoiceExcel(taxVendors, customers, issueDate, taxMethods || {}, OUTPUT_DIR);
 
     // 완료 상태 기록 — 실제로 세금계산서 행이 생성된 업체만 (result.issued)
     const issuedNames = result.issued || [];
@@ -4745,6 +4959,14 @@ async function ingestDetected(file, det, opts = {}) {
       r.targets.push(`입금검증 BOS 시재 ${x.count}건`);
       break;
     }
+    case 'subsidy-settlement': {
+      const x = await ingestSubsidySettlement(file);
+      r.targets.push(`유가보조 정산 ${x.count}행 (새로 ${x.added}행, 결제일 ${x.range.from} ~ ${x.range.to})`);
+      r.targets.push(...x.lines);
+      if (!x.results.length) r.warnings.push('이 파일에는 유가보조 업체(하나 3곳·한누리투어) 정산이 없습니다. 정산은 이용 다음 달 중순(하나 11~12일, 한누리투어 18~23일)쯤 들어옵니다.');
+      x.results.filter(p => p.r.status === 'mismatch').forEach(p => r.warnings.push(`${p.name} ${p.ym}: 정산과 BOS 건수·주유량이 안 맞아 카드 승인 기준으로 둡니다 — BOS 확인 필요`));
+      break;
+    }
     case 'ar-bos-receipts': {
       const x = await ingestArBosReceipts(file);
       r.targets.push(`미수 BOS 입금등록 ${x.count}건 (${x.range.from} ~ ${x.range.to})`);
@@ -4805,6 +5027,23 @@ app.post('/api/upload/auto/resolve', async (req, res) => {
 });
 
 // GET /api/upload/status — 자료별 최신 기간 + 마지막 업로드
+// 유가보조 정산 매칭 결과 (업체별, 건별 대조 포함)
+app.get('/api/subsidy/match', (req, res) => {
+  try {
+    const ym = `${req.query.year}-${String(req.query.month).padStart(2, '0')}`;
+    const { describeMatch } = require('./lib/subsidyMatcher');
+    const vendors = [...SUBSIDY_CARD_VENDORS].map(name => {
+      const r = subsidyMonthMatch(name, ym);
+      return { name, status: r.status, text: describeMatch(name, r), candidates: r.candidates, candAmount: r.candAmount,
+               settleCount: r.settleCount, settleLiters: r.settleLiters, settleAmount: r.settleAmount,
+               matchedAmount: r.matchedAmount, amountDiff: r.amountDiff, excluded: r.excluded,
+               cardDiffs: r.cardDiffs.map(d => ({ date: d.tx.date, vehicle: d.tx.vehicle, approvalNo: d.tx.approvalNo, bos: d.tx.amount, card: d.cardAmount, diff: d.diff })),
+               settlements: r.settlements };
+    });
+    res.json({ ok: true, ym, vendors });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 app.get('/api/upload/status', (req, res) => {
   try {
     const { getDataStatus } = require('./lib/consistencyCheck');
@@ -4838,7 +5077,9 @@ async function readStatementTotal(filePath) {
     const ExcelJS = require('exceljs');
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(filePath);
-    const ws = wb.worksheets[0];
+    // 업체별 추가 시트(제론텍 등)가 앞에 올 수 있으므로 출력방법 시트 중 첫 번째 기준
+    const { ALL_PRINT_METHODS } = require('./lib/statementGenerator');
+    const ws = wb.worksheets.find(w => ALL_PRINT_METHODS.includes(w.name)) || wb.worksheets[0];
     let total = null;
     ws.eachRow(row => { if (String(row.getCell(1).value || '').trim() === '총합계') total = Number(row.getCell(16).value) || 0; });
     return total;

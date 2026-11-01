@@ -168,7 +168,8 @@ function initTabs() {
 
 function switchGroup(group) {
   // 모든 그룹 숨기기 (inline style 사용 — CSS보다 우선순위 확실)
-  ['group-today', 'group-usage', 'group-summary', 'group-daily', 'group-monthly', 'group-vat', 'group-price'].forEach(id => {
+  if (group === 'usage') { group = 'today'; setTimeout(() => { const f = document.getElementById('usage-fold'); if (f) { f.open = true; f.scrollIntoView({ behavior: 'smooth' }); } }, 50); }
+  ['group-today', 'group-summary', 'group-daily', 'group-monthly', 'group-vat', 'group-price'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.style.display = 'none'; el.classList.remove('active'); }
   });
@@ -542,9 +543,34 @@ function renderVendors() {
 
   updateSortIcons();
 
+  const keepChecked = new Set(getChecked('vendor-check'));
   let sumCredit = 0, sumOther = 0, sumAll = 0;
 
+  // 업체 통합: 합쳐지는 업체(명신)는 받는 업체(현대스크랩) 행 바로 아래에 하위 행으로 표시
+  const vendorNames = new Set(state.vendors.map(v => v.name));
+  const mergedSubRow = (s) => {
+    const c = s.totalCredit || 0, o = s.totalOther || 0;
+    return `<tr class="merged-sub-row" style="background:#faf5ff;">
+      <td class="col-chk"></td>
+      <td style="padding-left:22px;color:#6d28d9;">└ ${esc(s.name)}${s.hasError ? `<button class="btn-error" onclick="showErrorModal('${esc(s.name)}')">⚠ 오류확인</button>` : ''}
+        <div style="font-size:11px;color:#7c3aed;">${esc(s.statementMergedInto)} 거래명세서에 함께 포함 (${(s.txs || []).length}건)</div></td>
+      <td class="col-num">${c > 0 ? c.toLocaleString() + '원' : '<span style="color:#94a3b8">-</span>'}</td>
+      <td class="col-num">${o > 0 ? o.toLocaleString() + '원' : '<span style="color:#94a3b8">-</span>'}</td>
+      <td class="col-num">${(s.total || 0).toLocaleString()}원</td>
+      <td class="col-method">${dash()}</td>
+      <td class="col-method">${dash()}</td>
+      <td class="col-status"><span class="badge" style="background:#ede9fe;color:#6d28d9">${esc(s.statementMergedInto)}에 합산</span></td>
+      <td class="col-action">-</td>
+    </tr>`;
+  };
+
   const rows = sortedVendors().map(v => {
+    if (v.statementMergedInto && vendorNames.has(v.statementMergedInto)) {
+      sumCredit += v.totalCredit || 0;
+      sumOther  += v.totalOther  || 0;
+      sumAll    += v.total || 0;
+      return '';   // 받는 업체 행 아래에서 그림
+    }
     const filename      = getFilename(v.name);
     const splitFile1    = getFilename(v.name, '스탠드');
     const splitFile2    = getFilename(v.name, '배달');
@@ -630,7 +656,10 @@ function renderVendors() {
       <td class="col-method">${splitCell}</td>
       <td class="col-status">${statCell}</td>
       <td class="col-action">${dlCell}</td>
-    </tr>`;
+    </tr>` + mergedFrom
+      .map(x => state.vendors.find(s => s.name === x.name))
+      .filter(Boolean)
+      .map(mergedSubRow).join('');
   });
 
   // 총합계 행
@@ -646,32 +675,67 @@ function renderVendors() {
   </tr>`;
 
   tbody.innerHTML = rows.join('') + totalRow;
+  restoreChecked('vendor-check', keepChecked);
+}
+
+// 표를 다시 그려도 체크해 둔 업체 유지
+function restoreChecked(cls, names) {
+  if (!names.size) return;
+  document.querySelectorAll(`.${cls}`).forEach(cb => {
+    if (!cb.disabled && names.has(cb.value)) cb.checked = true;
+  });
 }
 
 // ── 고객 목록 ────────────────────────────────────────────────
 function renderCustomers() {
   const tbody = document.getElementById('customer-tbody');
   const count = document.getElementById('customer-count');
-  count.textContent = `${state.customers.length}명`;
+  const filter = document.getElementById('customer-filter')?.value || 'all';
+  const q = (document.getElementById('customer-search')?.value || '').trim().toLowerCase();
 
-  if (!state.customers.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">등록된 고객이 없습니다</td></tr>';
+  const isCredit  = c => (c.tradePayTypes || []).includes('외상');
+  const missing   = c => !c.bizNo;
+  const list = state.customers.filter(c => {
+    if (q && !c.name.toLowerCase().includes(q)) return false;
+    if (filter === 'missing')        return missing(c);
+    if (filter === 'credit-missing') return missing(c) && isCredit(c);
+    if (filter === 'credit')         return isCredit(c);
+    if (filter === 'auto')           return !!c.autoAdded;
+    return true;
+  });
+  const needCnt = state.customers.filter(c => missing(c) && isCredit(c)).length;
+  count.textContent = `${list.length === state.customers.length ? '' : list.length + ' / '}${state.customers.length}곳`
+    + (needCnt ? ` · 외상 정보 입력 필요 ${needCnt}곳` : '');
+
+  if (!list.length) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="10">${state.customers.length ? '조건에 맞는 업체가 없습니다' : '등록된 고객이 없습니다'}</td></tr>`;
     return;
   }
-  tbody.innerHTML = state.customers.map(c => `<tr>
-    <td>${esc(c.name)}</td>
+  const ymLabel = ym => ym ? `${ym.slice(2, 4)}.${ym.slice(5)}` : '';
+  tbody.innerHTML = list.map(c => {
+    const pays = (c.tradePayTypes || []).map(p =>
+      `<span class="badge" style="${p === '외상' ? 'background:#fef3c7;color:#92400e' : 'background:#f1f5f9;color:#475569'}">${esc(p)}</span>`).join(' ');
+    const period = c.firstTradeMonth
+      ? `<div style="font-size:11px;color:#94a3b8;">${ymLabel(c.firstTradeMonth)}${c.lastTradeMonth !== c.firstTradeMonth ? ' ~ ' + ymLabel(c.lastTradeMonth) : ''}</div>` : '';
+    const needInfo = missing(c)
+      ? ` <span class="badge" style="background:${isCredit(c) ? '#fee2e2;color:#b91c1c' : '#f1f5f9;color:#64748b'}">정보 입력 필요</span>` : '';
+    const newBadge = c.autoAdded && missing(c) ? ` <span class="badge" style="background:#dbeafe;color:#1d4ed8" title="${esc(c.autoAdded)} 거래내역에서 자동 추가">신규</span>` : '';
+    return `<tr>
+    <td>${esc(c.name)}${newBadge}${needInfo}</td>
     <td>${esc(c.bizNo) || dash()}</td>
     <td>${esc(c.contactName) || dash()}</td>
     <td>${esc(c.email) || dash()}</td>
     <td>${esc(c.phone) || dash()}</td>
     <td>${c.bizType ? `<span class="badge badge-info">${esc(c.bizType)}</span>` : dash()}</td>
     <td>${c.bizItem ? `<span class="badge badge-info">${esc(c.bizItem)}</span>` : dash()}</td>
+    <td>${pays || dash()}${period}</td>
     <td class="col-method">${c.printMethod ? `<span class="badge badge-no">${esc(c.printMethod)}</span>` : dash()}</td>
     <td class="col-action">
-      <button class="btn-sm" onclick='editCustomer(${JSON.stringify(c.name)})'>수정</button>
+      <button class="btn-sm${missing(c) ? ' btn-primary' : ''}" onclick='editCustomer(${JSON.stringify(c.name)})'>${missing(c) ? '정보 입력' : '수정'}</button>
       <button class="btn-sm btn-danger" onclick='deleteCustomer(${JSON.stringify(c.name)})'>삭제</button>
     </td>
-  </tr>`).join('');
+  </tr>`;
+  }).join('');
 }
 
 // ── 메일 발송 목록 ───────────────────────────────────────────
@@ -737,20 +801,24 @@ function updateTaxIssuance(name, value) {
 const FUEL_PRODUCTS = new Set(['휘발유', '경유', '등유']);
 
 // 품목 집계 (브라우저 계산용 — taxInvoiceGenerator.js와 동일 로직)
-function calcProductsForVendor(vendor) {
+function calcProductsForVendor(vendor, customer) {
   const fuelMap = {};
   let nonFuelSupply = 0, nonFuelTax = 0;
+  const mergeFuelAs   = FUEL_PRODUCTS.has(customer?.mergeFuelAs) ? customer.mergeFuelAs : '';
+  const mergeGasoline = !!customer?.mergeGasoline;
 
   (vendor.txs || []).forEach(t => {
+    if (t.subsidyCard) return;   // 유가보조금 카드 결제 유류 — 세금계산서 제외 (서버와 동일)
     const supply = t.taxType === '면세' ? t.amount : Math.round(t.amount / 1.1);
     const tax    = t.taxType === '면세' ? 0        : t.amount - supply;
     const qty    = Math.floor(t.qty);
 
     if (FUEL_PRODUCTS.has(t.product)) {
-      if (!fuelMap[t.product]) fuelMap[t.product] = { qty: 0, supply: 0, tax: 0 };
-      fuelMap[t.product].qty    += qty;
-      fuelMap[t.product].supply += supply;
-      fuelMap[t.product].tax    += tax;
+      const key = mergeFuelAs || ((mergeGasoline && t.product === '휘발유') ? '경유' : t.product);
+      if (!fuelMap[key]) fuelMap[key] = { qty: 0, supply: 0, tax: 0 };
+      fuelMap[key].qty    += qty;
+      fuelMap[key].supply += supply;
+      fuelMap[key].tax    += tax;
     } else {
       nonFuelSupply += supply;
       nonFuelTax    += tax;
@@ -768,17 +836,22 @@ function calcProductsForVendor(vendor) {
 function renderTaxInvoice() {
   const tbody = document.getElementById('tax-tbody');
   if (!tbody) return;
-  const creditVendors = state.vendors.filter(v => v.hasCredit);
+  // 외상 업체 + 카드분도 세금계산서 받는 업체(taxTxs — 서버가 카드 거래를 합쳐 줌)
+  const vendorNameSet = new Set(state.vendors.map(v => v.name));
+  const creditVendors = state.vendors
+    .filter(v => v.hasCredit || (v.taxTxs || []).length)
+    .filter(v => !(v.statementMergedInto && vendorNameSet.has(v.statementMergedInto)));   // 명신 → 현대스크랩에 합산
 
   if (!creditVendors.length) {
     tbody.innerHTML = '<tr class="empty-row"><td colspan="9">Excel 파일을 업로드하면 목록이 표시됩니다</td></tr>';
     return;
   }
 
+  const keepChecked = new Set(getChecked('tax-check'));
   tbody.innerHTML = creditVendors.map(v => {
     const customer  = state.customers.find(c => c.name === v.name);
     const hasBizNo  = !!customer?.bizNo;
-    const products  = calcProductsForVendor(v);
+    const products  = calcProductsForVendor(v.taxTxs ? { ...v, txs: v.taxTxs } : v, customer);
     const method    = getTaxIssuance(v.name);
 
     const totalSupply = products.reduce((s, p) => s + p.supply, 0);
@@ -803,7 +876,9 @@ function renderTaxInvoice() {
     </select>`;
 
     const taxRecord  = state.completion.taxInvoices.find(t => t.name === v.name);
-    const countBadge = taxRecord
+    const countBadge = !products.length
+      ? `<span class="badge badge-info">발행 없음</span>`   // 전부 유가보조 카드 결제
+      : taxRecord
       ? `<span class="badge badge-done">완료</span><div style="font-size:11px;color:#64748b;margin-top:2px;">${esc(taxRecord.date)}</div>`
       : `<span class="badge ${invoiceCount > 1 ? 'badge-warn' : 'badge-ok'}">${invoiceCount}장</span>`;
 
@@ -811,18 +886,21 @@ function renderTaxInvoice() {
       <td class="col-chk">
         <input type="checkbox" class="tax-check" value="${esc(v.name)}" ${hasBizNo ? '' : 'disabled'}>
       </td>
-      <td>${esc(v.name)}</td>
+      <td>${esc(v.name)}${(v.statementMergedFrom || []).length
+        ? `<div style="font-size:11px;color:#6d28d9;">+ ${v.statementMergedFrom.map(s => esc(s.name) + ' ' + (s.credit || 0).toLocaleString()).join(', ')} 합산</div>` : ''}</td>
       <td>${hasBizNo
         ? `<span class="bizno">${esc(customer.bizNo)}</span>`
         : '<span class="badge badge-warn">사업자번호 미등록</span>'}</td>
       <td class="col-num">${totalSupply.toLocaleString()}원</td>
       <td class="col-num">${totalTax.toLocaleString()}원</td>
-      <td class="col-num">${v.totalCredit.toLocaleString()}원</td>
+      <td class="col-num">${(totalSupply + totalTax).toLocaleString()}원${v.statementSubsidyAmount
+        ? `<div style="font-size:11px;color:#64748b;">유가보조 카드 ${v.statementSubsidyAmount.toLocaleString()} 제외</div>` : ''}</td>
       <td class="col-products">${productTags}</td>
       <td class="col-method">${methodSel}</td>
       <td class="col-status">${countBadge}</td>
     </tr>`;
   }).join('');
+  restoreChecked('tax-check', keepChecked);   // 합산/분리 변경 등으로 다시 그려도 체크 유지
 }
 
 // ── 세금계산서 일괄발행 Excel 생성 ───────────────────────────
@@ -891,7 +969,16 @@ function statementScopeCell(v) {
   return `<div style="font-size:11px;color:#0369a1;margin-top:2px;" title="유가보조금 업체 — 거래명세서에 넣을 품목 선택">명세서:
     <select class="select-method" style="font-size:11px;" onchange="updateVendorStatementScope('${esc(v.name)}', this.value)">
       ${opt('nonfuel', '유외상품만')}${opt('fuel', '유류만')}${opt('all', '전체')}
-    </select></div>`;
+    </select></div>` + subsidyStatusLine(v);
+}
+
+// 유가보조 정산 매칭 상태 (자료 올리기로 정산 내역을 올리면 "정산 확인")
+function subsidyStatusLine(v) {
+  const st = v.subsidyStatus;
+  if (!st) return '';
+  const style = { matched: 'color:#15803d', pending: 'color:#b45309', mismatch: 'color:#b91c1c;font-weight:600' }[st.status] || '';
+  const icon  = { matched: '✓ ', pending: '⏳ ', mismatch: '⚠ ' }[st.status] || '';
+  return `<div style="font-size:11px;margin-top:2px;${style}" title="${esc(st.text)}">${icon}${esc(st.text.replace(/^.*? \d+월: /, '유가보조 '))}</div>`;
 }
 
 // ── 거래명세서 생성 ─────────────────────────────────────────
@@ -1049,10 +1136,12 @@ async function saveCustomer() {
   const printMethod   = document.getElementById('c-print-method').value;
   const taxIssuance   = document.getElementById('c-tax-issuance').value;
   const splitDelivery = document.getElementById('c-split-delivery').value === 'true';
-  const mergeGasoline = document.getElementById('c-merge-gasoline').value === 'true';
+  const mergeSel      = document.getElementById('c-merge-gasoline').value;
+  const mergeGasoline = mergeSel === 'true';
+  const mergeFuelAs   = mergeSel.startsWith('all:') ? mergeSel.slice(4) : '';
   if (!name) return toast('업체명을 입력하세요.', 'warn');
 
-  const res = await api('POST', '/api/customers', { name, bizNo, ceoName, contactName, email, taxEmail, phone, address, bizType, bizItem, printMethod, taxIssuance, splitDelivery, mergeGasoline });
+  const res = await api('POST', '/api/customers', { name, bizNo, ceoName, contactName, email, taxEmail, phone, address, bizType, bizItem, printMethod, taxIssuance, splitDelivery, mergeGasoline, mergeFuelAs });
   if (res.ok) {
     toast(`✅ ${name} 저장 완료`, 'success');
     closeCustomerForm();
@@ -1080,7 +1169,7 @@ function editCustomer(name) {
   document.getElementById('c-print-method').value   = c.printMethod || '';
   document.getElementById('c-tax-issuance').value   = c.taxIssuance || '합산';
   document.getElementById('c-split-delivery').value = c.splitDelivery ? 'true' : '';
-  document.getElementById('c-merge-gasoline').value = c.mergeGasoline ? 'true' : '';
+  document.getElementById('c-merge-gasoline').value = c.mergeFuelAs ? 'all:' + c.mergeFuelAs : (c.mergeGasoline ? 'true' : '');
   document.querySelector('[data-tab="customers"]').click();
   document.getElementById('customer-form-card').style.display = '';
   document.getElementById('customer-form-title').textContent  = `수정: ${name}`;
@@ -1099,7 +1188,8 @@ function closeCustomerForm() {
 }
 
 async function deleteCustomer(name) {
-  if (!confirm(`${name}을(를) 삭제하시겠습니까?`)) return;
+  if (!confirm(`${name}을(를) 삭제하시겠습니까?
+(거래내역 자동 추가로 다시 생기지 않습니다)`)) return;
   const res = await api('DELETE', `/api/customers/${encodeURIComponent(name)}`);
   if (res.ok) {
     toast('삭제 완료', 'success');
@@ -3017,7 +3107,6 @@ async function rebuildCustomerSales() {
 
 async function loadSummary() {
   const ym = `${summaryState.year}-${String(summaryState.month).padStart(2,'0')}`;
-  loadConsistency(ym);
   const res = await api('GET', `/api/summary/${ym}`);
   if (res.ok) renderSummary(res);
   loadStockVariance();
@@ -5794,16 +5883,51 @@ async function loadStaleStatements() {
 }
 
 // ══════════════════════════════════════════════════════════════
-// 오늘 할 일 (첫 화면) — 자료 현황 + 이번 달·지난달 점검
+// 데이터 점검 (첫 화면) — 이번 달·지난달 점검 + 다른 달 + 자료 현황(접힘) + 사용방법(접힘)
 // ══════════════════════════════════════════════════════════════
 function loadToday() {
   const now = new Date();
   const ym = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  loadUploadStatus('today-status');
+  loadUploadStatus('today-status').then(updateStatusSummary);
   loadConsistency(ym(now), 'today-check-current');
   // 지난달은 월마감(거래명세서·세금계산서·미수) 확인용
   loadConsistency(ym(prev), 'today-check-prev');
+  // 다른 달 고르기 (최근 12개월, 이번 달·지난달 제외)
+  const sel = document.getElementById('check-month');
+  if (sel && !sel.options.length) {
+    const opts = ['<option value="">선택</option>'];
+    for (let i = 2; i < 14; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      opts.push(`<option value="${ym(d)}">${d.getFullYear()}년 ${d.getMonth() + 1}월</option>`);
+    }
+    sel.innerHTML = opts.join('');
+  }
+  if (sel?.value) loadOtherCheck(sel.value);
+}
+
+function loadOtherCheck(ym) {
+  const el = document.getElementById('today-check-other');
+  if (!el) return;
+  el.style.display = ym ? '' : 'none';
+  if (ym) loadConsistency(ym, 'today-check-other');
+}
+
+// 자료 현황 접힘 제목에 "2일 넘게 안 올라온 자료" 개수
+function updateStatusSummary() {
+  const sum = document.getElementById('today-status-sum');
+  if (!sum) return;
+  const stale = document.querySelectorAll('#today-status tr.stale').length;
+  sum.innerHTML = stale
+    ? `<span class="stale-count">⚠ 2일 넘게 안 올라온 자료 ${stale}개</span> — 눌러서 보기`
+    : '— 모두 최근 자료 (눌러서 보기)';
+  sum.className = stale ? '' : 'muted';
+}
+
+// 헤더 ⚙ → 설정 (월마감 그룹 안의 설정 화면)
+function openSettings() {
+  switchGroup('monthly');
+  switchSubTab('settings');
 }
 
 // ══════════════════════════════════════════════════════════════

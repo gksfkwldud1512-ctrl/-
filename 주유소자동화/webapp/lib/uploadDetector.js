@@ -40,7 +40,7 @@ function terminalList(rows, col) {
 
 // → { type, label, range?, terminals?, sheetNames }
 //   type: bos-sales | bos-integrated | card-sales | card-integrated | bank | tank | orders |
-//         deposit-bos | deposit-easy | ar-bos-receipts | management | customers | unknown
+//         deposit-bos | deposit-easy | ar-bos-receipts | subsidy-settlement | management | customers | unknown
 async function detectUploadType(filePath) {
   const wb   = await readWorkbookAuto(filePath);
   const sheetNames = wb.SheetNames;
@@ -103,6 +103,13 @@ async function detectUploadType(filePath) {
       return { ...base, type: 'bank', label: '통장 입출금내역',
                range: dateRange(raw.slice(i + 1), cells.indexOf('거래일자')) };
     }
+  }
+
+  // 버스 유가보조금 정산 내역 (transcompSetlExcel_*.xls)
+  if (require('./subsidyMatcher').isSubsidySettlementSheet(head)) {
+    const h = head.findIndex(r => (r || []).map(norm).includes('결제금액'));
+    return { ...base, type: 'subsidy-settlement', label: '유가보조 정산 내역',
+             range: dateRange(raw.slice(h + 1), head[h].map(norm).indexOf('결제일자')) };
   }
 
   // BOS 유류대 입금현황 (외상 업체 입금 등록 기록)

@@ -5,6 +5,7 @@ npm-debug.log*
 # ── 민감한 데이터 (GitHub에 올리지 않음) ──────────
 webapp/data/settings.json
 webapp/data/customers.json
+webapp/data/customer_sync_ignore.json
 webapp/data/vendors*.json
 webapp/data/monthly_fuel*.json
 webapp/data/purchase_lots.json
@@ -63,3 +64,5 @@ webapp/*.xlsx
 Thumbs.db
 desktop.ini
 .vscode/
+webapp/data/subsidy_settlements.json
+webapp/data/subsidy_bizno_map.json

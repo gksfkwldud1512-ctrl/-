@@ -29,14 +29,19 @@ function calcProducts(vendor, customer) {
   let nonFuelSupply = 0, nonFuelTax = 0;
   // 업체 설정: 휘발유를 경유 항목으로 합산해 발행 (둘 다 L 단위라 수량 합산 가능)
   const mergeGasoline = !!customer?.mergeGasoline;
+  // 업체 설정: 모든 유류(휘발유·경유·등유)를 한 유종 이름으로 합산 발행 (예: 웰크론 → 등유)
+  const mergeFuelAs = FUEL_PRODUCTS.has(customer?.mergeFuelAs) ? customer.mergeFuelAs : '';
 
   (vendor.txs || []).forEach(t => {
+    if (t.subsidyCard) return;   // 유가보조금 카드로 결제된 유류 — 세금계산서 발행 대상 아님
     const supply = t.taxType === '면세' ? t.amount : Math.round(t.amount / 1.1);
     const tax    = t.taxType === '면세' ? 0        : t.amount - supply;
     const qty    = Math.floor(t.qty);
 
     if (FUEL_PRODUCTS.has(t.product)) {
-      const key = (mergeGasoline && t.product === '휘발유') ? '경유' : t.product;
+      const key = mergeFuelAs
+        ? mergeFuelAs
+        : (mergeGasoline && t.product === '휘발유') ? '경유' : t.product;
       if (!fuelMap[key]) fuelMap[key] = { qty: 0, supply: 0, tax: 0 };
       fuelMap[key].qty    += qty;
       fuelMap[key].supply += supply;
