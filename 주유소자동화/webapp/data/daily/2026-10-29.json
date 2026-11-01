@@ -9,7 +9,7 @@
       },
       "경유": {
         "qty": 12163.239999999998,
-        "amount": 22577890
+        "amount": 22588450
       },
       "등유": {
         "qty": 20,
@@ -23,9 +23,9 @@
       "amount": 190530
     },
     "byPay": {
-      "현금": 352775,
+      "현금": 50000,
       "신용카드": 16029357,
-      "외상": 7893265
+      "외상": 8206600
     },
     "cardTxs": [
       {
@@ -101,6 +101,14 @@
         "bosPayType": "신용카드"
       },
       {
+        "approvalNo": "34407011",
+        "cardCompany": "",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 313335,
+        "bosPayType": "외상"
+      },
+      {
         "approvalNo": "74959187",
         "cardCompany": "BC카드",
         "cardNo": "",
@@ -133,19 +141,19 @@
         "bosPayType": "신용카드"
       },
       {
-        "approvalNo": "45484973",
-        "cardCompany": "삼성카드",
-        "cardNo": "",
-        "product": "휘발유",
-        "amount": 60000,
-        "bosPayType": "신용카드"
-      },
-      {
         "approvalNo": "34505936",
         "cardCompany": "신한카드",
         "cardNo": "",
         "product": "경유",
         "amount": 188400,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "45484973",
+        "cardCompany": "삼성카드",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 60000,
         "bosPayType": "신용카드"
       },
       {
@@ -2431,15 +2439,34 @@
     }
   },
   "matching": {
-    "bosTotal": 16371384,
+    "bosTotal": 16684719,
     "easyTotal": 20096618,
     "bySource": {
       "나이스": 19937618,
       "이지샵": 159000
     },
-    "totalDiff": -3725234,
+    "totalDiff": -3411899,
     "totalMatch": false,
     "errors": [
+      {
+        "type": "amount_mismatch",
+        "approvalNo": "34407011",
+        "cardCompany": "",
+        "cardNo": "",
+        "product": "경유",
+        "source": "나이스",
+        "bosAmount": 313335,
+        "easyAmount": 302775,
+        "diff": 10560,
+        "recheck": {
+          "checkedSources": [
+            "나이스",
+            "이지샵"
+          ],
+          "notUploaded": [],
+          "crossDay": null
+        }
+      },
       {
         "type": "amount_mismatch",
         "approvalNo": "00000460",
@@ -2469,26 +2496,6 @@
         "bosAmount": 100000,
         "easyAmount": 330000,
         "diff": -230000,
-        "recheck": {
-          "checkedSources": [
-            "나이스",
-            "이지샵"
-          ],
-          "notUploaded": [],
-          "crossDay": null
-        }
-      },
-      {
-        "type": "easy_only",
-        "approvalNo": "34407011",
-        "cardCompany": "신한(구LG)",
-        "cardNo": "9410-17**-****-1800",
-        "product": "경유",
-        "transTime": "03:27:39",
-        "source": "나이스",
-        "bosAmount": null,
-        "easyAmount": 302775,
-        "diff": -302775,
         "recheck": {
           "checkedSources": [
             "나이스",

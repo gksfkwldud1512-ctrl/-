@@ -9,7 +9,7 @@
       },
       "경유": {
         "qty": 4500.76,
-        "amount": 8278042
+        "amount": 8288922
       },
       "등유": {
         "qty": 22.5,
@@ -23,9 +23,9 @@
       "amount": 54000
     },
     "byPay": {
-      "현금": 366950,
+      "현금": 55000,
       "신용카드": 6499491,
-      "외상": 2306595
+      "외상": 2629425
     },
     "cardTxs": [
       {
@@ -51,6 +51,14 @@
         "product": "경유",
         "amount": 297645,
         "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "16363142",
+        "cardCompany": "",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 322830,
+        "bosPayType": "외상"
       },
       {
         "approvalNo": "30098325",
@@ -1329,24 +1337,24 @@
     }
   },
   "matching": {
-    "bosTotal": 6579858,
+    "bosTotal": 6902688,
     "easyTotal": 6915793,
     "bySource": {
       "나이스": 6915793
     },
-    "totalDiff": -335935,
+    "totalDiff": -13105,
     "totalMatch": false,
     "errors": [
       {
         "type": "amount_mismatch",
-        "approvalNo": "00099663",
-        "cardCompany": "현대카드",
+        "approvalNo": "16363142",
+        "cardCompany": "",
         "cardNo": "",
         "product": "경유",
         "source": "나이스",
-        "bosAmount": 308115,
-        "easyAmount": 332100,
-        "diff": -23985,
+        "bosAmount": 322830,
+        "easyAmount": 311950,
+        "diff": 10880,
         "recheck": {
           "checkedSources": [
             "나이스"
@@ -1358,16 +1366,15 @@
         }
       },
       {
-        "type": "easy_only",
-        "approvalNo": "16363142",
-        "cardCompany": "신한(구LG)",
-        "cardNo": "9410-17**-****-1800",
+        "type": "amount_mismatch",
+        "approvalNo": "00099663",
+        "cardCompany": "현대카드",
+        "cardNo": "",
         "product": "경유",
-        "transTime": "03:20:49",
         "source": "나이스",
-        "bosAmount": null,
-        "easyAmount": 311950,
-        "diff": -311950,
+        "bosAmount": 308115,
+        "easyAmount": 332100,
+        "diff": -23985,
         "recheck": {
           "checkedSources": [
             "나이스"

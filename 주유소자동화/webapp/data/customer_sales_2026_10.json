@@ -468,32 +468,6 @@
     "totalAmount": 6206949
   },
   {
-    "name": "대표현금고객",
-    "custNo": "4999203",
-    "payType": "현금",
-    "fuels": {
-      "휘발유": {
-        "qty": 288.64,
-        "amount": 551000,
-        "avgPrice": 1909
-      },
-      "경유": {
-        "qty": 2671.13,
-        "amount": 5051039,
-        "avgPrice": 1891
-      },
-      "등유": {
-        "qty": 200,
-        "amount": 320000,
-        "avgPrice": 1600
-      }
-    },
-    "carwash": 124000,
-    "others": 15000,
-    "totalQty": 3159.77,
-    "totalAmount": 6061039
-  },
-  {
     "name": "하나물류",
     "custNo": "0000104",
     "payType": "신용카드",
@@ -544,6 +518,32 @@
     "others": 0,
     "totalQty": 2960,
     "totalAmount": 5561840
+  },
+  {
+    "name": "대표현금고객",
+    "custNo": "4999203",
+    "payType": "현금",
+    "fuels": {
+      "휘발유": {
+        "qty": 288.64,
+        "amount": 551000,
+        "avgPrice": 1909
+      },
+      "경유": {
+        "qty": 2336.13,
+        "amount": 4436314,
+        "avgPrice": 1899
+      },
+      "등유": {
+        "qty": 200,
+        "amount": 320000,
+        "avgPrice": 1600
+      }
+    },
+    "carwash": 124000,
+    "others": 15000,
+    "totalQty": 2824.77,
+    "totalAmount": 5446314
   },
   {
     "name": "주식회사 명신",
@@ -1326,6 +1326,32 @@
     "totalAmount": 2132577
   },
   {
+    "name": "풀무원 8470",
+    "custNo": "0000030",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 1108,
+        "amount": 2054620,
+        "avgPrice": 1854
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 1108,
+    "totalAmount": 2054620
+  },
+  {
     "name": "대창폴리마",
     "custNo": "0000060",
     "payType": "외상",
@@ -1560,32 +1586,6 @@
     "totalAmount": 1435662
   },
   {
-    "name": "풀무원 8470",
-    "custNo": "0000030",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 773,
-        "amount": 1418455,
-        "avgPrice": 1835
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 773,
-    "totalAmount": 1418455
-  },
-  {
     "name": "지성중공업",
     "custNo": "0000072",
     "payType": "외상",
@@ -1792,6 +1792,32 @@
     "others": 0,
     "totalQty": 368,
     "totalAmount": 691472
+  },
+  {
+    "name": "풀무원 8470",
+    "custNo": "0000030",
+    "payType": "현금",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 335,
+        "amount": 636165,
+        "avgPrice": 1899
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 335,
+    "totalAmount": 636165
   },
   {
     "name": "이형찬",
