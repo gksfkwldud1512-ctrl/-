@@ -1706,7 +1706,14 @@
         "source": "이지샵",
         "bosAmount": 207790,
         "easyAmount": 208890,
-        "diff": -1100
+        "diff": -1100,
+        "recheck": {
+          "checkedSources": [
+            "이지샵"
+          ],
+          "notUploaded": [],
+          "crossDay": null
+        }
       },
       {
         "type": "easy_only",
@@ -1718,8 +1725,19 @@
         "source": "이지샵",
         "bosAmount": null,
         "easyAmount": 113940,
-        "diff": -113940
+        "diff": -113940,
+        "recheck": {
+          "checkedSources": [
+            "이지샵"
+          ],
+          "notUploaded": [],
+          "crossDay": null
+        }
       }
+    ],
+    "notes": [],
+    "sources": [
+      "이지샵"
     ],
     "hasError": true
   },

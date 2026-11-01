@@ -2025,8 +2025,26 @@
         "product": "액스티어알파대D",
         "bosAmount": 15000,
         "easyAmount": null,
-        "diff": 15000
+        "diff": 15000,
+        "recheck": {
+          "checkedSources": [
+            "이지샵",
+            "나이스"
+          ],
+          "notUploaded": [],
+          "crossDay": {
+            "date": "2026-09-22",
+            "source": "나이스",
+            "amount": 15000,
+            "inBos": true
+          }
+        }
       }
+    ],
+    "notes": [],
+    "sources": [
+      "이지샵",
+      "나이스"
     ],
     "hasError": true
   },

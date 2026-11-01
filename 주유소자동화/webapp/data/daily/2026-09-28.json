@@ -361,7 +361,7 @@
         "cardCompany": "BC카드",
         "cardNo": "",
         "product": "경유",
-        "amount": 150000,
+        "amount": -76000,
         "bosPayType": "신용카드"
       },
       {
@@ -369,7 +369,7 @@
         "cardCompany": "BC카드",
         "cardNo": "",
         "product": "경유",
-        "amount": -76000,
+        "amount": 150000,
         "bosPayType": "신용카드"
       },
       {
@@ -2811,8 +2811,21 @@
         "source": "나이스",
         "bosAmount": 74000,
         "easyAmount": 150000,
-        "diff": -76000
+        "diff": -76000,
+        "recheck": {
+          "checkedSources": [
+            "나이스",
+            "이지샵"
+          ],
+          "notUploaded": [],
+          "crossDay": null
+        }
       }
+    ],
+    "notes": [],
+    "sources": [
+      "나이스",
+      "이지샵"
     ],
     "hasError": true
   }

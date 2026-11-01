@@ -166,8 +166,8 @@
         "avgPrice": 1930
       },
       "경유": {
-        "qty": 3193.08,
-        "amount": 6077493,
+        "qty": 3129.08,
+        "amount": 5955957,
         "avgPrice": 1903
       },
       "등유": {
@@ -178,8 +178,8 @@
     },
     "carwash": 1538000,
     "others": 2449470,
-    "totalQty": 5321.45,
-    "totalAmount": 14154663
+    "totalQty": 5257.45,
+    "totalAmount": 14033127
   },
   {
     "name": "현대스크랩",
@@ -572,32 +572,6 @@
     "totalAmount": 4528355
   },
   {
-    "name": "(주)하나항공여행사(음성지점)",
-    "custNo": "0000046",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 2343,
-        "amount": 4398807,
-        "avgPrice": 1877
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 32000,
-    "totalQty": 2343,
-    "totalAmount": 4430807
-  },
-  {
     "name": "하나관광여행사",
     "custNo": "0000132",
     "payType": "외상",
@@ -674,6 +648,32 @@
     "others": 8000,
     "totalQty": 2113.79,
     "totalAmount": 4061132
+  },
+  {
+    "name": "(주)하나항공여행사(음성지점)",
+    "custNo": "0000046",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 2130,
+        "amount": 3997515,
+        "avgPrice": 1877
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 32000,
+    "totalQty": 2130,
+    "totalAmount": 4029515
   },
   {
     "name": "주식회사 명신",
@@ -754,6 +754,32 @@
     "totalAmount": 3836335
   },
   {
+    "name": "한누리투어(주)",
+    "custNo": "0000034",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 2026,
+        "amount": 3810834,
+        "avgPrice": 1881
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 2026,
+    "totalAmount": 3810834
+  },
+  {
     "name": "일반화물2731",
     "custNo": "0000011",
     "payType": "신용카드",
@@ -778,32 +804,6 @@
     "others": 0,
     "totalQty": 2019.67,
     "totalAmount": 3681918
-  },
-  {
-    "name": "한누리투어(주)",
-    "custNo": "0000034",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "경유": {
-        "qty": 1903,
-        "amount": 3576372,
-        "avgPrice": 1879
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 1903,
-    "totalAmount": 3576372
   },
   {
     "name": "특별화물A",
@@ -1414,8 +1414,8 @@
         "avgPrice": 1929
       },
       "경유": {
-        "qty": 337.99,
-        "amount": 645726,
+        "qty": 278.99,
+        "amount": 532800,
         "avgPrice": 1910
       },
       "등유": {
@@ -1426,8 +1426,8 @@
     },
     "carwash": 29000,
     "others": 30000,
-    "totalQty": 909.4,
-    "totalAmount": 1741126
+    "totalQty": 850.4,
+    "totalAmount": 1628200
   },
   {
     "name": "현금고객",
@@ -1948,6 +1948,32 @@
     "others": 0,
     "totalQty": 238.06,
     "totalAmount": 454000
+  },
+  {
+    "name": "(주)하나항공여행사(음성지점)",
+    "custNo": "0000046",
+    "payType": "신용카드",
+    "fuels": {
+      "휘발유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      },
+      "경유": {
+        "qty": 213,
+        "amount": 401292,
+        "avgPrice": 1884
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 213,
+    "totalAmount": 401292
   },
   {
     "name": "한누리투어(주)",

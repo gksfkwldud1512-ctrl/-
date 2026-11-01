@@ -2564,7 +2564,15 @@
         "source": "나이스",
         "bosAmount": null,
         "easyAmount": 3035570,
-        "diff": -3035570
+        "diff": -3035570,
+        "recheck": {
+          "checkedSources": [
+            "나이스",
+            "이지샵"
+          ],
+          "notUploaded": [],
+          "crossDay": null
+        }
       },
       {
         "type": "easy_only",
@@ -2576,7 +2584,15 @@
         "source": "나이스",
         "bosAmount": null,
         "easyAmount": 1251323,
-        "diff": -1251323
+        "diff": -1251323,
+        "recheck": {
+          "checkedSources": [
+            "나이스",
+            "이지샵"
+          ],
+          "notUploaded": [],
+          "crossDay": null
+        }
       },
       {
         "type": "easy_only",
@@ -2588,7 +2604,15 @@
         "source": "나이스",
         "bosAmount": null,
         "easyAmount": 294546,
-        "diff": -294546
+        "diff": -294546,
+        "recheck": {
+          "checkedSources": [
+            "나이스",
+            "이지샵"
+          ],
+          "notUploaded": [],
+          "crossDay": null
+        }
       },
       {
         "type": "easy_only",
@@ -2600,8 +2624,21 @@
         "source": "나이스",
         "bosAmount": null,
         "easyAmount": 357748,
-        "diff": -357748
+        "diff": -357748,
+        "recheck": {
+          "checkedSources": [
+            "나이스",
+            "이지샵"
+          ],
+          "notUploaded": [],
+          "crossDay": null
+        }
       }
+    ],
+    "notes": [],
+    "sources": [
+      "나이스",
+      "이지샵"
     ],
     "hasError": true
   }

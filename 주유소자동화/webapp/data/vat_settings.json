@@ -1,0 +1,50 @@
+{
+  "fixedPurchases": [
+    {
+      "id": "rent",
+      "name": "HD현대오일뱅크 임차료",
+      "kind": "세금계산서",
+      "supplyMonthly": 11000000,
+      "from": "2026-01",
+      "to": null
+    }
+  ],
+  "manualPurchases": {
+    "2026-Q2": [
+      {
+        "id": "q2-etc-invoice",
+        "kind": "세금계산서",
+        "name": "기타 거래처 18곳 (2분기 신고서)",
+        "supply": 22426226,
+        "tax": 2242623,
+        "deductible": true,
+        "memo": "2분기 부가세 검증자료 — 세금계산서 매입 중 연료·임차료 제외분"
+      },
+      {
+        "id": "q2-card",
+        "kind": "카드",
+        "name": "사업용 카드 매입 101건 (2분기 신고서)",
+        "supply": 4484837,
+        "tax": 448443,
+        "deductible": true,
+        "memo": "2분기 부가세 검증자료 — 그 밖의 공제매입세액"
+      }
+    ],
+    "2026-Q4": []
+  },
+  "taxFreeCustomers": [],
+  "nonFuelOnlyFrom": "2026-09",
+  "eFilingCredit": false,
+  "actual": {
+    "2026-Q2": {
+      "salesInvoiceSupply": 547878950,
+      "salesCardSupply": 1454846262,
+      "outputTax": 200272521,
+      "inputInvoiceSupply": 1825990996,
+      "inputCardSupply": 4484837,
+      "inputTax": 183047542,
+      "payable": 17224979,
+      "source": "2분기 부가세 검증자료/부가세 신고서.pdf"
+    }
+  }
+}

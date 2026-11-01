@@ -725,6 +725,14 @@
         "bosPayType": "신용카드"
       },
       {
+        "approvalNo": "30005673",
+        "cardCompany": "",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 480420,
+        "bosPayType": "외상"
+      },
+      {
         "approvalNo": "73391215",
         "cardCompany": "BC카드",
         "cardNo": "",
@@ -1763,29 +1771,21 @@
     }
   },
   "matching": {
-    "bosTotal": 20196508,
+    "bosTotal": 20676928,
     "easyTotal": 20676928,
     "bySource": {
       "이지샵": 60000,
       "나이스": 20616928
     },
-    "totalDiff": -480420,
-    "totalMatch": false,
-    "errors": [
-      {
-        "type": "easy_only",
-        "approvalNo": "30005673",
-        "cardCompany": "국민카드",
-        "cardNo": "9491-01**-****-5908",
-        "product": "경유",
-        "transTime": "19:12:42",
-        "source": "나이스",
-        "bosAmount": null,
-        "easyAmount": 480420,
-        "diff": -480420
-      }
+    "totalDiff": 0,
+    "totalMatch": true,
+    "errors": [],
+    "notes": [],
+    "sources": [
+      "이지샵",
+      "나이스"
     ],
-    "hasError": true
+    "hasError": false
   },
   "cardSources": {
     "easyshop": {

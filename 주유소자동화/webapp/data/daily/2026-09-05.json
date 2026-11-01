@@ -33,7 +33,7 @@
         "cardCompany": "NH카드",
         "cardNo": "",
         "product": "휘발유",
-        "amount": 20000,
+        "amount": -16120,
         "bosPayType": "신용카드"
       },
       {
@@ -41,7 +41,7 @@
         "cardCompany": "NH카드",
         "cardNo": "",
         "product": "휘발유",
-        "amount": -16120,
+        "amount": 20000,
         "bosPayType": "신용카드"
       },
       {
@@ -987,7 +987,16 @@
         "source": "나이스",
         "bosAmount": 3880,
         "easyAmount": 20000,
-        "diff": -16120
+        "diff": -16120,
+        "recheck": {
+          "checkedSources": [
+            "나이스"
+          ],
+          "notUploaded": [
+            "이지샵"
+          ],
+          "crossDay": null
+        }
       },
       {
         "type": "easy_only",
@@ -999,8 +1008,21 @@
         "source": "나이스",
         "bosAmount": null,
         "easyAmount": 803970,
-        "diff": -803970
+        "diff": -803970,
+        "recheck": {
+          "checkedSources": [
+            "나이스"
+          ],
+          "notUploaded": [
+            "이지샵"
+          ],
+          "crossDay": null
+        }
       }
+    ],
+    "notes": [],
+    "sources": [
+      "나이스"
     ],
     "hasError": true
   },

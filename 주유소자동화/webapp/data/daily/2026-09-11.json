@@ -24,8 +24,8 @@
     },
     "byPay": {
       "현금": 146000,
-      "신용카드": 19370225,
-      "외상": 7882583
+      "신용카드": 19248689,
+      "외상": 8004119
     },
     "cardTxs": [
       {
@@ -390,11 +390,11 @@
       },
       {
         "approvalNo": "30004943",
-        "cardCompany": "국민카드",
+        "cardCompany": "",
         "cardNo": "",
         "product": "경유",
         "amount": 121536,
-        "bosPayType": "신용카드"
+        "bosPayType": "외상"
       },
       {
         "approvalNo": "40531516",
@@ -2086,6 +2086,11 @@
     "totalDiff": 0,
     "totalMatch": true,
     "errors": [],
+    "notes": [],
+    "sources": [
+      "이지샵",
+      "나이스"
+    ],
     "hasError": false
   },
   "cardSources": {

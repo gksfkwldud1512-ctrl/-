@@ -1720,32 +1720,25 @@
       "나이스": 18791387
     },
     "totalDiff": 0,
-    "totalMatch": false,
-    "errors": [
+    "totalMatch": true,
+    "errors": [],
+    "notes": [
       {
-        "type": "bos_only",
+        "type": "approval_diff",
         "approvalNo": "284997489",
-        "cardCompany": "신한카드",
-        "cardNo": "",
-        "product": "프로녹스",
-        "bosAmount": 15000,
-        "easyAmount": null,
-        "diff": 15000
-      },
-      {
-        "type": "easy_only",
-        "approvalNo": "28497489",
+        "cardApprovalNo": "28497489",
         "cardCompany": "신한(구LG)",
         "cardNo": "4619-54**-****-5918",
-        "product": "요소수",
-        "transTime": "03:47:22",
+        "product": "프로녹스",
         "source": "나이스",
-        "bosAmount": null,
-        "easyAmount": 15000,
-        "diff": -15000
+        "amount": 15000
       }
     ],
-    "hasError": true
+    "sources": [
+      "이지샵",
+      "나이스"
+    ],
+    "hasError": false
   },
   "cardSources": {
     "easyshop": {

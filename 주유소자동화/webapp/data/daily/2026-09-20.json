@@ -24,8 +24,8 @@
     },
     "byPay": {
       "현금": 432800,
-      "신용카드": 11434567,
-      "외상": 1287794
+      "신용카드": 11835859,
+      "외상": 886502
     },
     "cardTxs": [
       {
@@ -110,11 +110,11 @@
       },
       {
         "approvalNo": "02679268",
-        "cardCompany": "",
+        "cardCompany": "신한카드",
         "cardNo": "",
         "product": "경유",
         "amount": 401292,
-        "bosPayType": "외상"
+        "bosPayType": "신용카드"
       },
       {
         "approvalNo": "30003739",
@@ -1225,6 +1225,10 @@
     "totalDiff": 0,
     "totalMatch": true,
     "errors": [],
+    "notes": [],
+    "sources": [
+      "나이스"
+    ],
     "hasError": false
   },
   "cardSources": {

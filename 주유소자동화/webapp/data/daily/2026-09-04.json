@@ -2229,8 +2229,21 @@
         "source": "나이스",
         "bosAmount": 80000,
         "easyAmount": 79370,
-        "diff": 630
+        "diff": 630,
+        "recheck": {
+          "checkedSources": [
+            "이지샵",
+            "나이스"
+          ],
+          "notUploaded": [],
+          "crossDay": null
+        }
       }
+    ],
+    "notes": [],
+    "sources": [
+      "이지샵",
+      "나이스"
     ],
     "hasError": true
   },

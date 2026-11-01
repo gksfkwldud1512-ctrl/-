@@ -2002,7 +2002,15 @@
         "source": "나이스",
         "bosAmount": 64000,
         "easyAmount": 14000,
-        "diff": 50000
+        "diff": 50000,
+        "recheck": {
+          "checkedSources": [
+            "이지샵",
+            "나이스"
+          ],
+          "notUploaded": [],
+          "crossDay": null
+        }
       },
       {
         "type": "easy_only",
@@ -2014,8 +2022,21 @@
         "source": "나이스",
         "bosAmount": null,
         "easyAmount": 330000,
-        "diff": -330000
+        "diff": -330000,
+        "recheck": {
+          "checkedSources": [
+            "이지샵",
+            "나이스"
+          ],
+          "notUploaded": [],
+          "crossDay": null
+        }
       }
+    ],
+    "notes": [],
+    "sources": [
+      "이지샵",
+      "나이스"
     ],
     "hasError": true
   },

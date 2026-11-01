@@ -1,0 +1,2900 @@
+{
+  "date": "2026-10-27",
+  "bos": {
+    "date": "2026-10-27",
+    "fuels": {
+      "휘발유": {
+        "qty": 647.1,
+        "amount": 1232597
+      },
+      "경유": {
+        "qty": 11599.969999999998,
+        "amount": 21448787
+      },
+      "등유": {
+        "qty": 3000,
+        "amount": 4740000
+      }
+    },
+    "carwash": {
+      "amount": 75000
+    },
+    "others": {
+      "amount": 215430
+    },
+    "byPay": {
+      "현금": 50000,
+      "신용카드": 18723300,
+      "외상": 8918514
+    },
+    "cardTxs": [
+      {
+        "approvalNo": "00387373",
+        "cardCompany": "현대카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 214360,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "05712121",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 168910,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30034556",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 227500,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "00157083",
+        "cardCompany": "현대카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 300300,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30065838",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 80000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "78929653",
+        "cardCompany": "BC카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 180180,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "15431453",
+        "cardCompany": "삼성카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 247725,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "78952329",
+        "cardCompany": "BC카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 418600,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30022624",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 286260,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "06508994",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 95319,
+        "bosPayType": "외상"
+      },
+      {
+        "approvalNo": "06568070",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 254800,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "06568335",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "유록스",
+        "amount": 16000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "06612243",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 236600,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "00244065",
+        "cardCompany": "현대카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 305552,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "06666092",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 231400,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "06709345",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 171120,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "79168535",
+        "cardCompany": "BC카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 316880,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "07133154",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 186000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "07224508",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 344840,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "79244683",
+        "cardCompany": "BC카드",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 78482,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "79515226",
+        "cardCompany": "BC카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 236600,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30001878",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 511965,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "00822938",
+        "cardCompany": "현대카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 309424,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "80065820",
+        "cardCompany": "삼성카드",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 19090,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "07972040",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 223614,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "79639920",
+        "cardCompany": "BC카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 372800,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "04211908",
+        "cardCompany": "하나카드(외환)",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 1000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "05211908",
+        "cardCompany": "하나카드(외환)",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 1000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "06211908",
+        "cardCompany": "하나카드(외환)",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 1000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "07211908",
+        "cardCompany": "하나카드(외환)",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 1000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "08211908",
+        "cardCompany": "하나카드(외환)",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 1000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "09211908",
+        "cardCompany": "하나카드(외환)",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 1000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "08384306",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 167440,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "48731039",
+        "cardCompany": "NH카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 302000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "00521715",
+        "cardCompany": "현대카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 428720,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "33167168",
+        "cardCompany": "롯데카드",
+        "cardNo": "",
+        "product": "세차",
+        "amount": 20000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "08936412",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "세차",
+        "amount": 15000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "00382146",
+        "cardCompany": "현대카드",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 40000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30032548",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 164032,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30032559",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "유록스",
+        "amount": 16000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "67461428",
+        "cardCompany": "롯데카드",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 90000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30115246",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 191100,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "70778338",
+        "cardCompany": "BC카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 167760,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "09735411",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 147256,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "09858484",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 364000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "09868361",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "유록스",
+        "amount": 32000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "99254844",
+        "cardCompany": "삼성카드",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 33000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "10225028",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 165792,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "00576758",
+        "cardCompany": "현대카드",
+        "cardNo": "",
+        "product": "세차",
+        "amount": 5000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "10250159",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "세차",
+        "amount": 15000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30794032",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 73469,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "00106338",
+        "cardCompany": "현대카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 279600,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30063176",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 182672,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "11755751",
+        "cardCompany": "삼성카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 239850,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "04677201",
+        "cardCompany": "하나카드(외환)",
+        "cardNo": "",
+        "product": "유록스",
+        "amount": 32000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "11600549",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 156576,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "72413256",
+        "cardCompany": "BC카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 447360,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "0000",
+        "cardCompany": "",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 288444,
+        "bosPayType": "외상"
+      },
+      {
+        "approvalNo": "30042028",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "현대요소수벌크",
+        "amount": 17830,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30093284",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 468750,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30162111",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 843,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "0000",
+        "cardCompany": "",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 83205,
+        "bosPayType": "외상"
+      },
+      {
+        "approvalNo": "12243171",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 404488,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "72909874",
+        "cardCompany": "BC카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 152848,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "52129633",
+        "cardCompany": "NH카드",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 50000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "12478816",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 418600,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "39885351",
+        "cardCompany": "롯데카드",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 50000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "0000",
+        "cardCompany": "",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 64715,
+        "bosPayType": "외상"
+      },
+      {
+        "approvalNo": "12828951",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 372800,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "73413188",
+        "cardCompany": "BC카드",
+        "cardNo": "",
+        "product": "유록스",
+        "amount": 16000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "73440868",
+        "cardCompany": "BC카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 272700,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "19453986",
+        "cardCompany": "삼성카드",
+        "cardNo": "",
+        "product": "세차",
+        "amount": 20000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30046467",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 298240,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "00030871",
+        "cardCompany": "현대카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 195720,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "00723093",
+        "cardCompany": "현대카드",
+        "cardNo": "",
+        "product": "유록스",
+        "amount": 16000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30028648",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 167440,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "04604802",
+        "cardCompany": "하나카드(외환)",
+        "cardNo": "",
+        "product": "현대요소수벌크",
+        "amount": 23600,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "13402923",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 186000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "73811745",
+        "cardCompany": "BC카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 382120,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "13673597",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 316880,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "74121502",
+        "cardCompany": "BC카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 240240,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "14422688",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 345800,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30025632",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 208415,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "14679199",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 186400,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30038928",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 139800,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "00552840",
+        "cardCompany": "현대카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 148000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "15211829",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 30000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "29108810",
+        "cardCompany": "하나카드(외환)",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 17427,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30027179",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 139800,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "54799342",
+        "cardCompany": "NH카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 80000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "16827544",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 287560,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "75485702",
+        "cardCompany": "BC카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 167760,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "17765572",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 353350,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30098426",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 100000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30098437",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "현대요소수벌크",
+        "amount": 14000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "75758406",
+        "cardCompany": "BC카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 91000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "75768316",
+        "cardCompany": "BC카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 30000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "18252397",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 376800,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "18299990",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 20000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "00756708",
+        "cardCompany": "현대카드",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 41998,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30034824",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 335520,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "18871681",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 216342,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30108436",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 122460,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30015302",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 50000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "19128622",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 200000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "00791325",
+        "cardCompany": "현대카드",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 1000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "00542822",
+        "cardCompany": "현대카드",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 1000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "00287299",
+        "cardCompany": "현대카드",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 30000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "30001898",
+        "cardCompany": "국민카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 506460,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "19644705",
+        "cardCompany": "신한카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 320400,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "76662625",
+        "cardCompany": "BC카드",
+        "cardNo": "",
+        "product": "휘발유",
+        "amount": 100000,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "00466163",
+        "cardCompany": "현대카드",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 270280,
+        "bosPayType": "신용카드"
+      },
+      {
+        "approvalNo": "281849393",
+        "cardCompany": "",
+        "cardNo": "",
+        "product": "경유",
+        "amount": 334462,
+        "bosPayType": "외상"
+      }
+    ]
+  },
+  "cardSources": {
+    "nice": {
+      "date": "2026-10-27",
+      "totalAmount": 20887153,
+      "totalFee": 0,
+      "totalNet": 20887153,
+      "count": 109,
+      "depositDate": "2026-10-30",
+      "cardTxs": [
+        {
+          "approvalNo": "00387373",
+          "cardCompany": "현대카드",
+          "cardNo": "9490-38**-****-5419",
+          "fuel": "경유",
+          "amount": 214360,
+          "transTime": "00:04:18"
+        },
+        {
+          "approvalNo": "05712121",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "4009-33**-****-0590",
+          "fuel": "경유",
+          "amount": 168910,
+          "transTime": "00:10:56"
+        },
+        {
+          "approvalNo": "30034556",
+          "cardCompany": "국민카드",
+          "cardNo": "5259-82**-****-8044",
+          "fuel": "경유",
+          "amount": 227500,
+          "transTime": "01:17:33"
+        },
+        {
+          "approvalNo": "30065838",
+          "cardCompany": "국민카드",
+          "cardNo": "5173-32**-****-1165",
+          "fuel": "휘발유",
+          "amount": 80000,
+          "transTime": "02:06:48"
+        },
+        {
+          "approvalNo": "00157083",
+          "cardCompany": "현대카드",
+          "cardNo": "9490-38**-****-7601",
+          "fuel": "경유",
+          "amount": 300300,
+          "transTime": "02:07:00"
+        },
+        {
+          "approvalNo": "78929653",
+          "cardCompany": "비씨카드",
+          "cardNo": "9500-23**-****-3474",
+          "fuel": "경유",
+          "amount": 180180,
+          "transTime": "02:34:07"
+        },
+        {
+          "approvalNo": "15431453",
+          "cardCompany": "삼성카드",
+          "cardNo": "9420-88**-****-1137",
+          "fuel": "경유",
+          "amount": 247725,
+          "transTime": "02:41:04"
+        },
+        {
+          "approvalNo": "30022624",
+          "cardCompany": "국민카드",
+          "cardNo": "9445-41**-****-5013",
+          "fuel": "경유",
+          "amount": 286260,
+          "transTime": "03:22:11"
+        },
+        {
+          "approvalNo": "78952329",
+          "cardCompany": "비씨카드",
+          "cardNo": "9425-20**-****-8472",
+          "fuel": "경유",
+          "amount": 418600,
+          "transTime": "03:23:07"
+        },
+        {
+          "approvalNo": "06508994",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "9410-17**-****-9284",
+          "fuel": "경유",
+          "amount": 95319,
+          "transTime": "03:27:21"
+        },
+        {
+          "approvalNo": "06520018",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "4499-14**-****-0729",
+          "fuel": "경유",
+          "amount": 2370534,
+          "transTime": "03:28:47"
+        },
+        {
+          "approvalNo": "06568070",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "4009-33**-****-7199",
+          "fuel": "경유",
+          "amount": 254800,
+          "transTime": "04:19:43"
+        },
+        {
+          "approvalNo": "06568335",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "4009-33**-****-7199",
+          "fuel": "요소수",
+          "amount": 16000,
+          "transTime": "04:20:12"
+        },
+        {
+          "approvalNo": "06612243",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "4009-33**-****-7472",
+          "fuel": "경유",
+          "amount": 236600,
+          "transTime": "05:01:27"
+        },
+        {
+          "approvalNo": "00244065",
+          "cardCompany": "현대카드",
+          "cardNo": "9490-38**-****-3120",
+          "fuel": "경유",
+          "amount": 305552,
+          "transTime": "05:04:43"
+        },
+        {
+          "approvalNo": "06666092",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "9410-61**-****-3307",
+          "fuel": "경유",
+          "amount": 231400,
+          "transTime": "05:36:32"
+        },
+        {
+          "approvalNo": "06709345",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "9410-61**-****-8086",
+          "fuel": "경유",
+          "amount": 171120,
+          "transTime": "06:03:22"
+        },
+        {
+          "approvalNo": "79168535",
+          "cardCompany": "비씨카드",
+          "cardNo": "9500-23**-****-9973",
+          "fuel": "경유",
+          "amount": 316880,
+          "transTime": "07:44:21"
+        },
+        {
+          "approvalNo": "07133154",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "4009-33**-****-0541",
+          "fuel": "경유",
+          "amount": 186000,
+          "transTime": "07:56:13"
+        },
+        {
+          "approvalNo": "79244683",
+          "cardCompany": "비씨카드",
+          "cardNo": "5298-03**-****-3953",
+          "fuel": "휘발유",
+          "amount": 78482,
+          "transTime": "08:09:15"
+        },
+        {
+          "approvalNo": "07224508",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "9410-61**-****-0953",
+          "fuel": "경유",
+          "amount": 344840,
+          "transTime": "08:09:15"
+        },
+        {
+          "approvalNo": "79515226",
+          "cardCompany": "비씨카드",
+          "cardNo": "9500-24**-****-1442",
+          "fuel": "경유",
+          "amount": 236600,
+          "transTime": "09:08:58"
+        },
+        {
+          "approvalNo": "30001878",
+          "cardCompany": "국민카드",
+          "cardNo": "4265-86**-****-9884",
+          "fuel": "경유",
+          "amount": 511965,
+          "transTime": "09:15:16"
+        },
+        {
+          "approvalNo": "00822938",
+          "cardCompany": "현대카드",
+          "cardNo": "9490-38**-****-9308",
+          "fuel": "경유",
+          "amount": 309424,
+          "transTime": "09:16:10"
+        },
+        {
+          "approvalNo": "80065820",
+          "cardCompany": "삼성카드",
+          "cardNo": "5188-31**-****-2768",
+          "fuel": "휘발유",
+          "amount": 19090,
+          "transTime": "09:20:46"
+        },
+        {
+          "approvalNo": "07972040",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "4009-33**-****-8269",
+          "fuel": "경유",
+          "amount": 223614,
+          "transTime": "09:28:22"
+        },
+        {
+          "approvalNo": "79639920",
+          "cardCompany": "비씨카드",
+          "cardNo": "9500-23**-****-0565",
+          "fuel": "경유",
+          "amount": 372800,
+          "transTime": "09:29:57"
+        },
+        {
+          "approvalNo": "04211908",
+          "cardCompany": "하나(구외환)카드",
+          "cardNo": "5404-97**-****-4507",
+          "fuel": "경유",
+          "amount": 1000,
+          "transTime": "09:47:29"
+        },
+        {
+          "approvalNo": "05211908",
+          "cardCompany": "하나(구외환)카드",
+          "cardNo": "5404-97**-****-4507",
+          "fuel": "경유",
+          "amount": 1000,
+          "transTime": "09:48:27"
+        },
+        {
+          "approvalNo": "06211908",
+          "cardCompany": "하나(구외환)카드",
+          "cardNo": "5404-97**-****-4507",
+          "fuel": "경유",
+          "amount": 1000,
+          "transTime": "09:49:58"
+        },
+        {
+          "approvalNo": "07211908",
+          "cardCompany": "하나(구외환)카드",
+          "cardNo": "5404-97**-****-4507",
+          "fuel": "경유",
+          "amount": 1000,
+          "transTime": "09:51:43"
+        },
+        {
+          "approvalNo": "08211908",
+          "cardCompany": "하나(구외환)카드",
+          "cardNo": "5404-97**-****-4507",
+          "fuel": "경유",
+          "amount": 1000,
+          "transTime": "09:53:26"
+        },
+        {
+          "approvalNo": "09211908",
+          "cardCompany": "하나(구외환)카드",
+          "cardNo": "5404-97**-****-4507",
+          "fuel": "경유",
+          "amount": 1000,
+          "transTime": "09:55:02"
+        },
+        {
+          "approvalNo": "08384306",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "9410-61**-****-8321",
+          "fuel": "경유",
+          "amount": 167440,
+          "transTime": "10:04:15"
+        },
+        {
+          "approvalNo": "00521715",
+          "cardCompany": "현대카드",
+          "cardNo": "9490-38**-****-7703",
+          "fuel": "경유",
+          "amount": 428720,
+          "transTime": "10:20:25"
+        },
+        {
+          "approvalNo": "33167168",
+          "cardCompany": "롯데카드(구)",
+          "cardNo": "9409-15**-****-0236",
+          "fuel": "세차",
+          "amount": 20000,
+          "transTime": "10:22:55"
+        },
+        {
+          "approvalNo": "08936412",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "4009-33**-****-0541",
+          "fuel": "세차",
+          "amount": 15000,
+          "transTime": "10:50:04"
+        },
+        {
+          "approvalNo": "00382146",
+          "cardCompany": "현대카드",
+          "cardNo": "9431-82**-****-2011",
+          "fuel": "휘발유",
+          "amount": 40000,
+          "transTime": "11:00:03"
+        },
+        {
+          "approvalNo": "30032548",
+          "cardCompany": "국민카드",
+          "cardNo": "5259-82**-****-2036",
+          "fuel": "경유",
+          "amount": 164032,
+          "transTime": "11:14:21"
+        },
+        {
+          "approvalNo": "67461428",
+          "cardCompany": "롯데카드(구)",
+          "cardNo": "5137-92**-****-8975",
+          "fuel": "휘발유",
+          "amount": 90000,
+          "transTime": "11:14:37"
+        },
+        {
+          "approvalNo": "30032559",
+          "cardCompany": "국민카드",
+          "cardNo": "5259-82**-****-2036",
+          "fuel": "요소수",
+          "amount": 16000,
+          "transTime": "11:14:52"
+        },
+        {
+          "approvalNo": "30115246",
+          "cardCompany": "국민카드",
+          "cardNo": "5259-82**-****-6040",
+          "fuel": "경유",
+          "amount": 191100,
+          "transTime": "11:19:29"
+        },
+        {
+          "approvalNo": "70778338",
+          "cardCompany": "비씨카드",
+          "cardNo": "9425-20**-****-5649",
+          "fuel": "경유",
+          "amount": 167760,
+          "transTime": "11:44:27"
+        },
+        {
+          "approvalNo": "09735411",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "4009-33**-****-7207",
+          "fuel": "경유",
+          "amount": 147256,
+          "transTime": "11:48:28"
+        },
+        {
+          "approvalNo": "09858484",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "9410-61**-****-3751",
+          "fuel": "경유",
+          "amount": 364000,
+          "transTime": "11:56:12"
+        },
+        {
+          "approvalNo": "09868361",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "9410-61**-****-3751",
+          "fuel": "요소수",
+          "amount": 32000,
+          "transTime": "11:56:36"
+        },
+        {
+          "approvalNo": "99254844",
+          "cardCompany": "삼성카드",
+          "cardNo": "9410-30**-****-0577",
+          "fuel": "휘발유",
+          "amount": 33000,
+          "transTime": "12:00:12"
+        },
+        {
+          "approvalNo": "10225028",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "9410-61**-****-2461",
+          "fuel": "경유",
+          "amount": 165792,
+          "transTime": "12:16:10"
+        },
+        {
+          "approvalNo": "00576758",
+          "cardCompany": "현대카드",
+          "cardNo": "4033-02**-****-3609",
+          "fuel": "세차",
+          "amount": 5000,
+          "transTime": "12:16:37"
+        },
+        {
+          "approvalNo": "10250159",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "9410-61**-****-2461",
+          "fuel": "세차",
+          "amount": 15000,
+          "transTime": "12:17:32"
+        },
+        {
+          "approvalNo": "30794032",
+          "cardCompany": "국민카드",
+          "cardNo": "9410-49**-****-5803",
+          "fuel": "휘발유",
+          "amount": 73469,
+          "transTime": "12:40:01"
+        },
+        {
+          "approvalNo": "00106338",
+          "cardCompany": "현대카드",
+          "cardNo": "9490-38**-****-3115",
+          "fuel": "경유",
+          "amount": 279600,
+          "transTime": "13:08:14"
+        },
+        {
+          "approvalNo": "30063176",
+          "cardCompany": "국민카드",
+          "cardNo": "5259-82**-****-5056",
+          "fuel": "경유",
+          "amount": 182672,
+          "transTime": "13:11:48"
+        },
+        {
+          "approvalNo": "11755751",
+          "cardCompany": "삼성카드",
+          "cardNo": "9420-88**-****-9925",
+          "fuel": "경유",
+          "amount": 239850,
+          "transTime": "13:22:59"
+        },
+        {
+          "approvalNo": "04677201",
+          "cardCompany": "하나(구외환)카드",
+          "cardNo": "4021-75**-****-7998",
+          "fuel": "요소수",
+          "amount": 32000,
+          "transTime": "13:23:36"
+        },
+        {
+          "approvalNo": "11600549",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "9410-61**-****-8260",
+          "fuel": "경유",
+          "amount": 156576,
+          "transTime": "13:40:19"
+        },
+        {
+          "approvalNo": "72413256",
+          "cardCompany": "비씨카드",
+          "cardNo": "9500-23**-****-7063",
+          "fuel": "경유",
+          "amount": 447360,
+          "transTime": "13:41:54"
+        },
+        {
+          "approvalNo": "30042028",
+          "cardCompany": "국민카드",
+          "cardNo": "9410-49**-****-5804",
+          "fuel": "요소수",
+          "amount": 17830,
+          "transTime": "14:00:47"
+        },
+        {
+          "approvalNo": "30093284",
+          "cardCompany": "국민카드",
+          "cardNo": "6258-04**-****-9000",
+          "fuel": "경유",
+          "amount": 468750,
+          "transTime": "14:15:26"
+        },
+        {
+          "approvalNo": "30162111",
+          "cardCompany": "국민카드",
+          "cardNo": "4265-86**-****-5831",
+          "fuel": "휘발유",
+          "amount": 843,
+          "transTime": "14:22:24"
+        },
+        {
+          "approvalNo": "12243171",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "9410-61**-****-7948",
+          "fuel": "경유",
+          "amount": 404488,
+          "transTime": "14:29:35"
+        },
+        {
+          "approvalNo": "72909874",
+          "cardCompany": "비씨카드",
+          "cardNo": "9500-23**-****-1110",
+          "fuel": "경유",
+          "amount": 152848,
+          "transTime": "14:32:56"
+        },
+        {
+          "approvalNo": "52129633",
+          "cardCompany": "NH카드",
+          "cardNo": "4854-79**-****-5406",
+          "fuel": "휘발유",
+          "amount": 50000,
+          "transTime": "14:34:38"
+        },
+        {
+          "approvalNo": "12478816",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "4009-33**-****-3315",
+          "fuel": "경유",
+          "amount": 418600,
+          "transTime": "14:47:39"
+        },
+        {
+          "approvalNo": "39885351",
+          "cardCompany": "롯데카드(구)",
+          "cardNo": "5137-92**-****-4620",
+          "fuel": "휘발유",
+          "amount": 50000,
+          "transTime": "14:55:08"
+        },
+        {
+          "approvalNo": "12828951",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "4009-33**-****-1389",
+          "fuel": "경유",
+          "amount": 372800,
+          "transTime": "15:14:17"
+        },
+        {
+          "approvalNo": "73413188",
+          "cardCompany": "비씨카드",
+          "cardNo": "9500-23**-****-0617",
+          "fuel": "요소수",
+          "amount": 16000,
+          "transTime": "15:22:01"
+        },
+        {
+          "approvalNo": "73440868",
+          "cardCompany": "비씨카드",
+          "cardNo": "9500-23**-****-0617",
+          "fuel": "경유",
+          "amount": 272700,
+          "transTime": "15:23:56"
+        },
+        {
+          "approvalNo": "19453986",
+          "cardCompany": "삼성카드",
+          "cardNo": "9420-88**-****-6895",
+          "fuel": "세차",
+          "amount": 20000,
+          "transTime": "15:27:52"
+        },
+        {
+          "approvalNo": "30046467",
+          "cardCompany": "국민카드",
+          "cardNo": "3564-15**-****-7098",
+          "fuel": "경유",
+          "amount": 298240,
+          "transTime": "15:28:51"
+        },
+        {
+          "approvalNo": "00030871",
+          "cardCompany": "현대카드",
+          "cardNo": "9490-38**-****-5102",
+          "fuel": "경유",
+          "amount": 195720,
+          "transTime": "15:36:52"
+        },
+        {
+          "approvalNo": "00723093",
+          "cardCompany": "현대카드",
+          "cardNo": "9490-38**-****-5102",
+          "fuel": "요소수",
+          "amount": 16000,
+          "transTime": "15:38:05"
+        },
+        {
+          "approvalNo": "30028648",
+          "cardCompany": "국민카드",
+          "cardNo": "3564-15**-****-2094",
+          "fuel": "경유",
+          "amount": 167440,
+          "transTime": "15:40:01"
+        },
+        {
+          "approvalNo": "04604802",
+          "cardCompany": "하나(구외환)카드",
+          "cardNo": "4201-89**-****-9216",
+          "fuel": "요소수",
+          "amount": 23600,
+          "transTime": "15:55:18"
+        },
+        {
+          "approvalNo": "13402923",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "9410-61**-****-8086",
+          "fuel": "경유",
+          "amount": 186000,
+          "transTime": "15:58:06"
+        },
+        {
+          "approvalNo": "73811745",
+          "cardCompany": "비씨카드",
+          "cardNo": "9480-02**-****-6244",
+          "fuel": "경유",
+          "amount": 382120,
+          "transTime": "16:02:27"
+        },
+        {
+          "approvalNo": "13673597",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "4009-33**-****-3904",
+          "fuel": "경유",
+          "amount": 316880,
+          "transTime": "16:18:33"
+        },
+        {
+          "approvalNo": "74121502",
+          "cardCompany": "비씨카드",
+          "cardNo": "9500-23**-****-6492",
+          "fuel": "경유",
+          "amount": 240240,
+          "transTime": "16:32:25"
+        },
+        {
+          "approvalNo": "14422688",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "9410-61**-****-6324",
+          "fuel": "경유",
+          "amount": 345800,
+          "transTime": "17:01:17"
+        },
+        {
+          "approvalNo": "30025632",
+          "cardCompany": "국민카드",
+          "cardNo": "3564-15**-****-9022",
+          "fuel": "경유",
+          "amount": 208415,
+          "transTime": "17:08:57"
+        },
+        {
+          "approvalNo": "14679199",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "9410-61**-****-0278",
+          "fuel": "경유",
+          "amount": 186400,
+          "transTime": "17:10:53"
+        },
+        {
+          "approvalNo": "30038928",
+          "cardCompany": "국민카드",
+          "cardNo": "3564-15**-****-2001",
+          "fuel": "경유",
+          "amount": 139800,
+          "transTime": "17:16:24"
+        },
+        {
+          "approvalNo": "00552840",
+          "cardCompany": "현대카드",
+          "cardNo": "9490-38**-****-1300",
+          "fuel": "경유",
+          "amount": 148000,
+          "transTime": "17:18:53"
+        },
+        {
+          "approvalNo": "15211829",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "4658-87**-****-5157",
+          "fuel": "휘발유",
+          "amount": 30000,
+          "transTime": "17:30:37"
+        },
+        {
+          "approvalNo": "29108810",
+          "cardCompany": "하나(구외환)카드",
+          "cardNo": "9436-81**-****-8264",
+          "fuel": "휘발유",
+          "amount": 17427,
+          "transTime": "17:52:44"
+        },
+        {
+          "approvalNo": "30027179",
+          "cardCompany": "국민카드",
+          "cardNo": "5259-82**-****-4023",
+          "fuel": "경유",
+          "amount": 139800,
+          "transTime": "17:57:18"
+        },
+        {
+          "approvalNo": "54799342",
+          "cardCompany": "NH카드",
+          "cardNo": "9430-16**-****-9682",
+          "fuel": "경유",
+          "amount": 80000,
+          "transTime": "18:20:20"
+        },
+        {
+          "approvalNo": "16827544",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "9410-61**-****-6962",
+          "fuel": "경유",
+          "amount": 287560,
+          "transTime": "18:28:31"
+        },
+        {
+          "approvalNo": "75485702",
+          "cardCompany": "비씨카드",
+          "cardNo": "9500-23**-****-9016",
+          "fuel": "경유",
+          "amount": 167760,
+          "transTime": "18:45:19"
+        },
+        {
+          "approvalNo": "17765572",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "4009-33**-****-0475",
+          "fuel": "경유",
+          "amount": 353350,
+          "transTime": "19:02:52"
+        },
+        {
+          "approvalNo": "30098426",
+          "cardCompany": "국민카드",
+          "cardNo": "9445-41**-****-0082",
+          "fuel": "경유",
+          "amount": 100000,
+          "transTime": "19:05:52"
+        },
+        {
+          "approvalNo": "30098437",
+          "cardCompany": "국민카드",
+          "cardNo": "9445-41**-****-0082",
+          "fuel": "요소수",
+          "amount": 14000,
+          "transTime": "19:08:48"
+        },
+        {
+          "approvalNo": "75758406",
+          "cardCompany": "비씨카드",
+          "cardNo": "9425-20**-****-7648",
+          "fuel": "경유",
+          "amount": 91000,
+          "transTime": "19:17:19"
+        },
+        {
+          "approvalNo": "75768316",
+          "cardCompany": "비씨카드",
+          "cardNo": "4198-03**-****-4916",
+          "fuel": "경유",
+          "amount": 30000,
+          "transTime": "19:17:24"
+        },
+        {
+          "approvalNo": "18252397",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "9410-61**-****-7728",
+          "fuel": "경유",
+          "amount": 376800,
+          "transTime": "19:38:07"
+        },
+        {
+          "approvalNo": "18299990",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "4658-87**-****-1557",
+          "fuel": "휘발유",
+          "amount": 20000,
+          "transTime": "19:42:34"
+        },
+        {
+          "approvalNo": "00756708",
+          "cardCompany": "현대카드",
+          "cardNo": "4025-96**-****-2921",
+          "fuel": "휘발유",
+          "amount": 41998,
+          "transTime": "19:51:05"
+        },
+        {
+          "approvalNo": "30034824",
+          "cardCompany": "국민카드",
+          "cardNo": "3564-15**-****-4073",
+          "fuel": "경유",
+          "amount": 335520,
+          "transTime": "19:59:01"
+        },
+        {
+          "approvalNo": "18871681",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "9410-61**-****-4392",
+          "fuel": "경유",
+          "amount": 216342,
+          "transTime": "20:30:24"
+        },
+        {
+          "approvalNo": "30108436",
+          "cardCompany": "국민카드",
+          "cardNo": "5259-82**-****-3086",
+          "fuel": "경유",
+          "amount": 122460,
+          "transTime": "20:35:09"
+        },
+        {
+          "approvalNo": "19128622",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "4009-33**-****-3886",
+          "fuel": "경유",
+          "amount": 200000,
+          "transTime": "20:55:32"
+        },
+        {
+          "approvalNo": "30015302",
+          "cardCompany": "국민카드",
+          "cardNo": "5570-42**-****-2026",
+          "fuel": "휘발유",
+          "amount": 50000,
+          "transTime": "20:55:36"
+        },
+        {
+          "approvalNo": "00791325",
+          "cardCompany": "현대카드",
+          "cardNo": "5327-93**-****-7013",
+          "fuel": "휘발유",
+          "amount": 1000,
+          "transTime": "21:14:09"
+        },
+        {
+          "approvalNo": "00542822",
+          "cardCompany": "현대카드",
+          "cardNo": "5327-93**-****-7013",
+          "fuel": "휘발유",
+          "amount": 1000,
+          "transTime": "21:16:11"
+        },
+        {
+          "approvalNo": "00287299",
+          "cardCompany": "현대카드",
+          "cardNo": "5327-93**-****-7013",
+          "fuel": "휘발유",
+          "amount": 30000,
+          "transTime": "21:16:48"
+        },
+        {
+          "approvalNo": "30001898",
+          "cardCompany": "국민카드",
+          "cardNo": "4265-86**-****-6885",
+          "fuel": "경유",
+          "amount": 506460,
+          "transTime": "21:20:15"
+        },
+        {
+          "approvalNo": "19644705",
+          "cardCompany": "신한(구LG)",
+          "cardNo": "9410-61**-****-5042",
+          "fuel": "경유",
+          "amount": 320400,
+          "transTime": "21:50:08"
+        },
+        {
+          "approvalNo": "76662625",
+          "cardCompany": "비씨카드",
+          "cardNo": "9410-12**-****-2379",
+          "fuel": "휘발유",
+          "amount": 100000,
+          "transTime": "21:56:45"
+        },
+        {
+          "approvalNo": "00466163",
+          "cardCompany": "현대카드",
+          "cardNo": "9490-38**-****-2620",
+          "fuel": "경유",
+          "amount": 270280,
+          "transTime": "22:31:34"
+        }
+      ],
+      "depositExpected": {
+        "2026-10-30": {
+          "KB국민카드": 4302556,
+          "비씨카드": 3671330
+        }
+      }
+    },
+    "easyshop": {
+      "date": "2026-10-27",
+      "totalAmount": 302000,
+      "totalFee": 3926,
+      "totalNet": 298074,
+      "count": 1,
+      "depositDate": "2026-10-30",
+      "cardTxs": [
+        {
+          "approvalNo": "48731039",
+          "cardCompany": "NH카드",
+          "cardNo": "9431-1671-****-081*",
+          "fuel": "경유",
+          "amount": 302000,
+          "transTime": "10:03:41"
+        }
+      ],
+      "depositExpected": {}
+    }
+  },
+  "card": {
+    "date": "2026-10-27",
+    "totalAmount": 21189153,
+    "totalFee": 3926,
+    "totalNet": 21185227,
+    "count": 110,
+    "depositDate": "2026-10-30",
+    "cardTxs": [
+      {
+        "approvalNo": "00387373",
+        "cardCompany": "현대카드",
+        "cardNo": "9490-38**-****-5419",
+        "fuel": "경유",
+        "amount": 214360,
+        "transTime": "00:04:18",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "05712121",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "4009-33**-****-0590",
+        "fuel": "경유",
+        "amount": 168910,
+        "transTime": "00:10:56",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30034556",
+        "cardCompany": "국민카드",
+        "cardNo": "5259-82**-****-8044",
+        "fuel": "경유",
+        "amount": 227500,
+        "transTime": "01:17:33",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30065838",
+        "cardCompany": "국민카드",
+        "cardNo": "5173-32**-****-1165",
+        "fuel": "휘발유",
+        "amount": 80000,
+        "transTime": "02:06:48",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "00157083",
+        "cardCompany": "현대카드",
+        "cardNo": "9490-38**-****-7601",
+        "fuel": "경유",
+        "amount": 300300,
+        "transTime": "02:07:00",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "78929653",
+        "cardCompany": "비씨카드",
+        "cardNo": "9500-23**-****-3474",
+        "fuel": "경유",
+        "amount": 180180,
+        "transTime": "02:34:07",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "15431453",
+        "cardCompany": "삼성카드",
+        "cardNo": "9420-88**-****-1137",
+        "fuel": "경유",
+        "amount": 247725,
+        "transTime": "02:41:04",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30022624",
+        "cardCompany": "국민카드",
+        "cardNo": "9445-41**-****-5013",
+        "fuel": "경유",
+        "amount": 286260,
+        "transTime": "03:22:11",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "78952329",
+        "cardCompany": "비씨카드",
+        "cardNo": "9425-20**-****-8472",
+        "fuel": "경유",
+        "amount": 418600,
+        "transTime": "03:23:07",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "06508994",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "9410-17**-****-9284",
+        "fuel": "경유",
+        "amount": 95319,
+        "transTime": "03:27:21",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "06520018",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "4499-14**-****-0729",
+        "fuel": "경유",
+        "amount": 2370534,
+        "transTime": "03:28:47",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "06568070",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "4009-33**-****-7199",
+        "fuel": "경유",
+        "amount": 254800,
+        "transTime": "04:19:43",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "06568335",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "4009-33**-****-7199",
+        "fuel": "요소수",
+        "amount": 16000,
+        "transTime": "04:20:12",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "06612243",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "4009-33**-****-7472",
+        "fuel": "경유",
+        "amount": 236600,
+        "transTime": "05:01:27",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "00244065",
+        "cardCompany": "현대카드",
+        "cardNo": "9490-38**-****-3120",
+        "fuel": "경유",
+        "amount": 305552,
+        "transTime": "05:04:43",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "06666092",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "9410-61**-****-3307",
+        "fuel": "경유",
+        "amount": 231400,
+        "transTime": "05:36:32",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "06709345",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "9410-61**-****-8086",
+        "fuel": "경유",
+        "amount": 171120,
+        "transTime": "06:03:22",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "79168535",
+        "cardCompany": "비씨카드",
+        "cardNo": "9500-23**-****-9973",
+        "fuel": "경유",
+        "amount": 316880,
+        "transTime": "07:44:21",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "07133154",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "4009-33**-****-0541",
+        "fuel": "경유",
+        "amount": 186000,
+        "transTime": "07:56:13",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "79244683",
+        "cardCompany": "비씨카드",
+        "cardNo": "5298-03**-****-3953",
+        "fuel": "휘발유",
+        "amount": 78482,
+        "transTime": "08:09:15",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "07224508",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "9410-61**-****-0953",
+        "fuel": "경유",
+        "amount": 344840,
+        "transTime": "08:09:15",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "79515226",
+        "cardCompany": "비씨카드",
+        "cardNo": "9500-24**-****-1442",
+        "fuel": "경유",
+        "amount": 236600,
+        "transTime": "09:08:58",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30001878",
+        "cardCompany": "국민카드",
+        "cardNo": "4265-86**-****-9884",
+        "fuel": "경유",
+        "amount": 511965,
+        "transTime": "09:15:16",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "00822938",
+        "cardCompany": "현대카드",
+        "cardNo": "9490-38**-****-9308",
+        "fuel": "경유",
+        "amount": 309424,
+        "transTime": "09:16:10",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "80065820",
+        "cardCompany": "삼성카드",
+        "cardNo": "5188-31**-****-2768",
+        "fuel": "휘발유",
+        "amount": 19090,
+        "transTime": "09:20:46",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "07972040",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "4009-33**-****-8269",
+        "fuel": "경유",
+        "amount": 223614,
+        "transTime": "09:28:22",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "79639920",
+        "cardCompany": "비씨카드",
+        "cardNo": "9500-23**-****-0565",
+        "fuel": "경유",
+        "amount": 372800,
+        "transTime": "09:29:57",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "04211908",
+        "cardCompany": "하나(구외환)카드",
+        "cardNo": "5404-97**-****-4507",
+        "fuel": "경유",
+        "amount": 1000,
+        "transTime": "09:47:29",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "05211908",
+        "cardCompany": "하나(구외환)카드",
+        "cardNo": "5404-97**-****-4507",
+        "fuel": "경유",
+        "amount": 1000,
+        "transTime": "09:48:27",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "06211908",
+        "cardCompany": "하나(구외환)카드",
+        "cardNo": "5404-97**-****-4507",
+        "fuel": "경유",
+        "amount": 1000,
+        "transTime": "09:49:58",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "07211908",
+        "cardCompany": "하나(구외환)카드",
+        "cardNo": "5404-97**-****-4507",
+        "fuel": "경유",
+        "amount": 1000,
+        "transTime": "09:51:43",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "08211908",
+        "cardCompany": "하나(구외환)카드",
+        "cardNo": "5404-97**-****-4507",
+        "fuel": "경유",
+        "amount": 1000,
+        "transTime": "09:53:26",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "09211908",
+        "cardCompany": "하나(구외환)카드",
+        "cardNo": "5404-97**-****-4507",
+        "fuel": "경유",
+        "amount": 1000,
+        "transTime": "09:55:02",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "08384306",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "9410-61**-****-8321",
+        "fuel": "경유",
+        "amount": 167440,
+        "transTime": "10:04:15",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "00521715",
+        "cardCompany": "현대카드",
+        "cardNo": "9490-38**-****-7703",
+        "fuel": "경유",
+        "amount": 428720,
+        "transTime": "10:20:25",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "33167168",
+        "cardCompany": "롯데카드(구)",
+        "cardNo": "9409-15**-****-0236",
+        "fuel": "세차",
+        "amount": 20000,
+        "transTime": "10:22:55",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "08936412",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "4009-33**-****-0541",
+        "fuel": "세차",
+        "amount": 15000,
+        "transTime": "10:50:04",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "00382146",
+        "cardCompany": "현대카드",
+        "cardNo": "9431-82**-****-2011",
+        "fuel": "휘발유",
+        "amount": 40000,
+        "transTime": "11:00:03",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30032548",
+        "cardCompany": "국민카드",
+        "cardNo": "5259-82**-****-2036",
+        "fuel": "경유",
+        "amount": 164032,
+        "transTime": "11:14:21",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "67461428",
+        "cardCompany": "롯데카드(구)",
+        "cardNo": "5137-92**-****-8975",
+        "fuel": "휘발유",
+        "amount": 90000,
+        "transTime": "11:14:37",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30032559",
+        "cardCompany": "국민카드",
+        "cardNo": "5259-82**-****-2036",
+        "fuel": "요소수",
+        "amount": 16000,
+        "transTime": "11:14:52",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30115246",
+        "cardCompany": "국민카드",
+        "cardNo": "5259-82**-****-6040",
+        "fuel": "경유",
+        "amount": 191100,
+        "transTime": "11:19:29",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "70778338",
+        "cardCompany": "비씨카드",
+        "cardNo": "9425-20**-****-5649",
+        "fuel": "경유",
+        "amount": 167760,
+        "transTime": "11:44:27",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "09735411",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "4009-33**-****-7207",
+        "fuel": "경유",
+        "amount": 147256,
+        "transTime": "11:48:28",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "09858484",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "9410-61**-****-3751",
+        "fuel": "경유",
+        "amount": 364000,
+        "transTime": "11:56:12",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "09868361",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "9410-61**-****-3751",
+        "fuel": "요소수",
+        "amount": 32000,
+        "transTime": "11:56:36",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "99254844",
+        "cardCompany": "삼성카드",
+        "cardNo": "9410-30**-****-0577",
+        "fuel": "휘발유",
+        "amount": 33000,
+        "transTime": "12:00:12",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "10225028",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "9410-61**-****-2461",
+        "fuel": "경유",
+        "amount": 165792,
+        "transTime": "12:16:10",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "00576758",
+        "cardCompany": "현대카드",
+        "cardNo": "4033-02**-****-3609",
+        "fuel": "세차",
+        "amount": 5000,
+        "transTime": "12:16:37",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "10250159",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "9410-61**-****-2461",
+        "fuel": "세차",
+        "amount": 15000,
+        "transTime": "12:17:32",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30794032",
+        "cardCompany": "국민카드",
+        "cardNo": "9410-49**-****-5803",
+        "fuel": "휘발유",
+        "amount": 73469,
+        "transTime": "12:40:01",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "00106338",
+        "cardCompany": "현대카드",
+        "cardNo": "9490-38**-****-3115",
+        "fuel": "경유",
+        "amount": 279600,
+        "transTime": "13:08:14",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30063176",
+        "cardCompany": "국민카드",
+        "cardNo": "5259-82**-****-5056",
+        "fuel": "경유",
+        "amount": 182672,
+        "transTime": "13:11:48",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "11755751",
+        "cardCompany": "삼성카드",
+        "cardNo": "9420-88**-****-9925",
+        "fuel": "경유",
+        "amount": 239850,
+        "transTime": "13:22:59",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "04677201",
+        "cardCompany": "하나(구외환)카드",
+        "cardNo": "4021-75**-****-7998",
+        "fuel": "요소수",
+        "amount": 32000,
+        "transTime": "13:23:36",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "11600549",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "9410-61**-****-8260",
+        "fuel": "경유",
+        "amount": 156576,
+        "transTime": "13:40:19",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "72413256",
+        "cardCompany": "비씨카드",
+        "cardNo": "9500-23**-****-7063",
+        "fuel": "경유",
+        "amount": 447360,
+        "transTime": "13:41:54",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30042028",
+        "cardCompany": "국민카드",
+        "cardNo": "9410-49**-****-5804",
+        "fuel": "요소수",
+        "amount": 17830,
+        "transTime": "14:00:47",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30093284",
+        "cardCompany": "국민카드",
+        "cardNo": "6258-04**-****-9000",
+        "fuel": "경유",
+        "amount": 468750,
+        "transTime": "14:15:26",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30162111",
+        "cardCompany": "국민카드",
+        "cardNo": "4265-86**-****-5831",
+        "fuel": "휘발유",
+        "amount": 843,
+        "transTime": "14:22:24",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "12243171",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "9410-61**-****-7948",
+        "fuel": "경유",
+        "amount": 404488,
+        "transTime": "14:29:35",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "72909874",
+        "cardCompany": "비씨카드",
+        "cardNo": "9500-23**-****-1110",
+        "fuel": "경유",
+        "amount": 152848,
+        "transTime": "14:32:56",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "52129633",
+        "cardCompany": "NH카드",
+        "cardNo": "4854-79**-****-5406",
+        "fuel": "휘발유",
+        "amount": 50000,
+        "transTime": "14:34:38",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "12478816",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "4009-33**-****-3315",
+        "fuel": "경유",
+        "amount": 418600,
+        "transTime": "14:47:39",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "39885351",
+        "cardCompany": "롯데카드(구)",
+        "cardNo": "5137-92**-****-4620",
+        "fuel": "휘발유",
+        "amount": 50000,
+        "transTime": "14:55:08",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "12828951",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "4009-33**-****-1389",
+        "fuel": "경유",
+        "amount": 372800,
+        "transTime": "15:14:17",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "73413188",
+        "cardCompany": "비씨카드",
+        "cardNo": "9500-23**-****-0617",
+        "fuel": "요소수",
+        "amount": 16000,
+        "transTime": "15:22:01",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "73440868",
+        "cardCompany": "비씨카드",
+        "cardNo": "9500-23**-****-0617",
+        "fuel": "경유",
+        "amount": 272700,
+        "transTime": "15:23:56",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "19453986",
+        "cardCompany": "삼성카드",
+        "cardNo": "9420-88**-****-6895",
+        "fuel": "세차",
+        "amount": 20000,
+        "transTime": "15:27:52",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30046467",
+        "cardCompany": "국민카드",
+        "cardNo": "3564-15**-****-7098",
+        "fuel": "경유",
+        "amount": 298240,
+        "transTime": "15:28:51",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "00030871",
+        "cardCompany": "현대카드",
+        "cardNo": "9490-38**-****-5102",
+        "fuel": "경유",
+        "amount": 195720,
+        "transTime": "15:36:52",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "00723093",
+        "cardCompany": "현대카드",
+        "cardNo": "9490-38**-****-5102",
+        "fuel": "요소수",
+        "amount": 16000,
+        "transTime": "15:38:05",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30028648",
+        "cardCompany": "국민카드",
+        "cardNo": "3564-15**-****-2094",
+        "fuel": "경유",
+        "amount": 167440,
+        "transTime": "15:40:01",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "04604802",
+        "cardCompany": "하나(구외환)카드",
+        "cardNo": "4201-89**-****-9216",
+        "fuel": "요소수",
+        "amount": 23600,
+        "transTime": "15:55:18",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "13402923",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "9410-61**-****-8086",
+        "fuel": "경유",
+        "amount": 186000,
+        "transTime": "15:58:06",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "73811745",
+        "cardCompany": "비씨카드",
+        "cardNo": "9480-02**-****-6244",
+        "fuel": "경유",
+        "amount": 382120,
+        "transTime": "16:02:27",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "13673597",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "4009-33**-****-3904",
+        "fuel": "경유",
+        "amount": 316880,
+        "transTime": "16:18:33",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "74121502",
+        "cardCompany": "비씨카드",
+        "cardNo": "9500-23**-****-6492",
+        "fuel": "경유",
+        "amount": 240240,
+        "transTime": "16:32:25",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "14422688",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "9410-61**-****-6324",
+        "fuel": "경유",
+        "amount": 345800,
+        "transTime": "17:01:17",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30025632",
+        "cardCompany": "국민카드",
+        "cardNo": "3564-15**-****-9022",
+        "fuel": "경유",
+        "amount": 208415,
+        "transTime": "17:08:57",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "14679199",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "9410-61**-****-0278",
+        "fuel": "경유",
+        "amount": 186400,
+        "transTime": "17:10:53",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30038928",
+        "cardCompany": "국민카드",
+        "cardNo": "3564-15**-****-2001",
+        "fuel": "경유",
+        "amount": 139800,
+        "transTime": "17:16:24",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "00552840",
+        "cardCompany": "현대카드",
+        "cardNo": "9490-38**-****-1300",
+        "fuel": "경유",
+        "amount": 148000,
+        "transTime": "17:18:53",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "15211829",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "4658-87**-****-5157",
+        "fuel": "휘발유",
+        "amount": 30000,
+        "transTime": "17:30:37",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "29108810",
+        "cardCompany": "하나(구외환)카드",
+        "cardNo": "9436-81**-****-8264",
+        "fuel": "휘발유",
+        "amount": 17427,
+        "transTime": "17:52:44",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30027179",
+        "cardCompany": "국민카드",
+        "cardNo": "5259-82**-****-4023",
+        "fuel": "경유",
+        "amount": 139800,
+        "transTime": "17:57:18",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "54799342",
+        "cardCompany": "NH카드",
+        "cardNo": "9430-16**-****-9682",
+        "fuel": "경유",
+        "amount": 80000,
+        "transTime": "18:20:20",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "16827544",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "9410-61**-****-6962",
+        "fuel": "경유",
+        "amount": 287560,
+        "transTime": "18:28:31",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "75485702",
+        "cardCompany": "비씨카드",
+        "cardNo": "9500-23**-****-9016",
+        "fuel": "경유",
+        "amount": 167760,
+        "transTime": "18:45:19",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "17765572",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "4009-33**-****-0475",
+        "fuel": "경유",
+        "amount": 353350,
+        "transTime": "19:02:52",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30098426",
+        "cardCompany": "국민카드",
+        "cardNo": "9445-41**-****-0082",
+        "fuel": "경유",
+        "amount": 100000,
+        "transTime": "19:05:52",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30098437",
+        "cardCompany": "국민카드",
+        "cardNo": "9445-41**-****-0082",
+        "fuel": "요소수",
+        "amount": 14000,
+        "transTime": "19:08:48",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "75758406",
+        "cardCompany": "비씨카드",
+        "cardNo": "9425-20**-****-7648",
+        "fuel": "경유",
+        "amount": 91000,
+        "transTime": "19:17:19",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "75768316",
+        "cardCompany": "비씨카드",
+        "cardNo": "4198-03**-****-4916",
+        "fuel": "경유",
+        "amount": 30000,
+        "transTime": "19:17:24",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "18252397",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "9410-61**-****-7728",
+        "fuel": "경유",
+        "amount": 376800,
+        "transTime": "19:38:07",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "18299990",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "4658-87**-****-1557",
+        "fuel": "휘발유",
+        "amount": 20000,
+        "transTime": "19:42:34",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "00756708",
+        "cardCompany": "현대카드",
+        "cardNo": "4025-96**-****-2921",
+        "fuel": "휘발유",
+        "amount": 41998,
+        "transTime": "19:51:05",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30034824",
+        "cardCompany": "국민카드",
+        "cardNo": "3564-15**-****-4073",
+        "fuel": "경유",
+        "amount": 335520,
+        "transTime": "19:59:01",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "18871681",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "9410-61**-****-4392",
+        "fuel": "경유",
+        "amount": 216342,
+        "transTime": "20:30:24",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30108436",
+        "cardCompany": "국민카드",
+        "cardNo": "5259-82**-****-3086",
+        "fuel": "경유",
+        "amount": 122460,
+        "transTime": "20:35:09",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "19128622",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "4009-33**-****-3886",
+        "fuel": "경유",
+        "amount": 200000,
+        "transTime": "20:55:32",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30015302",
+        "cardCompany": "국민카드",
+        "cardNo": "5570-42**-****-2026",
+        "fuel": "휘발유",
+        "amount": 50000,
+        "transTime": "20:55:36",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "00791325",
+        "cardCompany": "현대카드",
+        "cardNo": "5327-93**-****-7013",
+        "fuel": "휘발유",
+        "amount": 1000,
+        "transTime": "21:14:09",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "00542822",
+        "cardCompany": "현대카드",
+        "cardNo": "5327-93**-****-7013",
+        "fuel": "휘발유",
+        "amount": 1000,
+        "transTime": "21:16:11",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "00287299",
+        "cardCompany": "현대카드",
+        "cardNo": "5327-93**-****-7013",
+        "fuel": "휘발유",
+        "amount": 30000,
+        "transTime": "21:16:48",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "30001898",
+        "cardCompany": "국민카드",
+        "cardNo": "4265-86**-****-6885",
+        "fuel": "경유",
+        "amount": 506460,
+        "transTime": "21:20:15",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "19644705",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "9410-61**-****-5042",
+        "fuel": "경유",
+        "amount": 320400,
+        "transTime": "21:50:08",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "76662625",
+        "cardCompany": "비씨카드",
+        "cardNo": "9410-12**-****-2379",
+        "fuel": "휘발유",
+        "amount": 100000,
+        "transTime": "21:56:45",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "00466163",
+        "cardCompany": "현대카드",
+        "cardNo": "9490-38**-****-2620",
+        "fuel": "경유",
+        "amount": 270280,
+        "transTime": "22:31:34",
+        "source": "나이스"
+      },
+      {
+        "approvalNo": "48731039",
+        "cardCompany": "NH카드",
+        "cardNo": "9431-1671-****-081*",
+        "fuel": "경유",
+        "amount": 302000,
+        "transTime": "10:03:41",
+        "source": "이지샵"
+      }
+    ],
+    "depositExpected": {
+      "2026-10-30": {
+        "KB국민카드": 4302556,
+        "비씨카드": 3671330
+      }
+    },
+    "bySource": {
+      "나이스": {
+        "amount": 20887153,
+        "count": 109
+      },
+      "이지샵": {
+        "amount": 302000,
+        "count": 1
+      }
+    }
+  },
+  "matching": {
+    "bosTotal": 18818619,
+    "easyTotal": 21189153,
+    "bySource": {
+      "나이스": 20887153,
+      "이지샵": 302000
+    },
+    "totalDiff": -2370534,
+    "totalMatch": false,
+    "errors": [
+      {
+        "type": "easy_only",
+        "approvalNo": "06520018",
+        "cardCompany": "신한(구LG)",
+        "cardNo": "4499-14**-****-0729",
+        "product": "경유",
+        "transTime": "03:28:47",
+        "source": "나이스",
+        "bosAmount": null,
+        "easyAmount": 2370534,
+        "diff": -2370534,
+        "recheck": {
+          "checkedSources": [
+            "나이스",
+            "이지샵"
+          ],
+          "notUploaded": [],
+          "crossDay": null
+        }
+      }
+    ],
+    "notes": [],
+    "sources": [
+      "나이스",
+      "이지샵"
+    ],
+    "hasError": true
+  }
+}

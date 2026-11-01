@@ -1817,8 +1817,19 @@
         "source": "이지샵",
         "bosAmount": 295200,
         "easyAmount": 332100,
-        "diff": -36900
+        "diff": -36900,
+        "recheck": {
+          "checkedSources": [
+            "이지샵"
+          ],
+          "notUploaded": [],
+          "crossDay": null
+        }
       }
+    ],
+    "notes": [],
+    "sources": [
+      "이지샵"
     ],
     "hasError": true
   },
