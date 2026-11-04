@@ -4607,6 +4607,16 @@ function arCellState(vendorName, m) {
   return { key: 'due', ...(m.status === 'short' ? AR_STATUS_STYLE.short : AR_STATUS_STYLE.overdue) };
 }
 
+// 미수 표에서 붙여 볼 같은 회사 묶음 (사업자만 다름)
+const AR_VENDOR_GROUPS = [
+  { key: '한누리', label: '한누리 묶음', color: '#7c3aed', test: n => /한누리/.test(n) },
+  { key: '하나',   label: '하나 묶음',   color: '#0891b2', test: n => /하나항공|하나관광/.test(n) },
+];
+function arVendorGroup(name) {
+  const g = AR_VENDOR_GROUPS.find(x => x.test(String(name || '')));
+  return g ? g.key : null;
+}
+
 function renderArVendorTable() {
   const box = document.getElementById('ar-monthly-table');
   if (!box) return;
@@ -4636,6 +4646,26 @@ function renderArVendorTable() {
       if (arState.sortField === 'name') return a.name.localeCompare(b.name, 'ko') * dir;
       return ((a.overdue + a.review) - (b.overdue + b.review) || a.remaining - b.remaining) * dir;
     });
+  // 사업자만 다른 같은 회사는 한데 모아 붙여 보기 (정렬상 가장 위 업체 자리에 묶음 전체를 배치)
+  const groupOrder = [];
+  sorted.forEach(v => { const g = arVendorGroup(v.name); if (g && !groupOrder.includes(g)) groupOrder.push(g); });
+  groupOrder.forEach(g => {
+    const members = sorted.filter(v => arVendorGroup(v.name) === g)
+      .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+    const at = sorted.findIndex(v => arVendorGroup(v.name) === g);
+    const rest = sorted.filter(v => arVendorGroup(v.name) !== g);
+    sorted.length = 0;
+    sorted.push(...rest.slice(0, at), ...members, ...rest.slice(at));
+  });
+  // 하나 묶음 바로 아래에 한누리 묶음 (유가보조 업체끼리 함께 확인)
+  if (groupOrder.includes('하나') && groupOrder.includes('한누리')) {
+    const han = sorted.filter(v => arVendorGroup(v.name) === '한누리');
+    const rest = sorted.filter(v => arVendorGroup(v.name) !== '한누리');
+    let last = -1;
+    rest.forEach((v, i) => { if (arVendorGroup(v.name) === '하나') last = i; });
+    sorted.length = 0;
+    sorted.push(...rest.slice(0, last + 1), ...han, ...rest.slice(last + 1));
+  }
   // "업체 · 유외상품" 줄은 그 업체 줄 바로 아래에
   sorted.filter(v => v.nonFuelOf).forEach(v => {
     const base = sorted.findIndex(x => x.name === v.nonFuelOf);
@@ -4716,8 +4746,10 @@ function renderArVendorTable() {
           const infoCount = (v.aliases?.length ? 1 : 0) + (v.beforeTrackAmount > 0 ? 1 : 0) + (v.surplus > 0 ? 1 : 0)
                           + (v.unresolved?.length ? 1 : 0) + (v.discountSetting ? 1 : 0);
           const dueMonths = v.months.filter(m => m.remaining > 0).length;
+          const grp = AR_VENDOR_GROUPS.find(x => x.key === arVendorGroup(v.name));
           return `<tr style="border-bottom:1px solid #f1f5f9;">
-            <td style="padding:6px;position:sticky;left:0;background:#fff;cursor:pointer;" onclick="openArReview('${vName}')" title="클릭: 업체별 점검 (결제 특징·월별 대조)">
+            <td style="padding:6px;position:sticky;left:0;background:${grp ? '#f8fafc' : '#fff'};cursor:pointer;${grp ? `box-shadow:inset 4px 0 0 ${grp.color};` : ''}" onclick="openArReview('${vName}')" title="클릭: 업체별 점검 (결제 특징·월별 대조)">
+              ${grp ? `<span class="ar-pay-tag" style="background:${grp.color};color:#fff;" title="사업자만 다른 같은 회사 — 붙여서 표시">${grp.label}</span>` : ''}
               ${v.payType === 'card' ? '<span class="ar-pay-tag card">카드</span>' : v.payType === 'other' ? '<span class="ar-pay-tag other">기타</span>' : !v.payType ? '<span class="ar-pay-tag none">미정</span>' : ''}
               <span style="text-decoration:underline dotted;">${esc(v.name)}</span>
               ${v.splitNonFuel ? '<span class="ar-pay-tag other" title="유외상품은 아래 · 유외상품 줄에서 따로 관리">유류분</span>' : ''}
