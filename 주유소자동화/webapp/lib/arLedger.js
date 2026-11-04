@@ -31,6 +31,16 @@ function splitNonFuelVendors(dataDir) {
   } catch (_) { return new Set(); }
 }
 
+// 배달 따로 관리 업체(프로필 splitDelivery, 예: 건국유업 — 주유(버스)분과 배달분이 통장으로 따로 입금):
+//   외상을 "업체명"(주유분)과 "업체명 · 배달"(BOS 출고형태 배달) 두 줄로 나눠 따로 미수 관리
+const DELIVERY_SUFFIX = ' · 배달';
+function splitDeliveryVendors(dataDir) {
+  try {
+    const all = JSON.parse(fs.readFileSync(path.join(dataDir, 'ar_vendor_profiles.json'), 'utf8'));
+    return new Set(Object.entries(all).filter(([, p]) => p?.splitDelivery).map(([n]) => n));
+  } catch (_) { return new Set(); }
+}
+
 // 잔액 관리 업체(프로필 balanceMode, 예: 대창폴리마 — 몇 월치가 아니라 아무 금액이나 수시로 결제)
 //   → { 업체명: { opening } }  opening = 추적 시작 전 이월 잔액(openingBalance)
 function balanceVendorsOf(dataDir) {
@@ -50,6 +60,7 @@ function cutoffPeriod(ym, cut) {
 function buildArMatrix(dataDir) {
   const cutoffs = cutoffDaysOf(dataDir);
   const splitNF = splitNonFuelVendors(dataDir);
+  const splitDel = splitDeliveryVendors(dataDir);
   const periodCharges = new Map();   // name -> Map(periodYm -> charge)
   const files = fs.readdirSync(dataDir)
     .filter(f => /^vendors_\d{4}_\d{2}\.json$/.test(f))
@@ -90,6 +101,14 @@ function buildArMatrix(dataDir) {
         const fuel = Math.round(v.txs.filter(t => AR_FUEL_PRODUCTS.includes(t.product)).reduce((s, t) => s + (t.amount || 0), 0) * ratio);
         push(v.name, fuel);
         push(v.name + NONFUEL_SUFFIX, v.totalCredit - fuel);
+        return;
+      }
+      if (splitDel.has(v.name) && (v.txs || []).length) {
+        const txTotal = v.txs.reduce((s, t) => s + (t.amount || 0), 0);
+        const ratio = txTotal > 0 ? v.totalCredit / txTotal : 0;
+        const del = Math.round(v.txs.filter(t => t.isDelivery).reduce((s, t) => s + (t.amount || 0), 0) * ratio);
+        push(v.name, v.totalCredit - del);
+        push(v.name + DELIVERY_SUFFIX, del);
         return;
       }
       push(v.name, v.totalCredit);
@@ -176,6 +195,7 @@ function decomposeUnits(deposits) {
       units.push({
         depositId: d.id, vendorName: d.matchedVendor, amount: primaryAmount,
         date: d.date, note: d.note || '', payer: d.payer || '', isCard: !!d.isCard, isBos: !!d.isBos,
+        isExtra: !!d.isExtra, fillMonths: d.extraMonths || null,
         manualMonthAssign: d.monthAssign || null,
         basis: d.matchBasis || null, needsReview: !!d.needsReview,
         isSplit: false, splitIndex: null, sourceFragment: null,
@@ -275,7 +295,7 @@ function applyBalanceMode(months, units, opening, trackStart, unitMeta) {
       appliedTo.push({ month: m.month, amount: a });
     }
     surplus += Math.max(0, left);
-    return { ...unitMeta(u), appliedTo, source: u.isBos ? 'bos' : u.isCard ? 'card' : 'manual' };
+    return { ...unitMeta(u), appliedTo, source: u.isBos ? 'bos' : u.isCard ? 'card' : u.isExtra ? 'extra' : 'manual' };
   });
   let balance = opening;
   months.forEach(m => {
@@ -333,6 +353,18 @@ function allocateArDeposits(arMatrix, deposits, manualPaid = new Set(), discount
     };
 
     for (const u of vendorUnits) {
+      // 직접 기록 입금(ar_extra_deposits.json)에서 여러 달만 적은 것: 그 달들의 남은 금액을 오래된 달부터 채우고 남으면 마지막 달 초과
+      if (u.fillMonths && u.fillMonths.length && !u.manualMonthAssign) {
+        let left = u.amount;
+        const assign = [];
+        u.fillMonths.forEach((ym, i) => {
+          if (left <= 0) return;
+          const m = monthByYm.get(ym);
+          const take = i === u.fillMonths.length - 1 ? left : Math.min(left, Math.max(0, m ? m.remaining : 0));
+          if (take > 0) { assign.push({ month: ym, amount: take }); left -= take; }
+        });
+        u.manualMonthAssign = assign;
+      }
       // 0순위: 수동 오버라이드
       // (월 지정은 사람 확정·비고·학습 자동 매칭에서 옴 — 근거는 basis)
       if (u.manualMonthAssign && u.manualMonthAssign.length) {
@@ -344,7 +376,7 @@ function allocateArDeposits(arMatrix, deposits, manualPaid = new Set(), discount
           continue;
         }
         applyToMonths(u.manualMonthAssign, u.date);
-        allocations.push({ ...unitMeta(u), appliedTo: u.manualMonthAssign, source: u.isBos ? 'bos' : u.isCard ? 'card' : (u.basis === 'note' || u.basis === 'auto' ? u.basis : 'manual') });
+        allocations.push({ ...unitMeta(u), appliedTo: u.manualMonthAssign, source: u.isBos ? 'bos' : u.isCard ? 'card' : u.isExtra ? 'extra' : (u.basis === 'note' || u.basis === 'auto' ? u.basis : 'manual') });
         continue;
       }
 
@@ -431,7 +463,7 @@ function allocateArDeposits(arMatrix, deposits, manualPaid = new Set(), discount
 }
 
 module.exports = {
-  NONFUEL_SUFFIX, AR_FUEL_PRODUCTS,
+  NONFUEL_SUFFIX, DELIVERY_SUFFIX, AR_FUEL_PRODUCTS,
   buildArMatrix, buildVendorAliasIndex, matchPayerToVendor,
   decomposeUnits, resolveSplitFragment, findGreedyWindow, allocateArDeposits,
 };

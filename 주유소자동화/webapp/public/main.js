@@ -4466,6 +4466,7 @@ async function loadArSummary() {
   arState.vendors               = res.vendors;
   arState.unmatched             = res.unmatched;
   arState.unresolvedAllocations = res.unresolvedAllocations || [];
+  arState.extraDepositErrors    = res.extraDepositErrors || [];
   renderArSummaryCards();
   renderArVendorTable();
   renderArUnmatchedBadge();
@@ -4528,7 +4529,7 @@ function renderArSummaryCards() {
     card('미수 (입금 기한 지남)', sumOf('overdue'), sumOf('overdue') > 0 ? '#dc2626' : '#16a34a') +
     card('확인 필요', sumOf('review'), '#c2410c') +
     card('입금 대기 (기한 전)', sumOf('waiting'), '#2563eb') +
-    card('카드 받음 체크 전', sumOf('cardWait'), '#be185d') +
+    card('현장카드 결제 확인 전', sumOf('cardWait'), '#be185d') +
     `<div style="flex:1;min-width:100px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;">
        <div style="font-size:11px;color:#64748b;">미매칭 입금</div>
        <div style="font-size:14px;font-weight:700;${arState.unmatched.length ? 'color:#d97706;' : ''}">${arState.unmatched.length}건</div>
@@ -4549,7 +4550,7 @@ function renderArUnmatchedBadge() {
 // 미수확인 표: 상단=월, 왼쪽=업체명. 칸에는 매출금액 + 완료/미수만 간단히 표시하고
 // 부족·초과·입금내역·카드결제 확인은 칸을 눌러 상세 창에서 처리
 // 서버 status: done 완료 | discount 할인 완료 | waiting 입금 대기(기한 전) | partial-wait 일부 입금(기한 전)
-//   short 부족 | overdue 미수(기한 지남) | review 확인 필요(맞춰 볼 입금 있음) | card-wait 현장카드 받음 체크 전
+//   short 부족 | overdue 미수(기한 지남) | review 확인 필요(맞춰 볼 입금 있음) | card-wait 현장카드 결제 자료 없음
 const AR_STATUS_STYLE = {
   done:           { text: '완료',      color: '#16a34a', bg: '#f0fdf4' },
   discount:       { text: '할인 완료', color: '#16a34a', bg: '#f0fdf4' },
@@ -4558,7 +4559,7 @@ const AR_STATUS_STYLE = {
   review:         { text: '확인 필요', color: '#c2410c', bg: '#fff7ed' },
   short:          { text: '부족',      color: '#dc2626', bg: '#fef2f2' },
   overdue:        { text: '미수',      color: '#dc2626', bg: '#fef2f2' },
-  'card-wait':    { text: '☐ 받음 체크', color: '#be185d', bg: '#fdf2f8' },
+  'card-wait':    { text: '💳 결제 확인 전', color: '#be185d', bg: '#fdf2f8' },
   balance:        { text: '잔액',      color: '#7c3aed', bg: '#f5f3ff' },
 };
 
@@ -4588,7 +4589,7 @@ function arCellState(vendorName, m) {
   if (!m || !(m.charge > 0)) return null;
   if (m.remaining <= 0 || m.status === 'done' || m.status === 'discount') {
     const st = AR_STATUS_STYLE[m.status === 'discount' ? 'discount' : 'done'];
-    return { key: 'done', ...st, text: m.manualPaidCard ? '☑ 받음' : st.text };
+    return { key: 'done', ...st };
   }
   if (m.status === 'card-wait') {
     // 현장카드 업체라도 카드 내역에서 금액이 맞는 결제를 찾았으면 먼저 보여줌 (칸 클릭 → 확인)
@@ -4692,7 +4693,8 @@ function renderArVendorTable() {
   box.innerHTML = `
     <div class="ar-filter-bar">
       ${pfBtn('all', '전체')} ${pfBtn('bank', '통장 입금 업체')} ${pfBtn('card', '현장카드 업체')} ${pfBtn('other', '기타')} ${pfBtn('none', '결제방식 미정')}
-      ${cardTodo ? `<span class="ar-card-todo">현장카드 업체 중 받음 체크 안 한 곳 ${cardTodo}</span>` : ''}
+      ${cardTodo ? `<span class="ar-card-todo">현장카드 업체 중 카드 결제 자료가 없는 곳 ${cardTodo}</span>` : ''}
+      ${(arState.extraDepositErrors || []).length ? `<div style="flex-basis:100%;color:#dc2626;font-size:12px;">⚠ data/ar_extra_deposits.json 확인: ${arState.extraDepositErrors.map(esc).join(' · ')}</div>` : ''}
       <button class="btn-sm btn-primary" style="margin-left:auto;" onclick="openArReview()">🔎 업체별 점검</button>
     </div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:#64748b;margin-bottom:6px;">
@@ -4700,7 +4702,7 @@ function renderArVendorTable() {
       <span><b style="color:#2563eb;">입금 대기</b> 아직 입금 기한 전 (업체별 1~2개월 뒤 입금)</span>
       <span><b style="color:#dc2626;">미수·부족</b> 입금 기한이 지났는데 안 들어옴</span>
       <span><b style="color:#c2410c;">확인 필요</b> 맞춰 볼 입금이 있음 — 업체별 점검에서 확인</span>
-      <span><b style="color:#be185d;">☐ 받음 체크</b> 현장카드 업체 — 칸을 누르면 받음 처리</span>
+      <span><b style="color:#be185d;">💳 결제 확인 전</b> 현장카드 업체인데 카드 결제 자료가 아직 없음 (개인통장 입금 등은 data/ar_extra_deposits.json에 기록)</span>
       <span><b style="color:#be185d;">카드일치</b> 이지샵·나이스에 같은 금액 카드결제 있음</span>
       <span><b style="color:#c2410c;">카드후보</b> 비슷한 금액 카드결제 있음</span>
       <span><b style="color:#b45309;">유외 미수</b> 유류는 입금, 유외상품만 남음</span>
@@ -4753,7 +4755,7 @@ function renderArVendorTable() {
               ${v.payType === 'card' ? '<span class="ar-pay-tag card">카드</span>' : v.payType === 'other' ? '<span class="ar-pay-tag other">기타</span>' : !v.payType ? '<span class="ar-pay-tag none">미정</span>' : ''}
               <span style="text-decoration:underline dotted;">${esc(v.name)}</span>
               ${v.splitNonFuel ? '<span class="ar-pay-tag other" title="유외상품은 아래 · 유외상품 줄에서 따로 관리">유류분</span>' : ''}
-              ${v.nonFuelOf ? '<span class="ar-pay-tag other" title="몇 달치 모아 한 번에 결제">모아 결제</span>' : ''}
+              ${v.deliveryOf ? '<span class="ar-pay-tag other" title="BOS 출고형태 배달 거래 — 배달분은 통장으로 따로 입금">배달분</span>' : v.nonFuelOf ? '<span class="ar-pay-tag other" title="몇 달치 모아 한 번에 결제">모아 결제</span>' : ''}${v.splitDelivery ? '<span class="ar-pay-tag other" title="배달분은 아래 · 배달 줄에서 따로 관리">주유분</span>' : ''}
               ${v.balanceMode ? '<span class="ar-pay-tag other" title="몇 월치가 아니라 아무 금액이나 수시로 결제 — 이월 잔액부터 오래된 달 순으로 갚은 것으로 계산">잔액 관리</span>' : ''}
               ${v.cutoffDay ? `<span class="ar-pay-tag other" title="거래 기간 ${v.cutoffDay + 1}일~다음달 ${v.cutoffDay}일${v.payDay ? ', 다음달 ' + v.payDay + '일 입금' : ''}">${v.cutoffDay}일 마감</span>` : ''}
               ${v.profileConfirmed ? '<span class="ar-confirmed" title="업체별 점검에서 확정">✓</span>' : ''}
@@ -4766,7 +4768,7 @@ function renderArVendorTable() {
               return `<td style="padding:4px 6px;text-align:right;${cellBorder}cursor:pointer;background:${o.due > 0 ? '#fef2f2' : '#f8fafc'};"
                           title="이전 달 합계 — 클릭하면 달별로 펼침" onclick="toggleArAllMonths()">
                   <div>${o.charge.toLocaleString()}</div>
-                  <div style="font-size:10px;font-weight:700;color:${o.due > 0 ? (o.cardWait ? '#be185d' : '#dc2626') : '#16a34a'};">${o.due > 0 ? `${o.cardWait ? '체크 전' : '미수'} ${o.dueCount}개월` : '완료'}</div>
+                  <div style="font-size:10px;font-weight:700;color:${o.due > 0 ? (o.cardWait ? '#be185d' : '#dc2626') : '#16a34a'};">${o.due > 0 ? `${o.cardWait ? '카드 확인 전' : '미수'} ${o.dueCount}개월` : '완료'}</div>
                 </td>`;
             })() : ''}
             ${months.map(m => {
@@ -4774,8 +4776,8 @@ function renderArVendorTable() {
               const st = arCellState(v.name, d);
               if (!st) return `<td style="text-align:center;color:#cbd5e1;${cellBorder}">-</td>`;
               return `<td style="padding:4px 6px;text-align:right;${cellBorder}cursor:pointer;background:${st.bg};"
-                          title="${v.balanceMode ? '클릭: 업체별 점검 (잔액 장부)' : v.payType === 'card' && !arCardTargetsFor(v.name, m).length ? '클릭: 카드 받음 체크/해제' : '클릭: 입금 상세·확인 처리'}"
-                          onclick="${v.balanceMode ? `openArReview('${vName}')` : v.payType === 'card' && !arCardTargetsFor(v.name, m).length ? `toggleArCardReceived('${vName}','${m}')` : `showArDepositModal('${vName}','${m}')`}">
+                          title="${v.balanceMode ? '클릭: 업체별 점검 (잔액 장부)' : '클릭: 입금 상세'}"
+                          onclick="${v.balanceMode ? `openArReview('${vName}')` : `showArDepositModal('${vName}','${m}')`}">
                   ${d.period ? `<div style="font-size:10px;color:#64748b;" title="마감 기간">${arPeriodLabel(d)}</div>` : ''}
                   <div>${d.charge.toLocaleString()}</div>
                   <div style="font-size:10px;font-weight:700;color:${st.color};">${st.text}</div>
@@ -4788,7 +4790,7 @@ function renderArVendorTable() {
               ${v.overdue > 0 ? `<div style="color:#dc2626;font-weight:600;">${v.overdue.toLocaleString()}</div><div style="font-size:10px;color:#94a3b8;">${v.overdueMonths}개월 미수</div>` : ''}
               ${v.review > 0 ? `<div style="font-size:11px;color:#c2410c;">확인 필요 ${v.review.toLocaleString()}</div>` : ''}
               ${v.waiting > 0 ? `<div style="font-size:11px;color:#2563eb;">대기 ${v.waiting.toLocaleString()}</div>` : ''}
-              ${v.cardWait > 0 ? `<div style="font-size:11px;color:#be185d;">카드 체크 전 ${v.cardWait.toLocaleString()}</div>` : ''}
+              ${v.cardWait > 0 ? `<div style="font-size:11px;color:#be185d;">카드 확인 전 ${v.cardWait.toLocaleString()}</div>` : ''}
               ${!(v.overdue > 0 || v.review > 0 || v.waiting > 0 || v.cardWait > 0) ? '<span class="badge badge-done">완납</span>' : ''}
             </td>
           </tr>`;
@@ -4825,15 +4827,13 @@ function renderArVendorDetail() {
     // remaining: 0=일치, 양수=부족(달마다 그대로 표시, 다른달과 상계 안함), 음수=그 달만 초과입금
     const remColor = m.remaining === 0 ? '#16a34a' : (m.remaining > 0 ? '#dc2626' : '#0369a1');
     const remLabel = m.remaining === 0 ? '0원' : (m.remaining > 0 ? arNum(m.remaining) + ' 부족' : arNum(-m.remaining) + ' 초과');
-    const cardBtn = m.manualPaidCard
-      ? `<button style="font-size:10px;padding:1px 5px;margin-left:6px;color:#dc2626;" onclick="unmarkArPaidCard('${esc(v.name)}','${m.month}')">✕확인 처리 취소</button>`
-      : m.remaining > 0 ? `<button style="font-size:10px;padding:1px 5px;margin-left:6px;" onclick="markArPaidCard('${esc(v.name)}','${m.month}')">입금 확인 처리</button>` : '';
+    const cardBtn = '';
     return `
     <tr style="border-bottom:1px solid #f1f5f9;">
       <td style="padding:1px 6px;line-height:1.2;">${m.month}</td>
       <td style="padding:1px 6px;line-height:1.2;text-align:right;">${arNum(m.charge)}</td>
       <td style="padding:1px 6px;line-height:1.2;text-align:right;">${arNum(m.paid)}${m.lagMonths != null ? ` <span style="font-size:10px;color:#64748b;">(+${m.lagMonths}개월)</span>` : ''}</td>
-      <td style="padding:1px 6px;line-height:1.2;text-align:right;color:${remColor};">${remLabel}${m.manualPaidCard ? ' <span class="badge badge-done" style="font-size:10px;">확인 처리</span>' : ''}</td>
+      <td style="padding:1px 6px;line-height:1.2;text-align:right;color:${remColor};">${remLabel}</td>
       <td style="padding:1px 6px;line-height:1.2;">${cardBtn}</td>
     </tr>`;
   }).join('');
@@ -4846,6 +4846,7 @@ function renderArVendorDetail() {
     'before-track': '<span class="badge" style="font-size:10px;background:#e2e8f0;">추적이전</span>',
     card: '<span class="badge" style="font-size:10px;background:#fce7f3;color:#9d174d;">카드</span>',
     bos: '<span class="badge" style="font-size:10px;background:#eef2ff;color:#4338ca;">BOS등록</span>',
+    extra: '<span class="badge" style="font-size:10px;background:#ecfdf5;color:#047857;">직접 기록</span>',
   };
   const otherVendorOptions = arState.vendors
     .filter(x => x.name !== v.name)
@@ -4854,7 +4855,7 @@ function renderArVendorDetail() {
 
   const allocRows = v.allocations.length
     ? v.allocations.map(a => {
-        const splitBtn = (a.source === 'card' || a.source === 'bos') ? ''   // 카드결제·BOS 등록은 통장 입금이 아니라 분할 대상 아님 (카드 매칭 창에서 취소)
+        const splitBtn = (a.source === 'card' || a.source === 'bos' || a.source === 'extra') ? ''   // 카드결제·BOS 등록은 통장 입금이 아니라 분할 대상 아님 (카드 매칭 창에서 취소)
           : !a.isSplit
           ? `<button style="font-size:10px;padding:1px 5px;margin-left:4px;" onclick="toggleArSplitForm('${a.depositId}')">➕분할</button>`
           : `<button style="font-size:10px;padding:1px 5px;margin-left:4px;color:#dc2626;"
@@ -4963,7 +4964,7 @@ async function saveArDiscount(vendorName) {
 
 // ── 월별 입금 내역 모달 (표의 입금 칸 클릭) ────────────────────
 // 그 업체의 그 달 매출에 충당된 입금(통장·카드·분할)을 입금일·입금자명과 함께 표시
-const AR_SOURCE_TEXT = { manual: '수동 지정', note: '비고 월표기', estimate: '금액 추정', card: '현장 카드결제', bos: 'BOS 입금등록' };
+const AR_SOURCE_TEXT = { manual: '수동 지정', note: '비고 월표기', estimate: '금액 추정', card: '현장 카드결제', bos: 'BOS 입금등록', extra: '직접 기록 (개인통장 등)' };
 
 function showArDepositModal(vendorName, month) {
   const v = arState.vendors.find(x => x.name === vendorName);
@@ -4986,7 +4987,6 @@ function showArDepositModal(vendorName, month) {
       <div>입금 <strong style="color:#0f766e;">${arNum(m.paid)}</strong></div>
       <div>${diffTxt}</div>
       <div>${m.remaining > 0 ? '<span class="badge badge-fail">미수</span>' : '<span class="badge badge-done">완료</span>'}</div>
-      ${m.manualPaidCard ? '<div><span class="badge badge-done">확인 처리됨</span></div>' : ''}
     </div>
     ${arMonthActionHtml(v, m, month)}
     ${rows.length ? `
@@ -5047,12 +5047,10 @@ function arMonthActionHtml(v, m, month) {
         <button style="font-size:10px;padding:1px 6px;color:#dc2626;" onclick="cancelArCardAuto('${jsArg(c.matchKey || '')}','${jsArg(c.id)}')">취소</button></div>`).join('')}
     </div>` : '';
 
-  const btn = m.manualPaidCard
-    ? `<button style="font-size:12px;padding:4px 10px;color:#dc2626;" onclick="unmarkArPaidCard('${jsArg(v.name)}','${month}')">✕ 확인 처리 취소</button>`
-    : m.remaining > 0
-      ? `<button class="btn-primary" style="font-size:12px;padding:4px 10px;" onclick="markArPaidCard('${jsArg(v.name)}','${month}')">✔ 입금 확인 처리 (미수 → 완료)</button>
-         <span style="font-size:11px;color:#64748b;">통장·카드 내역으로 안 잡히지만 받은 게 확실할 때</span>`
-      : '';
+  // 수동 확인 처리는 없음 — 통장·카드 자료가 없는 돈(개인통장 입금 등)은 data/ar_extra_deposits.json에 기록
+  const btn = m.remaining > 0 && !targets.length
+    ? `<span style="font-size:11px;color:#64748b;">통장·카드 자료로 확인되지 않은 금액입니다. 개인통장 등으로 받았다면 VS Code에서 <code>webapp/data/ar_extra_deposits.json</code>에 날짜·금액·계좌를 적어 주세요.</span>`
+    : '';
   return `${cardHtml}${confirmedHtml}${btn ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">${btn}</div>` : ''}`;
 }
 
@@ -5249,24 +5247,6 @@ async function confirmArMatch(depositId, vendorName) {
   toast(`${vendorName}로 매칭 완료`, 'success');
   await loadArSummary();
   renderArUnmatchedModalBody();
-}
-
-// ── 카드결제 등 은행입금 매칭 대상이 없는 업체의 월별 완납 수동 확정 ──
-async function markArPaidCard(vendorName, month) {
-  const res = await api('POST', '/api/ar/mark-paid', { vendorName, month, note: '확인처리' });
-  if (!res.ok) return toast(res.error || '처리 실패', 'error');
-  toast(`${vendorName} ${Number(month.slice(5, 7))}월 입금 확인 처리`, 'success');
-  await loadArSummary();
-  renderArVendorDetail();
-  if (arState.openCell && document.getElementById('ar-deposit-modal').style.display === 'flex') showArDepositModal(...arState.openCell);
-}
-
-async function unmarkArPaidCard(vendorName, month) {
-  const res = await api('DELETE', '/api/ar/mark-paid', { vendorName, month });
-  if (!res.ok) return toast(res.error || '취소 실패', 'error');
-  await loadArSummary();
-  renderArVendorDetail();
-  if (arState.openCell && document.getElementById('ar-deposit-modal').style.display === 'flex') showArDepositModal(...arState.openCell);
 }
 
 // ── 미확정 배분(자동판별 실패 건) 수동 확정 모달 ──────────────────
@@ -5966,26 +5946,12 @@ function openSettings() {
 // 미수 — 업체별 점검 (결제방식·입금자명·입금 시기·할인 확인 → 월별 대조 → 확정)
 // /api/ar/vendor-review, /api/ar/profile, /api/ar/assign, /api/ar/confirm-vendor
 // ══════════════════════════════════════════════════════════════
-const AR_BASIS_LABEL = { manual: '사람 확정', note: '비고', auto: '자동', review: '확인 필요', card: '카드', bos: 'BOS 등록' };
+const AR_BASIS_LABEL = { manual: '사람 확정', note: '비고', auto: '자동', review: '확인 필요', card: '카드', bos: 'BOS 등록', extra: '직접 기록' };
 const arReview = { name: null, data: null, search: '' };
 
 function setArPayFilter(k) {
   arState.payFilter = k;
   renderArVendorTable();
-}
-
-// 현장카드 업체: 칸을 누르면 받음 체크 ↔ 해제 (기존 /api/ar/mark-paid)
-async function toggleArCardReceived(name, month) {
-  const v = arState.vendors.find(x => x.name === name);
-  const m = v?.months.find(x => x.month === month);
-  if (!m) return;
-  const on = !(m.manualPaidCard || m.remaining <= 0);
-  if (!on && !m.manualPaidCard) { showArDepositModal(name, month); return; }   // 통장·카드매칭으로 완료된 달은 상세로
-  const res = await api(on ? 'POST' : 'DELETE', '/api/ar/mark-paid', { vendorName: name, month, note: '카드 받음' });
-  if (!res.ok) { toast(res.error || '저장 실패', 'error'); return; }
-  toast(on ? `☑ ${name} ${Number(month.slice(5))}월 카드 받음` : `${name} ${Number(month.slice(5))}월 받음 해제`, 'success');
-  await loadArSummary();
-  if (arReview.name === name) loadArReview(name);
 }
 
 function arReviewVendorList() {
@@ -6039,7 +6005,7 @@ async function loadArReview(name) {
 function arDepLine(d, vendor) {
   const isSplitPart = d.matchedVendor !== vendor;
   const amt = isSplitPart ? (d.splits || []).filter(s => s.vendorName === vendor).reduce((s, x) => s + x.amount, 0) : d.amount;
-  const basis = d.isBos ? 'bos' : d.isCard ? 'card' : d.matchBasis;
+  const basis = d.isBos ? 'bos' : d.isCard ? 'card' : d.isExtra ? 'extra' : d.matchBasis;
   return `<span class="ar-dep">
     <span class="ar-basis ${basis || ''}">${AR_BASIS_LABEL[basis] || basis || ''}</span>
     ${esc(d.date.slice(5))} ${esc(d.payer)} <b>${amt.toLocaleString()}</b>${isSplitPart ? ` <span class="muted">(${esc(d.matchedVendor)} 입금 중)</span>` : ''}
@@ -6073,12 +6039,11 @@ function renderArReviewDetail() {
       <td class="n">${m.charge.toLocaleString()}</td>
       <td class="n">${m.paid ? m.paid.toLocaleString() : '-'}</td>
       <td class="n ${m.remaining > 100 ? 'neg' : ''}">${m.remaining > 100 ? m.remaining.toLocaleString() : m.remaining < -100 ? '+' + (-m.remaining).toLocaleString() : '0'}</td>
-      <td><span class="ar-st" style="color:${s.color};background:${s.bg};">${m.manualPaidCard ? '☑ 받음' : s.text}</span>
+      <td><span class="ar-st" style="color:${s.color};background:${s.bg};">${s.text}</span>
         ${m.dueDate ? `<div class="muted" style="font-size:11px;">${arDueLine(m, r.allocations)}</div>` : ''}
         ${isCard && m.remaining > 0 ? arCardTargetsFor(name, m.month).map(t => t.options.slice(0, 2).map((o, i) =>
           `<div style="font-size:11px;">💳 ${o.date.slice(5).replace('-', '/')} ${o.amount.toLocaleString()}${o.diff ? ` (차이 ${o.diff > 0 ? '+' : ''}${o.diff.toLocaleString()})` : ''}${t.parts.length > 1 ? ' · 두 업체 합산' : ''}
-            <button class="btn-sm ${t.status === 'match' ? 'btn-primary' : ''}" onclick="confirmArCardAuto('${esc(t.key).replace(/'/g, "\\'")}', ${i})">이 카드로 확인</button></div>`).join('')).join('') : ''}
-        ${isCard && (m.manualPaidCard || m.remaining > 0) ? `<button class="btn-sm" onclick="toggleArCardReceived('${nameArg}','${m.month}')">${m.manualPaidCard ? '받음 해제' : '☐ 받음'}</button>` : ''}</td>
+            <button class="btn-sm ${t.status === 'match' ? 'btn-primary' : ''}" onclick="confirmArCardAuto('${esc(t.key).replace(/'/g, "\\'")}', ${i})">이 카드로 확인</button></div>`).join('')).join('') : ''}</td>
       <td class="deps">${uniq.map(d => `<div>${arDepLine(d, name)}
           ${!d.isCard ? `<button class="btn-sm" onclick="arAssignPrompt('${d.id}')">옮기기</button>` : ''}</div>`).join('') || '<span class="muted">-</span>'}</td>
     </tr>`;

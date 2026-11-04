@@ -118,9 +118,66 @@ const AR_DEPOSITS_FILE     = path.join(DATA_DIR, 'ar_deposits.json');
 const AR_ALIASES_FILE      = path.join(DATA_DIR, 'ar_vendor_aliases.json');
 const AR_MANUAL_PAID_FILE  = path.join(DATA_DIR, 'ar_manual_paid.json');
 
-// 카드결제 등 은행입금 매칭 대상 자체가 없어 사람이 "완납 처리"로 직접 확정한 (업체,월) 집합
+// (폐지 2026-11-04) 사람이 근거 없이 "완납 처리/받음 체크"하던 기능 — 이제 미수는 통장 입금·카드결제 자료로만 지움.
+//   ar_manual_paid.json은 기록으로만 남기고 계산에 쓰지 않음. 통장·카드 자료가 없는 돈(개인통장 입금 등)은
+//   data/ar_extra_deposits.json에 날짜·금액·계좌를 적어 넣음 (loadArExtraDeposits)
 function loadArManualPaidSet() {
-  return new Set(readJSON(AR_MANUAL_PAID_FILE, []).map(x => `${x.vendorName}|${x.month}`));
+  return new Set();
+}
+
+// 개인통장 등 앱이 모르는 계좌로 받은 외상대금 — VS Code에서 data/ar_extra_deposits.json을 직접 수정
+//   { "입금": [ { "날짜": "2026-10-15", "업체": "배준용", "금액": 500000, "대상월": "2026-09",
+//               "입금계좌": "대표 개인통장(농협)", "메모": "" } ] }
+//   대상월: "2026-09" 한 달 / ["2026-08","2026-09"] 여러 달(오래된 달부터 채움) / [{"월":"2026-08","금액":300000}, …] 금액 지정
+const AR_EXTRA_DEPOSITS_FILE = path.join(DATA_DIR, 'ar_extra_deposits.json');
+const AR_EXTRA_TEMPLATE = {
+  '설명': [
+    '개인통장 등 앱이 모르는 계좌로 받은 외상대금을 여기에 적으면 미수에서 빠집니다 (통장·카드 자료가 있는 입금은 적지 마세요 — 이중 반영).',
+    '입금 한 건 = { } 하나. 날짜(YYYY-MM-DD)·업체(미수확인 화면의 거래처명 그대로)·금액(숫자, 쉼표 없이)·대상월·입금계좌는 꼭 적기.',
+    '대상월: "2026-09" 또는 ["2026-08","2026-09"](오래된 달부터 채움) 또는 [{"월":"2026-08","금액":300000},{"월":"2026-09","금액":200000}]',
+    '저장하면 미수확인 화면을 새로 열 때 바로 반영됩니다 (서버 재시작 불필요). 잘못 적은 줄은 화면 위쪽에 빨간 글씨로 표시됩니다.',
+  ],
+  '예시(반영 안 됨)': { '날짜': '2026-10-15', '업체': '배준용', '금액': 500000, '대상월': '2026-09', '입금계좌': '대표 개인통장(농협)', '메모': '' },
+  '입금': [],
+};
+function loadArExtraDeposits() {
+  if (!fs.existsSync(AR_EXTRA_DEPOSITS_FILE)) {
+    try { fs.writeFileSync(AR_EXTRA_DEPOSITS_FILE, JSON.stringify(AR_EXTRA_TEMPLATE, null, 2), 'utf8'); } catch (_) {}
+  }
+  const errors = [];
+  let raw;
+  try { raw = JSON.parse(fs.readFileSync(AR_EXTRA_DEPOSITS_FILE, 'utf8').replace(/^﻿/, '')); }
+  catch (e) { return { deposits: [], errors: [`ar_extra_deposits.json을 읽을 수 없습니다 (쉼표·따옴표 확인): ${e.message}`] }; }
+  const list = Array.isArray(raw) ? raw : (raw['입금'] || []);
+  const deposits = [];
+  list.forEach((r, i) => {
+    const no = `${i + 1}번째 입금`;
+    const date = String(r['날짜'] || '').trim().replace(/[./]/g, '-');
+    const vendor = String(r['업체'] || '').trim();
+    const amount = Number(String(r['금액'] ?? '').replace(/,/g, ''));
+    const account = String(r['입금계좌'] || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return errors.push(`${no}: 날짜를 2026-10-15 형식으로 적어 주세요`);
+    if (!vendor) return errors.push(`${no}: 업체가 없습니다`);
+    if (!(amount > 0)) return errors.push(`${no} (${vendor}): 금액이 없습니다`);
+    if (!account) return errors.push(`${no} (${vendor}): 입금계좌를 적어 주세요 (어느 통장으로 받았는지)`);
+    let tm = r['대상월'];
+    if (!tm) return errors.push(`${no} (${vendor}): 대상월이 없습니다`);
+    if (!Array.isArray(tm)) tm = [tm];
+    let assign;
+    if (tm.every(x => typeof x === 'object' && x)) {
+      assign = tm.map(x => ({ month: String(x['월'] || '').trim(), amount: Number(String(x['금액'] ?? '').replace(/,/g, '')) }));
+      if (assign.some(a => !/^\d{4}-\d{2}$/.test(a.month) || !(a.amount > 0))) return errors.push(`${no} (${vendor}): 대상월의 "월"·"금액"을 확인해 주세요`);
+      const sum = assign.reduce((s, a) => s + a.amount, 0);
+      if (Math.abs(sum - amount) > 1) return errors.push(`${no} (${vendor}): 대상월 금액 합계 ${sum.toLocaleString()} ≠ 입금 금액 ${amount.toLocaleString()}`);
+    } else {
+      const months = tm.map(x => String(x).trim());
+      if (months.some(m => !/^\d{4}-\d{2}$/.test(m))) return errors.push(`${no} (${vendor}): 대상월을 2026-09 형식으로 적어 주세요`);
+      assign = months.length === 1 ? [{ month: months[0], amount }] : null;   // 여러 달 = 배분 로직이 오래된 달부터 채움
+      if (!assign) assign = months.sort().map(m => ({ month: m, amount: 0 }));
+    }
+    deposits.push({ id: `extra_${date}_${i}`, date, month: date.slice(0, 7), amount, vendor, account, memo: String(r['메모'] || ''), assign });
+  });
+  return { deposits, errors };
 }
 
 const AR_CARD_PAYMENTS_FILE = path.join(DATA_DIR, 'ar_card_payments.json');
@@ -136,8 +193,17 @@ function loadArDepositsWithCards() {
     matchedVendor: c.vendorName, manual: true, isCard: true, splits: [],
     monthAssign: c.assign || [{ month: c.month, amount: c.amount }],
   }));
+  // 개인통장 등 직접 적은 입금 (data/ar_extra_deposits.json)
+  const extras = loadArExtraDeposits().deposits.map(x => ({
+    id: x.id, date: x.date, month: x.month, amount: x.amount,
+    payer: x.account, note: `직접 기록 입금 (ar_extra_deposits.json)${x.memo ? ' — ' + x.memo : ''}`,
+    matchedVendor: x.vendor, manual: true, isExtra: true, splits: [],
+    monthAssign: x.assign.some(a => !a.amount) ? null : x.assign,
+    extraMonths: x.assign.some(a => !a.amount) ? x.assign.map(a => a.month) : null,
+  }));
   // 통장 입금은 비고·사람 확정·학습 프로필로 업체·월을 정한 뒤 사용 (resolveArDeposits)
-  const base = resolveArDeposits(readJSON(AR_DEPOSITS_FILE, [])).concat(cards);
+  const base = routeDeliveryDeposits(resolveArDeposits(readJSON(AR_DEPOSITS_FILE, [])),
+    require('./lib/arLedger').buildArMatrix(DATA_DIR), loadArProfiles()).concat(cards, extras);
   return base.concat(bosReceiptDeposits(base));
 }
 
@@ -338,7 +404,9 @@ function arIgnoreMatcher() {
 
 function arMatchContext(arMatrix) {
   const { buildVendorAliasIndex, matchPayerToVendor } = require('./lib/arLedger');
-  const aliasIndex = buildVendorAliasIndex([...arMatrix.byVendor.keys()], readJSON(CUSTOMERS_FILE, []), readJSON(AR_ALIASES_FILE, {}));
+  // "업체 · 배달" 줄은 입금자명 매칭 대상에서 뺌 (본 업체와 이름이 같아 업체를 하나로 못 정하게 됨) — 배달분은 routeDeliveryDeposits가 나눔
+  const { DELIVERY_SUFFIX } = require('./lib/arLedger');
+  const aliasIndex = buildVendorAliasIndex([...arMatrix.byVendor.keys()].filter(k => !k.endsWith(DELIVERY_SUFFIX)), readJSON(CUSTOMERS_FILE, []), readJSON(AR_ALIASES_FILE, {}));
   return { aliasIndex, matchPayer: matchPayerToVendor, isIgnored: arIgnoreMatcher() };
 }
 
@@ -378,7 +446,64 @@ function loadArProfiles() {
     const k = n + NONFUEL_SUFFIX;
     all[k] = { payers: [], lagMonths: null, discount: null, payGroup: null, noteKeywords: [], memo: '', ...all[k], payType: p.payType, nonFuelOf: n };
   }
+  // 배달 따로 관리 업체(splitDelivery): "업체 · 배달" 줄 — 입금자명·지연은 본 업체와 같게
+  const { DELIVERY_SUFFIX } = require('./lib/arLedger');
+  for (const [n, p] of Object.entries(all)) {
+    if (!p?.splitDelivery) continue;
+    const k = n + DELIVERY_SUFFIX;
+    all[k] = { payers: [], lagMonths: p.lagMonths || null, discount: null, payGroup: null, noteKeywords: [], memo: '', ...all[k], payType: p.payType, nonFuelOf: n, deliveryOf: n };
+  }
   return all;
+}
+
+// 배달 따로 관리 업체: 통장 입금 중 배달분을 "업체 · 배달" 줄로 보냄
+//   비고에 "배달"이 있거나, 배달 줄의 오래된 미수 연속 달 합계와 입금액이 같으면(±100원) 배달분
+//   대상 달은 비고 월이 배달 줄에 있으면 그 달, 아니면 오래된 미수 달부터 연속으로 금액이 맞는 달들
+function routeDeliveryDeposits(deposits, arMatrix, profiles) {
+  const { DELIVERY_SUFFIX } = require('./lib/arLedger');
+  const bases = Object.entries(profiles).filter(([, p]) => p?.splitDelivery).map(([n]) => n);
+  if (!bases.length) return deposits;
+  const used = new Map();   // 배달 줄 달별로 이미 배정된 금액
+  const out = deposits.map(d => ({ ...d }));
+  for (const base of bases) {
+    const dv = base + DELIVERY_SUFFIX;
+    const charges = (arMatrix.byVendor.get(dv) || []).slice().sort((a, b) => a.month.localeCompare(b.month));
+    if (!charges.length) continue;
+    const left = ym => (charges.find(c => c.month === ym)?.charge || 0) - (used.get(ym) || 0);
+    // 이 업체로 매칭된 입금 + 업체를 못 정했지만 입금자명이 이 업체 입금자명인 입금(배달분은 주유분 달과 금액이 안 맞아 못 정해짐)
+    const payers = (profiles[base]?.payers || []).map(p => p.replace(/\s/g, '')).filter(Boolean);
+    const payerOf = d => String(d.payer || '').split('/')[0].replace(/\s/g, '');
+    const mine = out.filter(d => !(d.splits || []).length && !d.ignored &&
+        (d.matchedVendor === base || (!d.matchedVendor && payers.includes(payerOf(d)))))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    for (const d of mine) {
+      if (d.manual && d.monthAssign?.length && d.matchBasis === 'manual' && !/배달/.test(d.note || '')) continue;
+      const open = charges.filter(c => c.month < d.date.slice(0, 7) && left(c.month) > 100).map(c => c.month);
+      let pick = null;
+      for (let i = 0; i < open.length && !pick; i++) {
+        let sum = 0;
+        for (let j = i; j < open.length; j++) {
+          sum += left(open[j]);
+          if (Math.abs(sum - d.amount) <= 100) { pick = open.slice(i, j + 1); break; }
+          if (sum > d.amount + 100) break;
+        }
+      }
+      const noteDel = /배달/.test(d.note || '');
+      if (!pick && !noteDel) continue;
+      // 주유분 달과 금액이 정확히 맞는 입금(비고 "N월 버스" 등)은 주유분으로 둠
+      if (!noteDel && (d.monthAssign || []).some(m => Math.abs((arMatrix.byVendor.get(base) || []).find(c => c.month === m.month)?.charge - d.amount) <= 100)) continue;
+      const months = pick || (open.length ? [open[0]] : null);
+      if (!months) continue;
+      let rest = d.amount;
+      const assign = months.map((ym, i) => {
+        const a = i === months.length - 1 ? rest : Math.min(rest, left(ym));
+        rest -= a; used.set(ym, (used.get(ym) || 0) + a);
+        return { month: ym, amount: a };
+      });
+      Object.assign(d, { matchedVendor: dv, monthAssign: assign, needsReview: false, matchBasis: d.matchBasis === 'manual' ? 'manual' : 'auto' });
+    }
+  }
+  return out;
 }
 
 // 유외상품 따로 관리 업체 { 업체명: true }
@@ -421,6 +546,23 @@ function resolveArDeposits(raw) {
   // 사람이 "외상 무관"으로 뺀 입금(ignoredManual)도 제외
   const results = new Map(autoMatch(raw, arMatrix, profiles,
     { ...ctx, isIgnored: (p, d) => !!d?.ignoredManual || ctx.isIgnored(p), fixed, forceVendor, keyOf }).map(r => [r.dep.id, r]));
+  // BOS 업체명이 달마다 괄호(지점명)만 다르게 찍힌 경우 — 예: 1~3·5~7월 "(주)하나항공여행사", 4월만 "(주)하나항공여행사(음성지점)"
+  //   입금 업체의 그 달 외상이 없고, 괄호만 다른 업체의 같은 달 외상이 입금액과 같으면(±100원) 그 업체로 옮김
+  const baseName = n => String(n).replace(/\(주\)|주식회사|㈜/g, '').replace(/\(.*?\)/g, '').replace(/\s/g, '');
+  const chargeOf = (v, ym) => (arMatrix.byVendor.get(v) || []).find(m => m.month === ym)?.charge || 0;
+  const sisterFix = (vendor, months, amount) => {
+    if (!vendor || !months?.length || months.length !== 1 || chargeOf(vendor, months[0].month) > 0) return null;
+    const ym = months[0].month, base = baseName(vendor);
+    const sis = [...arMatrix.byVendor.keys()].filter(v => v !== vendor && baseName(v) === base && Math.abs(chargeOf(v, ym) - amount) <= 100);
+    return sis.length === 1 ? sis[0] : null;
+  };
+  for (const [id, r] of results) {
+    if (r.splits?.length) continue;
+    const dep = r.dep || raw.find(d => d.id === id);
+    if (dep?.monthAssign?.length && dep.manual) continue;   // 사람이 정한 것은 그대로
+    const to = sisterFix(r.vendor, r.months, dep?.amount || 0);
+    if (to) { r.vendor = to; r.sisterFrom = dep.matchedVendor || null; }
+  }
   return raw.map(d => {
     const r = results.get(d.id);
     if (!r) return d;
@@ -2686,7 +2828,8 @@ app.get('/api/ar/summary', (req, res) => {
         totalDiscount: a.totalDiscount || 0,
         discountSetting: discounts[name] || null,   // 할인 입금 업체 설정 { maxDiff }
         splitNonFuel: !!profile?.splitNonFuel,   // 이 줄은 유류분만 (매달 카드결제), 유외상품은 아래 별도 줄
-        nonFuelOf: profile?.nonFuelOf || null,   // "업체 · 유외상품" 줄 — 몇 달치 모아 결제
+        nonFuelOf: profile?.nonFuelOf || null,   // "업체 · 유외상품"·"업체 · 배달" 줄 — 본 업체 줄 바로 아래
+        deliveryOf: profile?.deliveryOf || null, splitDelivery: !!profile?.splitDelivery,
         balanceMode: !!a.balanceMode,            // 잔액 관리: 결제는 이월 잔액 → 오래된 달 순, months에 inMonth·balance
         openingBalance: a.openingBalance || 0, openingLeft: a.openingLeft || 0,
         remaining:   a.remaining,
@@ -2698,7 +2841,7 @@ app.get('/api/ar/summary', (req, res) => {
     });
 
     const unmatched = deposits
-      .filter(d => !d.matchedVendor && !d.isCard && !d.ignored)
+      .filter(d => !d.matchedVendor && !d.isCard && !d.isExtra && !d.ignored)
       .sort((a, b) => b.date.localeCompare(a.date));
 
     // 전체 업체 취합 미확정 배분 목록 (모달용)
@@ -2708,7 +2851,7 @@ app.get('/api/ar/summary', (req, res) => {
     });
     unresolvedAllocations.sort((a, b) => b.date.localeCompare(a.date));
 
-    res.json({ ok: true, months: arMatrix.months, vendors, unmatched, unresolvedAllocations });
+    res.json({ ok: true, months: arMatrix.months, vendors, unmatched, unresolvedAllocations, extraDepositErrors: loadArExtraDeposits().errors });
   } catch (e) {
     console.error('[ar/summary]', e);
     res.status(500).json({ ok: false, error: e.message });
@@ -2833,8 +2976,9 @@ app.post('/api/ar/rematch', (req, res) => {
   }
 });
 
-// 카드결제 등 은행입금 매칭 대상 자체가 없는 업체의 특정 월을 "완납 처리"로 직접 확정
+// (폐지 2026-11-04) 근거 없는 "완납 처리/받음 체크" — 통장·카드 자료 또는 data/ar_extra_deposits.json 기록으로만 미수를 지움
 app.post('/api/ar/mark-paid', (req, res) => {
+  return res.status(410).json({ ok: false, error: '수동 받음 체크는 없어졌습니다. 통장·카드 자료로 확인하거나, 개인통장 입금은 data/ar_extra_deposits.json에 적어 주세요.' });
   try {
     const { vendorName, month, note } = req.body;
     if (!vendorName || !month) return res.status(400).json({ ok: false, error: 'vendorName/month 필요' });
@@ -2851,6 +2995,7 @@ app.post('/api/ar/mark-paid', (req, res) => {
 });
 
 app.delete('/api/ar/mark-paid', (req, res) => {
+  return res.status(410).json({ ok: false, error: '수동 받음 체크는 없어졌습니다.' });
   try {
     const { vendorName, month } = req.body;
     const list = readJSON(AR_MANUAL_PAID_FILE, []).filter(x => !(x.vendorName === vendorName && x.month === month));
@@ -5131,7 +5276,7 @@ app.get('/api/consistency', async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // 미수 — 업체별 점검 (결제 특징 확인·수정·확정)
 // ══════════════════════════════════════════════════════════════
-const AR_PROFILE_FIELDS = ['payType', 'payers', 'lagMonths', 'discount', 'payGroup', 'noteKeywords', 'installments', 'memo', 'confirmed', 'cutoffDay', 'payDay', 'splitNonFuel', 'balanceMode', 'openingBalance'];
+const AR_PROFILE_FIELDS = ['payType', 'payers', 'lagMonths', 'discount', 'payGroup', 'noteKeywords', 'installments', 'memo', 'confirmed', 'cutoffDay', 'payDay', 'splitNonFuel', 'splitDelivery', 'balanceMode', 'openingBalance'];
 
 app.get('/api/ar/profiles', (req, res) => {
   try { res.json({ ok: true, profiles: loadArProfiles(), ignore: readJSON(AR_IGNORE_FILE, DEFAULT_AR_IGNORE) }); }
@@ -5225,7 +5370,7 @@ app.post('/api/ar/confirm-vendor', (req, res) => {
     writeJSON(AR_PROFILES_FILE, all);
     let frozen = 0;
     if (confirmed) {
-      const effective = new Map(loadArDepositsWithCards().filter(d => !d.isCard).map(d => [d.id, d]));
+      const effective = new Map(loadArDepositsWithCards().filter(d => !d.isCard && !d.isExtra).map(d => [d.id, d]));
       const list = readJSON(AR_DEPOSITS_FILE, []);
       for (const d of list) {
         const e = effective.get(d.id);
@@ -5260,7 +5405,7 @@ app.get('/api/ar/vendor-review', (req, res) => {
     const n = normName(name);
     const openMonths = alloc.months.filter(m => m.remaining > AR_DONE_TOL);
     const payers = new Set((profile?.payers || []).map(normName));
-    const candidates = deposits.filter(d => !d.isCard && !d.ignored && (!d.matchedVendor || d.needsReview) && !mine.includes(d))
+    const candidates = deposits.filter(d => !d.isCard && !d.isExtra && !d.ignored && (!d.matchedVendor || d.needsReview) && !mine.includes(d))
       .map(d => {
         const pn = normName(d.payer);
         const nameScore = payers.has(pn) ? 1 : vendorSimilarity(pn, n);
