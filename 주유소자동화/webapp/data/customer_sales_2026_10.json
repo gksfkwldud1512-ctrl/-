@@ -540,10 +540,10 @@
         "avgPrice": 1600
       }
     },
-    "carwash": 124000,
+    "carwash": 129000,
     "others": 15000,
     "totalQty": 2824.77,
-    "totalAmount": 5446314
+    "totalAmount": 5451314
   },
   {
     "name": "주식회사 명신",
@@ -1924,6 +1924,32 @@
     "totalAmount": 330000
   },
   {
+    "name": "금강어린이집",
+    "custNo": "0000079",
+    "payType": "외상",
+    "fuels": {
+      "휘발유": {
+        "qty": 105.82,
+        "amount": 202000,
+        "avgPrice": 1909
+      },
+      "경유": {
+        "qty": 50.03,
+        "amount": 95000,
+        "avgPrice": 1899
+      },
+      "등유": {
+        "qty": 0,
+        "amount": 0,
+        "avgPrice": null
+      }
+    },
+    "carwash": 0,
+    "others": 0,
+    "totalQty": 155.85,
+    "totalAmount": 297000
+  },
+  {
     "name": "대소방범대",
     "custNo": "0000035",
     "payType": "외상",
@@ -1974,32 +2000,6 @@
     "others": 0,
     "totalQty": 119.01,
     "totalAmount": 226000
-  },
-  {
-    "name": "금강어린이집",
-    "custNo": "0000079",
-    "payType": "외상",
-    "fuels": {
-      "휘발유": {
-        "qty": 105.82,
-        "amount": 202000,
-        "avgPrice": 1909
-      },
-      "경유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      },
-      "등유": {
-        "qty": 0,
-        "amount": 0,
-        "avgPrice": null
-      }
-    },
-    "carwash": 0,
-    "others": 0,
-    "totalQty": 105.82,
-    "totalAmount": 202000
   },
   {
     "name": "건국노사TFT",
