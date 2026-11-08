@@ -3188,10 +3188,18 @@ function buildNonFuelTargets(name, a) {
   return out;
 }
 
+// 그 달 그 업체 외상 유류(휘발유·경유·등유) 주유량 — 유류 L당 할인 업체(프로필 fuelDiscountPerL, 예: 상공회의소 30원) 카드 대조용
+function arMonthFuelLiters(name, ym) {
+  const v = readJSON(path.join(DATA_DIR, `vendors_${ym.replace('-', '_')}.json`), [])
+    .find(x => String(x.name || '').trim() === name && x.hasCredit);
+  return (v?.txs || []).reduce((s, t) => s + (['휘발유', '경유', '등유'].includes(t.product) ? Number(t.qty) || 0 : 0), 0);
+}
+
 function buildArCardTargets(alloc) {
   const { NONFUEL_SUFFIX } = require('./lib/arLedger');
   const targets = [];
   const cutoffs = arCutoffVendors(), periodVendors = arPeriodVendors();
+  const profiles = loadArProfiles();
   const remainOf = (name, month) => (alloc[name]?.months || []).find(m => m.month === month)?.remaining || 0;
   for (const [name, a] of Object.entries(alloc)) {
     if (cutoffs[name] || a.balanceMode) continue;   // 잔액 관리 업체는 달별 금액과 맞춰 볼 수 없음
@@ -3210,8 +3218,22 @@ function buildArCardTargets(alloc) {
       targets.push(...buildNonFuelTargets(name, a));
       continue;
     }
+    const perL = Number(profiles[name]?.fuelDiscountPerL) || 0;
     for (const m of a.months || []) {
       if (!(m.remaining > 0)) continue;
+      // 유류 L당 할인 업체: 아직 하나도 안 받은 달은 "매출 − 유류 L × 할인단가"를 카드 금액과 비교
+      if (perL > 0 && m.remaining === m.charge) {
+        const liters = arMonthFuelLiters(name, m.month);
+        const discount = Math.round(liters * perL);
+        if (discount > 0 && discount < m.remaining) {
+          targets.push({ key: `${name}|${m.month}`, kind: 'fuelDiscount',
+                         fuelDiscount: { perL, liters: Math.round(liters * 100) / 100, amount: discount },
+                         label: `${Number(m.month.slice(5, 7))}월 미수 (유류 ${(Math.round(liters * 100) / 100).toLocaleString()}L × ${perL}원 할인 ${discount.toLocaleString()}원)`,
+                         from: `${m.month}-01`, amount: m.remaining - discount,
+                         parts: [{ vendorName: name, assign: [{ month: m.month, amount: m.remaining }] }] });
+          continue;
+        }
+      }
       targets.push({ key: `${name}|${m.month}`, label: `${Number(m.month.slice(5, 7))}월 미수`, from: `${m.month}-01`,
                      amount: m.remaining, parts: [{ vendorName: name, assign: [{ month: m.month, amount: m.remaining }] }] });
     }
@@ -3484,7 +3506,19 @@ function recordArCardMatch(list, t, opt, extra = {}) {
   }
   // 카드 금액이 원단위 절사로 몇십원 적으면 그 차액도 같이 채워 미수가 남지 않게 함 (취소 시 함께 삭제)
   const short = slots.reduce((s, x) => s + Math.max(0, x.left), 0);
-  if (short > 0 && short <= AR_CARD_ROUND_TOL) {
+  // 유류 L당 할인 업체: 할인액(+절사 차액)을 할인 레코드로 채워 그 달 완료 (취소 시 함께 삭제)
+  if (t.kind === 'fuelDiscount' && short > 0 && short <= t.fuelDiscount.amount + AR_CARD_ROUND_TOL) {
+    const lastCard = opt.cards[opt.cards.length - 1];
+    for (const s of slots.filter(x => x.left > 0)) {
+      list.push({
+        id: `${matchKey}#fueldisc#${s.vendorName}#${s.month}`, cardId: null, matchKey, date: lastCard.date,
+        approvalNo: '', cardCompany: `유류 L당 ${t.fuelDiscount.perL}원 할인`, cardNo: '', amount: s.left, vendorName: s.vendorName,
+        month: s.month, assign: [{ month: s.month, amount: s.left }], auto: true, rounding: true, fuelDiscount: t.fuelDiscount,
+        note: `유류 ${t.fuelDiscount.liters}L × ${t.fuelDiscount.perL}원 할인`,
+        coverKeys: [], matchedAt: new Date().toISOString(), ...extra,
+      });
+    }
+  } else if (short > 0 && short <= AR_CARD_ROUND_TOL) {
     const lastCard = opt.cards[opt.cards.length - 1];
     for (const s of slots.filter(x => x.left > 0)) {
       list.push({
@@ -5276,7 +5310,7 @@ app.get('/api/consistency', async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // 미수 — 업체별 점검 (결제 특징 확인·수정·확정)
 // ══════════════════════════════════════════════════════════════
-const AR_PROFILE_FIELDS = ['payType', 'payers', 'lagMonths', 'discount', 'payGroup', 'noteKeywords', 'installments', 'memo', 'confirmed', 'cutoffDay', 'payDay', 'splitNonFuel', 'splitDelivery', 'balanceMode', 'openingBalance'];
+const AR_PROFILE_FIELDS = ['payType', 'payers', 'lagMonths', 'discount', 'payGroup', 'noteKeywords', 'installments', 'memo', 'confirmed', 'cutoffDay', 'payDay', 'splitNonFuel', 'splitDelivery', 'balanceMode', 'openingBalance', 'fuelDiscountPerL'];
 
 app.get('/api/ar/profiles', (req, res) => {
   try { res.json({ ok: true, profiles: loadArProfiles(), ignore: readJSON(AR_IGNORE_FILE, DEFAULT_AR_IGNORE) }); }
@@ -5311,6 +5345,10 @@ app.post('/api/ar/profile', (req, res) => {
       cur.openingBalance = Math.round(Number(String(cur.openingBalance).replace(/,/g, '')));
       if (!Number.isFinite(cur.openingBalance)) return res.status(400).json({ ok: false, error: '이월 잔액은 숫자로' });
     }
+    if (cur.fuelDiscountPerL === '' || cur.fuelDiscountPerL === 0) cur.fuelDiscountPerL = null;
+    if (cur.fuelDiscountPerL != null && !(Number(cur.fuelDiscountPerL) > 0 && Number(cur.fuelDiscountPerL) <= 500))
+      return res.status(400).json({ ok: false, error: '유류 L당 할인은 1~500원' });
+    if (cur.fuelDiscountPerL != null) cur.fuelDiscountPerL = Number(cur.fuelDiscountPerL);
     cur.edited = true;
     all[name] = cur;
     writeJSON(AR_PROFILES_FILE, all);

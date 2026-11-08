@@ -2133,8 +2133,9 @@ const dFmt = {
 // group: 머리글 1행 묶음 이름(없으면 2행 합침), cls: 머리글·셀 색 클래스
 const DAILY_COLS = [
   { key: 'date',   label: '날짜', cls: 'daily-col-date sticky-col' },
+  { key: 'drum',   label: '합계 드럼', cls: 'group-summary', cellCls: 'group-summary-cell',
+    title: '휘발유+경유+등유 판매량 ÷ 200L' },
   { key: 'sales',  label: '판매금액', cls: 'group-summary', cellCls: 'group-summary-cell strong' },
-  { key: 'drum',   label: '합계 드럼', cls: 'group-summary', cellCls: 'group-summary-cell', detail: true },
   { key: 'pfFuel', label: '유종 이익', cls: 'group-summary daily-col-profit', cellCls: 'group-summary-cell daily-col-profit',
     title: '휘발유+경유+등유 판매이익 (매출 − 판매량×FIFO매입단가)' },
   { key: 'pfEtc',  label: '유외·세차 이익', cls: 'group-summary daily-col-profit', cellCls: 'group-summary-cell daily-col-profit',
