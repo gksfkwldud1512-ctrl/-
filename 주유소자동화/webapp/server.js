@@ -3374,6 +3374,38 @@ function arKnownCardKeys() {
   return known;
 }
 
+// 현장카드 업체의 "BOS 입금등록만으로 완료된 달"과 금액이 같은(±100원) 카드결제 → [{ t, o, rule: 'bos-card' }]
+//   카드 날짜는 그 달 1일 ~ AR_CARD_WINDOW_DAYS일. 카드 하나·칸 하나가 서로 하나씩만 맞을 때만
+function planArCardBosReplace(usedIds = new Set()) {
+  const { buildArMatrix, allocateArDeposits } = require('./lib/arLedger');
+  const alloc = allocateArDeposits(buildArMatrix(DATA_DIR), loadArDepositsWithCards(), loadArManualPaidSet(), loadArDiscountVendors());
+  const profiles = loadArProfiles();
+  const cards = listUnmatchedCardPayments().filter(c => !usedIds.has(c.id));
+  const cands = [];
+  for (const [name, a] of Object.entries(alloc)) {
+    const p = profiles[name];
+    if (p?.payType !== 'card' || a.balanceMode || p?.cutoffDay || AR_FIXED_CARD_VENDORS[name]) continue;
+    for (const m of a.months || []) {
+      if (!(m.charge > 0) || m.remaining > 0) continue;
+      const srcs = (a.allocations || []).filter(x => (x.appliedTo || []).some(t => t.month === m.month)).map(x => x.source);
+      if (!srcs.length || srcs.some(s => s !== 'bos')) continue;
+      for (const c of cards) {
+        if (c.date < `${m.month}-01` || daysBetween(`${m.month}-01`, c.date) > AR_CARD_WINDOW_DAYS) continue;
+        if (Math.abs(c.amount - m.charge) > AR_CARD_ROUND_TOL) continue;
+        cands.push({ name, month: m.month, charge: m.charge, card: c });
+      }
+    }
+  }
+  const byCard = {}, byCell = {};
+  cands.forEach(x => { byCard[x.card.id] = (byCard[x.card.id] || 0) + 1; byCell[`${x.name}|${x.month}`] = (byCell[`${x.name}|${x.month}`] || 0) + 1; });
+  return cands.filter(x => byCard[x.card.id] === 1 && byCell[`${x.name}|${x.month}`] === 1).map(x => ({
+    rule: 'bos-card',
+    t: { key: `${x.name}|${x.month}`, label: `${Number(x.month.slice(5, 7))}월 (BOS 입금등록 → 카드 확인)`, amount: x.charge,
+         parts: [{ vendorName: x.name, assign: [{ month: x.month, amount: x.charge }] }] },
+    o: { cards: [x.card], date: x.card.date, amount: x.card.amount, diff: x.card.amount - x.charge },
+  }));
+}
+
 // 자동 반영할 것 계산 (저장 안 함) → [{ t, o, rule } | { balance: true, vendorName, card, rule }]
 function planArCardAuto() {
   const { NONFUEL_SUFFIX } = require('./lib/arLedger');
@@ -3401,8 +3433,11 @@ function planArCardAuto() {
   });
   const out = picks.filter(pk => pk.o.cards.every(c => cardUse[c.id] === 1)
     && pk.t.parts.every(pt => pt.assign.every(a => cellUse[`${pt.vendorName}|${a.month}`] === 1)));
-  // 잔액 관리 업체: 전에 쓴 카드로 결제한 것 (카드가 한 업체에만 알려져 있을 때)
+  // 현장카드 업체에서 BOS 입금등록으로만 완료된 달 = 금액이 같은 카드결제 → 카드 근거로 기록
+  //   (그 달 BOS 현금 등록은 같은 돈이라 배분에서 자동으로 빠짐 → 미수 금액 변화 없음)
   const used = new Set(out.flatMap(pk => pk.o.cards.map(c => c.id)));
+  for (const pk of planArCardBosReplace(used)) { out.push(pk); pk.o.cards.forEach(c => used.add(c.id)); }
+  // 잔액 관리 업체: 전에 쓴 카드로 결제한 것 (카드가 한 업체에만 알려져 있을 때)
   const balanceVendors = Object.entries(loadArProfiles()).filter(([, p]) => p?.balanceMode).map(([n]) => n);
   if (balanceVendors.length) {
     for (const c of listUnmatchedCardPayments()) {
