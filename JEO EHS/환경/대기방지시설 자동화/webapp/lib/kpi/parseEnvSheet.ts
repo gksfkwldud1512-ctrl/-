@@ -244,6 +244,7 @@ export function buildEnvPayload(
       fiscalYear: parsed.fiscalYear, month, monthNumber,
       calendarYear: monthNumber >= 4 ? firstYear : secondYear,
       value,
+      source: "env",
     };
   };
   const monthly = (fn: (m: EnvMonthRaw) => number): MonthlyPoint[] =>

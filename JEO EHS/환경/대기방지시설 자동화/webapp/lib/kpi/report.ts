@@ -392,10 +392,14 @@ function buildBreakdownSlide(
   const numFmt = decimals === 0 ? "#,##0" : `#,##0.${"0".repeat(decimals)}`;
 
   const totalByMonth = new Map<string, number>();
+  // 하단 표는 본사 DETAILS 업로드 값만 반영한다(환경종합자료로 임시 반영한 달은 "-").
+  const detailsTotalByMonth = new Map<string, number>();
   for (const name of measureNames) {
     const m = monthValueMap(breakdown[name], fiscalYear);
+    const mDetails = monthValueMap(breakdown[name].filter((p) => p.source !== "env"), fiscalYear);
     for (const month of FISCAL_MONTHS) {
       totalByMonth.set(month, (totalByMonth.get(month) ?? 0) + (m.get(month) ?? 0));
+      if (mDetails.has(month)) detailsTotalByMonth.set(month, (detailsTotalByMonth.get(month) ?? 0) + (mDetails.get(month) ?? 0));
     }
   }
   // 데이터가 없는 달은 0으로 라벨을 찍지 않도록 null로 비운다(막대 자체도 없는 달이라 라벨도 없어야 함).
@@ -487,7 +491,8 @@ function buildBreakdownSlide(
     [
       { text: "월 합계", options: { bold: true, fontSize: 7 } },
       ...FISCAL_MONTHS.map((m) => {
-        const v = totalByMonth.get(m) ?? 0;
+        const v = detailsTotalByMonth.get(m);
+        if (v === undefined) return { text: "-", options: { fontSize: 7, align: "center" as const, color: "999999" } };
         const overTarget = v > target;
         return { text: fmtComma(v), options: { fontSize: 7, align: "center" as const, color: overTarget ? RED : "1a2a3a", bold: overTarget } };
       }),

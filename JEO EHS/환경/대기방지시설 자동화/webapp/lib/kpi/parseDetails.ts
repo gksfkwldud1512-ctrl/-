@@ -44,6 +44,9 @@ export type MonthlyPoint = {
   monthNumber: number; // 1~12 (달력 기준)
   calendarYear: number;
   value: number;
+  // "env" = 환경종합자료(사용자 엑셀)에서 온 임시 값. 본사 DETAILS 값에는 없다.
+  // PPT 하단 표처럼 본사 확정치만 보여줘야 하는 곳에서 걸러내는 데 쓴다.
+  source?: "env";
 };
 
 export type KpiSummary = {
