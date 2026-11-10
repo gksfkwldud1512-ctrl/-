@@ -2,6 +2,7 @@ import { loadKpiSummary } from "@/lib/kpi/store";
 import { loadSafetyPyramid } from "@/lib/kpi/safetyPyramid";
 import { KpiDashboard } from "@/components/KpiDashboard";
 import { KpiUploadForm } from "@/components/KpiUploadForm";
+import { EnvSheetUploadForm } from "@/components/EnvSheetUploadForm";
 import { SafetyPyramidCard } from "@/components/SafetyPyramidCard";
 import { ReportDownloadButton } from "@/components/ReportDownloadButton";
 import type { SeriesKey } from "@/lib/kpi/parseDetails";
@@ -33,6 +34,8 @@ export default async function KpiPage() {
       </div>
 
       <KpiUploadForm lastUpdated={summary?.uploadedAt ?? null} sourceFilename={summary?.sourceFilename ?? null} />
+
+      <EnvSheetUploadForm />
 
       <SafetyPyramidCard
         monthly={safetyPyramid.monthly}
